@@ -1,0 +1,8 @@
+import {describe,it,expect} from 'vitest';
+import {initial,reduce,Chunk} from './store';
+const c=(id:string,rev=1):Chunk=>({id,rev,status:'provisional',sentence_ids:['s'],text:'Тема',t0:0,t1:1000,updated_at:0});
+describe('stream state',()=>{
+ it('replaces partial with final and detects gaps',()=>{let s=reduce(initial(),{type:'partial',text:'Те'});s=reduce(s,{type:'final',seq:1,sentence:{id:'s',text:'Тема',t0:0,t1:1}});expect(s.partial).toBe('');expect(Object.keys(s.sentences)).toHaveLength(1);expect(()=>reduce(s,{type:'chunk',seq:3,chunk:c('a')})).toThrow();});
+ it('applies split and merge atomically; discards stale slides',()=>{let s=reduce(initial(),{type:'chunk',seq:1,chunk:c('a')});s=reduce(s,{type:'chunk_revise',seq:2,replace_ids:['a'],chunks:[c('a',2),c('b')]});expect(Object.keys(s.chunks)).toEqual(['a','b']);s=reduce(s,{type:'slide',seq:3,slide:{chunk_id:'a',rev:1,title:'Old',bullets:[],notes:'',source:'test'}});expect(s.slides.a).toBeUndefined();s=reduce(s,{type:'chunk_revise',seq:4,replace_ids:['a','b'],chunks:[c('a',3)]});expect(Object.keys(s.chunks)).toEqual(['a']);expect(reduce(s,{type:'chunk',seq:1,chunk:c('z')})).toBe(s);});
+ it('does not delete chunks when a stale revision is replayed with a new sequence',()=>{let s=reduce(initial(),{type:'chunk',seq:1,chunk:c('a',3)});s=reduce(s,{type:'chunk_revise',seq:2,replace_ids:['a'],chunks:[c('a',2),c('b')]});expect(s.chunks.a.rev).toBe(3);expect(s.chunks.b).toBeUndefined();});
+});

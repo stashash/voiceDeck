@@ -1,0 +1,12 @@
+{
+  "threads": 2,
+  "provider": "cpu",
+  "vad": "/models/vad/silero_vad.onnx",
+  "partial": {
+    "type": "nemo_ctc",
+    "model": "/models/asr-ctc/model.onnx",
+    "tokens": "/models/asr-ctc/tokens.txt"
+  },
+  "fridaModel": "/models/frida/model.onnx",
+  "fridaTokenizer": "/models/frida/tokenizer.json"
+}

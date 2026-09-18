@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/target
+**/dist
+models
+native
+data
+.env
+test-results

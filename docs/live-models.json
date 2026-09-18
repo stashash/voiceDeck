@@ -1,0 +1,15 @@
+{
+  "threads": 4,
+  "provider": "cpu",
+  "vad": "/models/vad/silero_vad.onnx",
+  "partial": {
+    "type": "nemo_ctc",
+    "model": "/models/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/model.int8.onnx",
+    "tokens": "/models/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/tokens.txt"
+  },
+  "embeddingModel": "/models/semantic/model.onnx",
+  "embeddingTokenizer": "/models/semantic/tokenizer.json",
+  "embeddingPooling": "mean",
+  "embeddingName": "multilingual-minilm",
+  "embeddingPrefix": ""
+}

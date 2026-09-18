@@ -1,0 +1,9 @@
+node_modules/
+target/
+dist/
+.env
+data/
+models/*
+!models/README.md
+*.log
+test-results/

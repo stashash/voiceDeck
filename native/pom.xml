@@ -1,0 +1,7 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><groupId>local.voicedeck</groupId><artifactId>native-model-runtime</artifactId><version>1.0</version>
+<properties><sherpa.version>1.13.8</sherpa.version><native.platform>linux-x64</native.platform></properties>
+<repositories><repository><id>jitpack</id><url>https://jitpack.io</url></repository></repositories>
+<dependencies>
+<dependency><groupId>com.github.k2-fsa.sherpa-onnx</groupId><artifactId>sherpa-onnx-jvm</artifactId><version>${sherpa.version}</version></dependency>
+<dependency><groupId>com.github.k2-fsa.sherpa-onnx</groupId><artifactId>sherpa-onnx-native-lib-${native.platform}</artifactId><version>${sherpa.version}</version></dependency>
+</dependencies></project>
