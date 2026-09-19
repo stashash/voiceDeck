@@ -1,0 +1,92 @@
+[project]
+name = "voicedeck-m3"
+description = "Local voice-to-presentation pipeline (microphone -> transcript -> semantic chunks -> slides). Incremental fixes for segmentation, embedding backend, two-phase chunking."
+spec = "../README.md"
+language_backend = "java21"
+language_frontend = "typescript"
+created = "2026-09-18"
+human_owner = "stas"
+
+# === Hardware (target deployment = this PC, same as voicedeck-live) ===
+[hardware]
+cpu = "Intel Core Ultra 9 275HX (24 cores, 24 logical, 2.7 GHz boost)"
+ram_gb = 32
+ram_type = "DDR5-5600 (2x16 GB)"
+gpu_name = "NVIDIA GeForce RTX 5090 Laptop GPU"
+gpu_vram_gb = 24
+gpu_count = 1
+ollama_installed = true
+ollama_models = ["qwen3-router", "bge-m3-embed", "qwen3-coder", "qwen3-rnda", "deepseek-ocr", "gemma4:31b", "qwen3.8:27b", "deepseek-r1:32b", "gemma4:26b"]
+python_installed = false
+captured_at = "2026-09-18T22:50:00Z"
+
+[hardware.constraints]
+asr_vram_reserve_gb = 4         # sherpa-onnx ASR + Silero VAD нужны стабильно
+llm_vram_reserve_gb = 17        # GigaChat3-10B-A1.8B в fp16 ~16 ГБ
+ollama_max_loaded = 1           # 24 ГБ не вытянуть больше одной крупной модели за раз
+
+# === Project structure (voiceDeck_m3 specific) ===
+[paths]
+workspace = "C:/Users/Admin/dev/project/voiceDeck_m3"
+backend_root = "backend"
+backend_src = "backend/src/main/java/local/voicedeck"
+backend_test = "backend/src/test/java/local/voicedeck"
+frontend_src = "frontend/src"
+models_root = "models"
+scripts_root = "scripts"
+java_package = "local.voicedeck"
+
+# === Existing models (don't break them) ===
+[models.asr]
+name = "gigaam-v3"
+sherpa_onnx_integration = true
+int8 = true
+path = "/models/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/model.int8.onnx"
+
+[models.vad]
+name = "silero-vad-v5"
+path = "/models/vad/silero_vad.onnx"
+
+[models.embedding]
+# SWAP target: multilingual-MiniLM-L12-v2 -> bge-m3 via Ollama
+name_current = "paraphrase-multilingual-MiniLM-L12-v2"
+name_target = "bge-m3-embed"
+backend_target = "ollama"
+endpoint = "http://127.0.0.1:11434/v1"
+dimension = 1024
+reason = "MiniLM слаб для тематической сегментации; bge-m3 на ruMTEB в топе для русского"
+
+[models.llm]
+name_primary = "gigachat3-10b-a1.8b"
+name_fallback = "qwen3-8b"
+endpoint = "http://127.0.0.1:11434/v1"
+use_case = "slide generation + phase-2 boundary verifier (SLIDE_MODE=llm)"
+
+# === Agents ===
+[agents]
+coder_default_model = "minimax/MiniMax-M3"
+reviewer_default_model = "minimax/MiniMax-M3"
+judge_default_model = "minimax/MiniMax-M3"
+coder_fallback_model = "ollama-local/qwen3:14b"
+
+# === Risks (inherits voicedeck-live safety profile) ===
+[risks]
+auto_merge_max = "low"
+context_budget_default = 100000
+max_files_per_task = 5
+require_healthcheck = true
+require_tests = true
+
+[retention]
+completed_keep = 200
+plans_archive_days = 30
+logs_rotate_days = 90
+
+[sandbox]
+mode = "openclaw-native"
+
+# === Source of truth for this iteration ===
+[source_analysis]
+file = "inbound analysis (external untrusted content, 2026-09-18)"
+sections_in_scope = ["2", "3", "4", "5", "variant_E"]
+sections_out_of_scope = ["rewrite (deferred)"]

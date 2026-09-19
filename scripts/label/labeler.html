@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<title>VoiceDeck labeler</title>
+<style>
+body{font:14px system-ui;max-width:900px;margin:24px auto;padding:0 16px;background:#f6f7f4;color:#253e34}
+.row{padding:8px 10px;border-bottom:1px solid #e2e7dc;cursor:pointer;user-select:none}
+.row:hover{background:#eef2ea}
+.row.boundary{border-top:3px solid #c96a4a;padding-top:7px}
+.idx{display:inline-block;width:44px;color:#98a58e;font-variant-numeric:tabular-nums}
+mark{background:#f5e2c9;color:#7a5a1e;padding:0 3px;border-radius:3px}
+header{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+button{border:1px solid #ccd6c2;background:white;border-radius:6px;padding:8px 14px;cursor:pointer}
+.hint{color:#8a977c;font-size:12px}
+</style>
+<h1>Разметка границ тем</h1>
+<header>
+  <input type="file" id="file" accept=".tsv,.txt">
+  <button id="export" disabled>Скачать boundaries.tsv</button>
+  <span class="hint">Клик по строке = граница ПЕРЕД этим предложением. Формат входа: start_ms&lt;TAB&gt;text или просто text на строку.</span>
+</header>
+<div id="list"><p class="hint">Загрузите transcript.tsv …</p></div>
+<script>
+let sentences=[],boundaries=new Set();
+document.getElementById('file').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const text=await f.text();
+  sentences=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{const p=l.split('\t');return p.length>1?p[1]:p[0];});
+  boundaries.clear();render();
+};
+function render(){
+  const el=document.getElementById('list');el.innerHTML='';
+  sentences.forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='row'+(boundaries.has(i)?' boundary':'');
+    d.innerHTML='<span class="idx">'+i+'</span>'+(boundaries.has(i)?'<mark>ГРАНИЦА</mark> ':'')+escapeHtml(s);
+    d.onclick=()=>{if(i===0)return;boundaries.has(i)?boundaries.delete(i):boundaries.add(i);render();};
+    el.appendChild(d);
+  });
+  document.getElementById('export').disabled=sentences.length===0;
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+document.getElementById('export').onclick=()=>{
+  const lines=[...boundaries].sort((a,b)=>a-b).map(i=>i+'\tslide');
+  const blob=new Blob([lines.join('\n')+'\n'],{type:'text/tab-separated-values'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='boundaries.tsv';a.click();
+};
+</script>

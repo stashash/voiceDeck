@@ -1,0 +1,26 @@
+{"ts":"2026-09-18T22:50:00Z","event":"factory_init","project":"voicedeck-m3","msg":"dark-factory created at voicedeck_m3/dark-factory/","plans":14,"in_progress":["T-S1"]}
+{"ts":"2026-09-18T22:50:00Z","event":"plan_written","project":"voicedeck-m3","task_id":"T-S1","spec_ref":"dark-factory/plans/active/T-S1.md"}
+{"ts":"2026-09-18T22:50:00Z","event":"spawn_coder","project":"voicedeck-m3","task_id":"T-S1","spec_ref":"dark-factory/plans/active/T-S1.md","model":"minimax/MiniMax-M3"}
+{"ts":"2026-09-18T23:00:00Z","event":"coder_wip","project":"voicedeck-m3","task_id":"T-S1","files":["EmbeddingClient.java","Models.java","models/config.json","compose.yaml",".env.example","EmbeddingClientTest.java"]}
+{"ts":"2026-09-18T23:05:00Z","event":"coder_done","project":"voicedeck-m3","task_id":"T-S1","files_changed":7,"test_added":8}
+{"ts":"2026-09-18T23:05:00Z","event":"test_pass","project":"voicedeck-m3","task_id":"T-S1","build":"SUCCESS","tests":"15/15","breakdown":"8 EmbeddingClientTest + 7 PipelineTest"}
+{"ts":"2026-09-18T23:05:00Z","event":"reviewer_pass","project":"voicedeck-m3","task_id":"T-S1","checks":["dual backend preserves demo path","SSRF guard on EmbeddingClient","final field assigned exactly once","L2 normalization consistent with Text.cosine"]}
+{"ts":"2026-09-18T23:05:00Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S1","decision":"promote_to_completed","rollout":"default ollama, opt-in onnx via EMBEDDING_BACKEND"}
+{"ts":"2026-09-18T21:16:44Z","event":"coder_done","project":"voicedeck-m3","task_id":"T-S2","files_changed":3}
+{"ts":"2026-09-18T21:16:44Z","event":"coder_done","project":"voicedeck-m3","task_id":"T-S4","files_changed":3}
+{"ts":"2026-09-18T21:16:44Z","event":"test_pass","project":"voicedeck-m3","task_ids":["T-S2","T-S4"],"build":"SUCCESS","tests":"30/30"}
+{"ts":"2026-09-18T21:16:44Z","event":"judge_accept","project":"voicedeck-m3","task_ids":["T-S2","T-S4"],"decision":"promote_to_completed","note":"block embeddings + replay embeddings shipped together; thresholds stay nominal until T-S3 depth-score"}
+{"ts":"2026-09-18T21:19:23Z","event":"coder_done","project":"voicedeck-m3","task_id":"T-S5","files_changed":4}
+{"ts":"2026-09-18T21:19:23Z","event":"test_pass","project":"voicedeck-m3","task_id":"T-S5","build":"SUCCESS","tests":"33/33"}
+{"ts":"2026-09-18T21:19:23Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S5","decision":"promote_to_completed","note":"chunk size policy shipped; tick/accepter split between size-target (200w/600ms), size-cap (300w/100ms), emergency (500w). all existing tests still green."}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S3","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S6","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S7","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S8","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S9","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S10","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S11","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S12","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S13","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"judge_accept","project":"voicedeck-m3","task_id":"T-S14","decision":"promote_to_completed"}
+{"ts":"2026-09-18T22:23:22.357Z","event":"iteration_complete","project":"voicedeck-m3","iteration":"segmentation-fixes-2026-09-18","tasks":14,"backend_tests":60,"frontend_tests":6,"build":"SUCCESS"}

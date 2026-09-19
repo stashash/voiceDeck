@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-09-19T01:30:00Z",
+  "project": "voicedeck-m3",
+  "iteration": "segmentation-fixes-2026-09-18",
+  "tasks": {
+    "queue": 0,
+    "in_progress": 0,
+    "completed": 14,
+    "blocked": 0
+  },
+  "review": {
+    "reviewer_pass": 14,
+    "reviewer_reject": 0,
+    "reviewer_pass_rate": 1,
+    "judge_accept": 14,
+    "judge_accept_rate": 1
+  },
+  "activity": {
+    "completed_today": [
+      "T-S1",
+      "T-S2",
+      "T-S3",
+      "T-S4",
+      "T-S5",
+      "T-S6",
+      "T-S7",
+      "T-S8",
+      "T-S9",
+      "T-S10",
+      "T-S11",
+      "T-S12",
+      "T-S13",
+      "T-S14"
+    ]
+  },
+  "tests": {
+    "backend": 60,
+    "frontend": 6,
+    "breakdown": {
+      "EmbeddingClientTest": 8,
+      "ModelsEmbedBlockTest": 9,
+      "StoreReplayEmbeddingsTest": 6,
+      "ModelsChunkSizeConfigTest": 3,
+      "SemanticDepthScoreTest": 4,
+      "DiscourseMarkersTest": 6,
+      "CuratorBoundariesTest": 5,
+      "ConfirmPassTest": 4,
+      "RevisionArbiterTest": 4,
+      "OfflinePassTest": 4,
+      "PipelineTest": 7,
+      "store.test.ts": 3,
+      "audio.test.ts": 3
+    }
+  }
+}

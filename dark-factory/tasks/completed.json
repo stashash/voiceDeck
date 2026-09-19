@@ -1,0 +1,86 @@
+[
+  {
+    "id": "T-S1",
+    "completed_at": "2026-09-18T23:05:00Z",
+    "tests_added": 8,
+    "_note": "Embedding backend: MiniLM -> bge-m3 via Ollama (EmbeddingClient, SSRF guard, L2 norm, dual backend in Models)"
+  },
+  {
+    "id": "T-S2",
+    "completed_at": "2026-09-18T23:18:00Z",
+    "tests_added": 9,
+    "_note": "Block embeddings: joinBlock last 3 sentences; Session.acceptFinal embeds blocks"
+  },
+  {
+    "id": "T-S4",
+    "completed_at": "2026-09-18T23:18:00Z",
+    "tests_added": 6,
+    "_note": "Replay embeddings from pgvector on Session construction; parsePgVector"
+  },
+  {
+    "id": "T-S5",
+    "completed_at": "2026-09-18T23:25:00Z",
+    "tests_added": 3,
+    "_note": "Chunk sizes 60/200/300/500 + coalesce 250, all from config; tick size-cap/size-target"
+  },
+  {
+    "id": "T-S3",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 4,
+    "_note": "Depth-score: EMA baseline + dispersion replaces absolute 0.3; emergency floor from config"
+  },
+  {
+    "id": "T-S9",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 6,
+    "_note": "Discourse lexicon: 12 markers; marker at sentence start commits pending (>=60 words) first"
+  },
+  {
+    "id": "T-S10",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 0,
+    "_note": "coalesceThreshold/emergencyThreshold wired from config into coalesce() and semantic()"
+  },
+  {
+    "id": "T-S6",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 4,
+    "_note": "confirmChunkPass every 5s: merge with look-ahead, split on internal dip, else confirm; source=confirmer"
+  },
+  {
+    "id": "T-S7",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 4,
+    "_note": "Revision arbiter: source field, priority human>offline>curator>confirmer>drift; store.ts Chunk.source"
+  },
+  {
+    "id": "T-S8",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 3,
+    "_note": "Curator applies ALL boundaries via applyBoundaries(); window 25 -> 60 sentences"
+  },
+  {
+    "id": "T-S11",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 2,
+    "_note": "Llm.verifyBoundaries: curator verifies depth candidates instead of discovering; subset-only schema"
+  },
+  {
+    "id": "T-S13",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 4,
+    "_note": "TextTiling bilateral pass on stop; skipped when human edits exist; atomic chunk_revise source=offline"
+  },
+  {
+    "id": "T-S12",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 0,
+    "_note": "Calibration stand: recording-protocol, label-format, labeler.html, calibrate.mjs (Pk/WindowDiff/F1), calibrate.sh"
+  },
+  {
+    "id": "T-S14",
+    "completed_at": "2026-09-19T01:30:00Z",
+    "tests_added": 0,
+    "_note": "Frontend: quota slide renders explicit badge instead of blank preview"
+  }
+]

@@ -1,5 +1,5 @@
 export type Sentence={id:string;text:string;t0:number;t1:number};
-export type Chunk={id:string;rev:number;status:'provisional'|'confirmed';sentence_ids:string[];text:string;t0:number;t1:number;updated_at:number};
+export type Chunk={id:string;rev:number;status:'provisional'|'confirmed';sentence_ids:string[];text:string;t0:number;t1:number;updated_at:number;source?:'human'|'drift'|'curator'|'confirmer'|'offline'};
 export type Slide={chunk_id:string;rev:number;title:string|null;bullets:string[];notes:string;source:string};
 export type State={seq:number;sentences:Record<string,Sentence>;chunks:Record<string,Chunk>;slides:Record<string,Slide>;partial:string};
 export const initial=():State=>({seq:0,sentences:{},chunks:{},slides:{},partial:''});

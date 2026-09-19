@@ -23,6 +23,10 @@ services:
       LLM_URL: ${LLM_URL:-http://host.docker.internal:8000/v1}
       LLM_MODEL: ${LLM_MODEL:-deckgen}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-deckgen-small}
+      EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-ollama}
+      EMBEDDING_URL: ${EMBEDDING_URL:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3-embed}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1024}
       ALLOWED_ORIGIN: http://localhost:${APP_PORT:-8088}
     volumes: ["./models:/models:ro", "./native:/native:ro"]
     depends_on:

@@ -6,6 +6,15 @@ import java.util.regex.Pattern;
 public final class Text {
     private Text() {}
     private static final Pattern ABBR = Pattern.compile("(?iu).*(?<!\\p{L})(?:т\\.е|т\\.д|т\\.п|т\\.к|рис|стр|им|руб|г|гг|см|др|проф|доц|ул|д|кв|[а-яa-z])\\.$");
+    // T-S9: presentation register discourse markers. Strong topic-shift signal when at sentence start.
+    private static final List<String> DISCOURSE_MARKERS = List.of("итак","теперь","далее","наконец","перейдём","переходим","следующий пункт","следующая тема","давайте поговорим","давайте обсудим","ещё про","вернёмся к");
+    public static boolean startsWithMarker(String sentence) {
+        if (sentence == null) return false;
+        String t = sentence.trim().toLowerCase();
+        if (t.length() < 5) return false;
+        for (String m : DISCOURSE_MARKERS) if (t.startsWith(m + " ") || t.startsWith(m + ",")) return true;
+        return false;
+    }
     public static List<String> sentences(String text) {
         List<String> result = new ArrayList<>();
         int start = 0;

@@ -53,4 +53,24 @@ public final class Store {
         String value=Arrays.toString(vector);
         try(var c=connect();var p=c.prepareStatement("INSERT INTO embeddings(session_id,sent_id,embedding) VALUES(?,?,?::vector) ON CONFLICT(session_id,sent_id) DO UPDATE SET embedding=EXCLUDED.embedding")){p.setString(1,id);p.setString(2,sentId);p.setString(3,value);p.executeUpdate();}
     }
+    /** Restore all stored embeddings for a session. Returns empty map in-memory or when DB is empty. */
+    public Map<String,float[]> embeddingsOf(String sessionId)throws SQLException {
+        Map<String,float[]> out=new HashMap<>();
+        if(!durable())return out;
+        try(var c=connect();var p=c.prepareStatement("SELECT sent_id,embedding FROM embeddings WHERE session_id=?")) {
+            p.setString(1,sessionId);
+            try(var r=p.executeQuery()){while(r.next())out.put(r.getString(1),parsePgVector(r.getString(2)));}
+        }
+        return out;
+    }
+    /** Parse pgvector text format {@code [0.1, 0.2, ...]} into float[]. */
+    public static float[] parsePgVector(String s){
+        if(s==null||s.length()<2||s.charAt(0)!='['||s.charAt(s.length()-1)!=']')throw new IllegalArgumentException("Invalid pgvector string: "+s);
+        String inner=s.substring(1,s.length()-1).trim();
+        if(inner.isEmpty())return new float[0];
+        String[] parts=inner.split(",");
+        float[] v=new float[parts.length];
+        for(int i=0;i<parts.length;i++)v[i]=Float.parseFloat(parts[i].trim());
+        return v;
+    }
 }

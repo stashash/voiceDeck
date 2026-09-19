@@ -14,25 +14,44 @@ public final class Models implements AutoCloseable {
     private final OrtEnvironment ort;
     private final OrtSession frida;
     private final HuggingFaceTokenizer tokenizer;
+    private final EmbeddingClient embeddingHttp;
     public final boolean live;
+    public final String embeddingBackend;
     public Models(boolean live) throws Exception {
+        this(live, live ? defaultEmbeddingClient() : null);
+    }
+    public Models(boolean live,EmbeddingClient embeddingHttp) throws Exception {
         this.live=live;
-        if(!live){config=new JsonObject();partial=finals=null;ort=null;frida=null;tokenizer=null;return;}
+        if(!live){config=new JsonObject();partial=finals=null;ort=null;frida=null;tokenizer=null;this.embeddingHttp=null;this.embeddingBackend="disabled";return;}
         config=new JsonObject(Files.readString(Path.of(Main.env("MODEL_CONFIG","models/config.json"))));
         partial=recognizer(config.getJsonObject("partial"));
         finals=config.containsKey("final")?recognizer(config.getJsonObject("final")):partial;
-        String embedding=config.getString("embeddingModel",config.getString("fridaModel",""));
-        if(!embedding.isBlank()) {
-            ort=OrtEnvironment.getEnvironment();
-            try(var options=new OrtSession.SessionOptions()) {
-                options.setIntraOpNumThreads(config.getInteger("threads",2));
-                frida=ort.createSession(embedding,options);
-            }
-            tokenizer=HuggingFaceTokenizer.newInstance(Path.of(config.getString("embeddingTokenizer",config.getString("fridaTokenizer"))),Map.of("maxLength","512","truncation","true"));
-        } else {ort=null;frida=null;tokenizer=null;}
+        this.embeddingBackend=config.getString("embeddingBackend",Main.env("EMBEDDING_BACKEND","ollama"));
+        if("ollama".equals(this.embeddingBackend)){
+            ort=null;frida=null;tokenizer=null;
+            // Disabled or unreachable client collapses to pause/deadline fallback.
+            this.embeddingHttp=(embeddingHttp!=null&&embeddingHttp.enabled())?embeddingHttp:null;
+        } else {
+            String embeddingPath=config.getString("embeddingModel",config.getString("fridaModel",""));
+            if(!embeddingPath.isBlank()) {
+                ort=OrtEnvironment.getEnvironment();
+                try(var options=new OrtSession.SessionOptions()) {
+                    options.setIntraOpNumThreads(config.getInteger("threads",2));
+                    frida=ort.createSession(embeddingPath,options);
+                }
+                tokenizer=HuggingFaceTokenizer.newInstance(Path.of(config.getString("embeddingTokenizer",config.getString("fridaTokenizer"))),Map.of("maxLength","512","truncation","true"));
+            } else {ort=null;frida=null;tokenizer=null;}
+            this.embeddingHttp=null;
+        }
         // Fail readiness on missing/incompatible files, including VAD, before accepting a microphone.
         Object vad=newVad();call(vad,"acceptWaveform",new float[512]);call(vad,"release");
         for(int i=0;i<2;i++){decode(new float[16000],false);decode(new float[16000],true);embed("Проверка готовности распознавания речи.");}
+    }
+    private static EmbeddingClient defaultEmbeddingClient(){
+        String backend=Main.env("EMBEDDING_BACKEND","ollama");
+        if("disabled".equals(backend))return null;
+        if(!"ollama".equals(backend))return null; // ONNX path constructs none; config drives loading.
+        return new EmbeddingClient();
     }
     static Object call(Object target,String method,Object... args) throws Exception {
         for(Method m:target.getClass().getMethods()) {
@@ -70,6 +89,11 @@ public final class Models implements AutoCloseable {
         finally{call(stream,"release");}
     }
     public synchronized float[] embed(String text) throws Exception {
+        if(text==null||text.isBlank())return null;
+        if("ollama".equals(embeddingBackend)){
+            if(embeddingHttp==null)return null; // Explicit pause/deadline fallback; never fake semantic embeddings.
+            return embeddingHttp.embed(text);
+        }
         if(frida==null)return null; // Explicit pause/deadline fallback; never fake semantic embeddings.
         boolean mean=config.getString("embeddingPooling","cls").equals("mean");
         var encoding=tokenizer.encode(config.getString("embeddingPrefix",mean?"":"categorize_topic: ")+text);
@@ -88,9 +112,33 @@ public final class Models implements AutoCloseable {
             }
         }
     }
-    public String embeddingStatus(){return frida==null?"pause-only":config.getString("embeddingName","frida");}
+    /** Join the last 3 sentences with spaces; used as the embedding unit (TextTiling-style block). */
+    public static String joinBlock(java.util.List<String> sentences){
+        if(sentences==null||sentences.isEmpty())return null;
+        int from=Math.max(0,sentences.size()-3);
+        return String.join(" ",sentences.subList(from,sentences.size()));
+    }
+    /** Embed a sliding block of 1–3 sentences. {@code null}/empty → {@code null}. */
+    public synchronized float[] embedBlock(java.util.List<String> sentences)throws Exception{
+        String text=joinBlock(sentences);
+        if(text==null)return null;
+        return embed(text);
+    }
+    public String embeddingStatus(){
+        if("ollama".equals(embeddingBackend))return embeddingHttp==null?"ollama-disabled":"ollama:"+embeddingHttp.modelName();
+        return frida==null?"pause-only":config.getString("embeddingName","frida");
+    }
+    // T-S5 chunk size policy, read from models/config.json. Defaults match §2.5 of the segmentation analysis.
+    public int chunkSizeMin(){return config.getInteger("chunkSizeMin",60);}
+    public int chunkSizeTarget(){return config.getInteger("chunkSizeTarget",200);}
+    public int chunkSizeMax(){return config.getInteger("chunkSizeMax",300);}
+    public int chunkSizeEmergency(){return config.getInteger("chunkSizeEmergency",500);}
+    public int chunkCoalesceMax(){return config.getInteger("chunkCoalesceMax",250);}
+    public double coalesceThreshold(){return config.getDouble("coalesceThreshold",0.65);}
+    public double emergencyThreshold(){return config.getDouble("emergencyThreshold",0.2);}
     public void close() throws Exception {
         if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");
         if(frida!=null)frida.close();if(tokenizer!=null)tokenizer.close();
+        if(embeddingHttp!=null)embeddingHttp.close();
     }
 }
