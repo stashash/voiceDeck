@@ -1,0 +1,5 @@
+name: audit-deck
+version: "1"
+temperature: 0
+max_tokens: 600
+reasoning_effort: none
