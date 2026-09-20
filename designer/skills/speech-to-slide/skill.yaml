@@ -1,0 +1,5 @@
+name: speech-to-slide
+version: "1"
+temperature: 0.2
+max_tokens: 400
+reasoning_effort: none
