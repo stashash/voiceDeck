@@ -1,6 +1,7 @@
 """Слайды-образцы как паттерны: слоты, повторяющиеся блоки, тип слайда. Владелец: задача T-02."""
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -470,7 +471,7 @@ def _fill_to_color(node, part, theme: ThemeInfo) -> tuple[str | None, str | None
                 image_part = part.related_part(rel_id)
             except (KeyError, AttributeError):
                 return None, None
-            return _image_average(image_part), Path(str(image_part.partname)).stem
+            return _image_average(image_part), hashlib.sha1(image_part.blob).hexdigest()[:12]
     ref = node.find(qn("p:bgRef"))
     if ref is not None:
         return _color_of(ref, theme), None
@@ -512,7 +513,8 @@ def _full_bleed_fill(shapes: list[ShapeInfo], slide, theme: ThemeInfo) -> tuple[
             continue
         if info.kind == "image":
             try:
-                return _image_average(shape.image), info.image_part
+                # Тот же идентификатор, что у Asset.id в слое ассетов: первые 12 знаков sha1 содержимого.
+                return _image_average(shape.image), shape.image.sha1[:12]
             except Exception:
                 continue
         props = shape._element.find(qn("p:spPr"))
@@ -787,6 +789,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         kind_confidence=confidence,
         theme="dark" if dark else "light",
         background_asset=asset,
+        background_color=color,
         slots=slots,
         areas=areas,
         groups=groups,

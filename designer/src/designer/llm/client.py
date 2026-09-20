@@ -39,8 +39,11 @@ class LlmClient:
     def close(self) -> None:
         self._client.close()
 
-    def complete_json(self, system: str, user: str, schema: dict, images_png: list[bytes] | None = None) -> dict:
+    def complete_json(self, system: str, user: str, schema: dict, images_png: list[bytes] | None = None,
+                      params: dict | None = None) -> dict:
+        """params это параметры запроса из skill.yaml: temperature, max_tokens, reasoning_effort и другие."""
         payload = self._build_payload(system, user, schema, images_png)
+        payload.update(params or {})
         errors: list[str] = []
         for _ in range(_MAX_ATTEMPTS):
             content = self._call(payload)

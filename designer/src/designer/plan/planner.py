@@ -16,13 +16,13 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     schema = DeckPlan.model_json_schema()
     system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count))
 
-    data = client.complete_json(system=system, user=brief, schema=schema)
+    data = client.complete_json(system=system, user=brief, schema=schema, params=skill.params)
     plan = DeckPlan.model_validate(data)
 
     violations = _structural_violations(plan, slide_count)
     if violations:
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
-        data = client.complete_json(system=system, user=retry_user, schema=schema)
+        data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
         plan = DeckPlan.model_validate(data)
 
     # Числа, которых нет в брифе, убираются кодом безусловно: повтор не гарантирует,

@@ -152,7 +152,8 @@ class Pattern(BaseModel):
     kind: SlideKind
     kind_confidence: float = Field(ge=0, le=1)
     theme: Literal["light", "dark"]
-    background_asset: str | None = None
+    background_asset: str | None = Field(default=None, description="Asset.id картинки фона: первые 12 знаков sha1 содержимого")
+    background_color: str | None = None
     slots: list[Slot] = Field(default_factory=list)
     areas: list[Area] = Field(default_factory=list)
     groups: list[RepeatGroup] = Field(default_factory=list)

@@ -1,11 +1,14 @@
 """Сборка пакета дизайн-системы на диске. Владелец: задача T-01."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from pptx import Presentation
 
 from designer.contracts import DesignSystem, LayoutInfo, Pattern
+
+SOURCE_NAME = "source.pptx"
 from designer.parse.assets import _extract_embedded_fonts, extract_assets
 from designer.parse.patterns import extract_layouts, extract_patterns
 from designer.parse.tokens import extract_tokens
@@ -41,6 +44,8 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
     pptx_path = Path(pptx_path)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Исходник нужен сборщику pptx: слайды-образцы клонируются из него вместе с макетами и встроенными шрифтами.
+    shutil.copyfile(pptx_path, out_dir / SOURCE_NAME)
 
     prs = Presentation(str(pptx_path))
     slide_size_emu = (prs.slide_width, prs.slide_height)
