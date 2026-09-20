@@ -165,6 +165,20 @@ class SemanticDepthScoreTest {
         }
     }
 
+    @Test void bilateralGapHelperSeparatesTopics(){
+        float[] a=vec(1),b=vec(2);
+        java.util.List<float[]> vecs=java.util.List.of(a,a,a,a,a,b,b,b,b,b);
+        // At at=5 (between a's and b's): left=mean(a,a), right=mean(b,b). cosine~0, gap~1.
+        double gapBoundary=Text.bilateralGap(vecs,5,2);
+        assertTrue(gapBoundary>0.5,"boundary gap should be large: "+gapBoundary);
+        // At at=2 (within a's): left=mean(a,a), right=mean(a,a). cosine~1, gap~0.
+        double gapWithin=Text.bilateralGap(vecs,2,2);
+        assertTrue(gapWithin<0.05,"within-topic gap should be small: "+gapWithin);
+        // At at=8 (within b's): also small.
+        double gapWithinB=Text.bilateralGap(vecs,8,2);
+        assertTrue(gapWithinB<0.05,"within-topic gap (b) should be small: "+gapWithinB);
+    }
+
     @Test void depthIsComputedBeforeEmaUpdate()throws Exception{
         try(var session=live("order")){
             session.emaBaseline=0.9;session.emaDispersion=0.11875;session.emaCount=10;

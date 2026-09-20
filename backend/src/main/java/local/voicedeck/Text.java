@@ -40,6 +40,24 @@ public final class Text {
         for (int i=0;i<a.length;i++) { dot+=a[i]*b[i]; aa+=a[i]*a[i]; bb+=b[i]*b[i]; }
         return aa==0 || bb==0 ? 1 : dot/Math.sqrt(aa*bb);
     }
+    /** L2-normalised mean of L2-normalised vectors. Used by the bilateral gap helper. */
+    public static float[] mean(java.util.List<float[]> vs) {
+        if (vs==null||vs.isEmpty()) return null;
+        int d=vs.get(0).length; float[] m=new float[d];
+        for (float[] v : vs) for (int i=0;i<d;i++) m[i]+=v[i]/vs.size();
+        double n=0; for (float x:m) n+=x*x;
+        if (n>0) for (int i=0;i<d;i++) m[i]/=(float)Math.sqrt(n);
+        return m;
+    }
+    /** TextTiling-style bilateral cosine-distance at position {@code at} over {@code window} vectors on each side.
+     *  Returns {@code 1 - cosine(mean_left, mean_right)}; values close to 1 mark strong topic shifts. */
+    public static double bilateralGap(java.util.List<float[]> vectors, int at, int window) {
+        if (vectors==null||vectors.isEmpty()||at<=0||at>=vectors.size()||window<1) return 0;
+        int leftFrom=Math.max(0,at-window), leftTo=at;
+        int rightFrom=at, rightTo=Math.min(vectors.size(), at+window);
+        if (leftTo-leftFrom<1 || rightTo-rightFrom<1) return 0;
+        return 1-cosine(mean(vectors.subList(leftFrom,leftTo)), mean(vectors.subList(rightFrom,rightTo)));
+    }
     public static String deduplicate(String previous, String current) {
         String[] a=previous.trim().split("\\s+"), b=current.trim().split("\\s+");
         for (int n=Math.min(12,Math.min(a.length,b.length));n>=2;n--) {

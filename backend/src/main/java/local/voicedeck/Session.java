@@ -148,6 +148,14 @@ public final class Session implements AutoCloseable {
         for(int i=at-1;i>=Math.max(0,at-20);i--){if(embeddings.containsKey(streamIds.get(i))){prevId=streamIds.get(i);break;}}
         if(prevId==null)return;
         double cosine=Text.cosine(embeddings.get(prevId),vector);
+        // T4: bilateral cosine-distance (TextTiling-style, windowed mean on each side of `at`).
+        // Independent of EMA: emitted as telemetry; also used as a secondary threshold when EMA noise dominates.
+        int bWin=models.bilateralWindow();
+        double bilateralGap=0;
+        java.util.List<float[]> leftVecs=new java.util.ArrayList<>(),rightVecs=new java.util.ArrayList<>();
+        for(int i=Math.max(0,at-bWin);i<at;i++){float[] v=embeddings.get(streamIds.get(i));if(v!=null)leftVecs.add(v);}
+        for(int i=at;i<Math.min(streamIds.size(),at+bWin);i++){float[] v=embeddings.get(streamIds.get(i));if(v!=null)rightVecs.add(v);}
+        if(!leftVecs.isEmpty()&&!rightVecs.isEmpty())bilateralGap=1-Text.cosine(Text.mean(leftVecs),Text.mean(rightVecs));
         double alpha=0.1,depth;
         // Threshold and depth both come from the pre-update snapshot: the dip is judged against the state
         // that existed when the pair arrived, before baseline/dispersion move.
@@ -171,7 +179,7 @@ public final class Session implements AutoCloseable {
             if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
             else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
         }
-        if(semanticDebug)wire(new JsonObject().put("type","semantic_debug").put("sid",sid).put("cosine",cosine).put("depth",depth).put("ema_baseline",emaBaseline).put("ema_dispersion",emaDispersion).put("decision",decision));
+        if(semanticDebug)wire(new JsonObject().put("type","semantic_debug").put("sid",sid).put("cosine",cosine).put("depth",depth).put("ema_baseline",emaBaseline).put("ema_dispersion",emaDispersion).put("bilateral_gap",bilateralGap).put("decision",decision));
     }
     /** T1b: a confirmed valley applies the boundary at the remembered candidate, then clears it. */
     boolean applyCandidate(){String sid=candidateSid;candidateSid=null;candidateDepth=0;candidateCos=0;candidateAge=0;return applyBoundaryAt(sid,false);}

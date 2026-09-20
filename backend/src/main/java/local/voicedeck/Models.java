@@ -146,6 +146,11 @@ public final class Models implements AutoCloseable {
     public double depthFloor(){return config.getDouble("depthFloor",0.12);}
     // T1b: absolute cos guard, 1.0 disables it pending bge-m3 calibration (T3).
     public double deepDipCosFloor(){return config.getDouble("deepDipCosFloor",1.0);}
+    // T4: bilateral cosine-distance window (TextTiling-style), used as the second stream signal alongside EMA.
+    public int bilateralWindow(){return config.getInteger("bilateralWindow",2);}
+    public int rollingBufferSize(){return config.getInteger("rollingBufferSize",20);}
+    public double dispersionMultiplier(){return config.getDouble("dispersionMultiplier",1.6);}
+    public double bilateralFloor(){return config.getDouble("bilateralFloor",0.12);} // cosine-distance floor for the bilateral signal.
     public void close() throws Exception {
         if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");
         if(frida!=null)frida.close();if(tokenizer!=null)tokenizer.close();
