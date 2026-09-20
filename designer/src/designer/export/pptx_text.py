@@ -1,0 +1,89 @@
+"""Текст в фигуру слайда с оформлением образца. Владелец: задача T-08.
+
+Шаблон задаёт шрифт, кегль, цвет и начертание первым фрагментом первого абзаца.
+Всё остальное содержимое фигуры это текст-образец, он уходит.
+"""
+from __future__ import annotations
+
+import copy
+
+from pptx.oxml import parse_xml
+from pptx.oxml.ns import nsdecls, qn
+
+_XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+
+
+def set_text(shape, text: str) -> None:
+    """Пишет текст в фигуру, сохраняя оформление первого фрагмента первого абзаца.
+
+    Лишние фрагменты и абзацы убираются, перевод строки даёт новый абзац с тем же оформлением.
+    Пустая строка очищает фигуру, сама фигура остаётся на слайде.
+    Принимает и фигуру python-pptx, и её XML.
+    """
+    body = _text_body(shape)
+    if body is None:
+        return
+    run_props, para_props = _sample_props(body)
+    for para in body.findall(qn("a:p")):
+        body.remove(para)
+    for line in _lines(text):
+        body.append(_paragraph(line, run_props, para_props))
+
+
+def _text_body(shape):
+    element = getattr(shape, "_element", shape)
+    return element.find(qn("p:txBody"))
+
+
+def _sample_props(body):
+    """Оформление образца: свойства фрагмента и абзаца, которые переносим на новый текст."""
+    paragraphs = body.findall(qn("a:p"))
+    if not paragraphs:
+        return None, None
+    first = paragraphs[0]
+    para_props = first.find(qn("a:pPr"))
+    run = first.find(qn("a:r"))
+    if run is None:
+        run = next((r for para in paragraphs for r in para.findall(qn("a:r"))), None)
+    if run is not None:
+        return run.find(qn("a:rPr")), para_props
+    if para_props is not None:
+        defaults = para_props.find(qn("a:defRPr"))
+        if defaults is not None:
+            return _retag(defaults, "a:rPr"), para_props
+    tail = first.find(qn("a:endParaRPr"))
+    if tail is not None:
+        return _retag(tail, "a:rPr"), para_props
+    return None, para_props
+
+
+def _retag(element, tag: str):
+    copied = copy.deepcopy(element)
+    copied.tag = qn(tag)
+    return copied
+
+
+def _lines(text: str) -> list[str]:
+    """Строки текста: перевод строки в любом виде делит текст на абзацы."""
+    if not text:
+        return [""]
+    plain = text.replace("\r\n", "\n").replace("\r", "\n").replace("\v", "\n")
+    plain = "".join(ch if ch >= " " or ch in "\t\n" else " " for ch in plain)
+    return plain.split("\n")
+
+
+def _paragraph(line: str, run_props, para_props):
+    para = parse_xml("<a:p %s/>" % nsdecls("a"))
+    if para_props is not None:
+        para.append(copy.deepcopy(para_props))
+    if line:
+        run = parse_xml("<a:r %s><a:t/></a:r>" % nsdecls("a"))
+        if run_props is not None:
+            run.insert(0, copy.deepcopy(run_props))
+        text_node = run.find(qn("a:t"))
+        text_node.text = line
+        text_node.set(_XML_SPACE, "preserve")
+        para.append(run)
+    elif run_props is not None:
+        para.append(_retag(run_props, "a:endParaRPr"))
+    return para
