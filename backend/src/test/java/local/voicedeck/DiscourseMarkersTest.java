@@ -30,6 +30,30 @@ class DiscourseMarkersTest {
         assertFalse(Text.startsWithMarker("Аудио обрабатывается на локальном компьютере."));
     }
 
+    @Test void markerCommitsAtThirtyWordsNotBelow()throws Exception{
+        Store store=new Store();store.create("mk3","hash","live");
+        try(var session=new Session("mk3","live",store,new Models(false),new Llm())){
+            session.clock.shutdownNow();session.generating=true;
+            // 2 sentences × 10 words = 20 words < markerMinWords(30): marker must NOT commit.
+            session.acceptFinal("Одна короткая фраза с фиксированным количеством слов здесь. Вторая такая же фраза из десяти слов.",0,4000);
+            session.acceptFinal("Итак, переходим дальше.",4000,5000);
+            assertTrue(session.chunks.isEmpty());
+            assertEquals(3,session.pending.size());
+        }
+        Store store2=new Store();store2.create("mk4","hash","live");
+        try(var session=new Session("mk4","live",store2,new Models(false),new Llm())){
+            session.clock.shutdownNow();session.generating=true;
+            // 3 sentences × 12 words = 36 words ≥ 30: marker commits.
+            StringBuilder big=new StringBuilder();
+            for(int i=0;i<3;i++)big.append("Предложение с достаточным количеством слов для преодоления порога номер ").append(i).append(" продолжается. ");
+            session.acceptFinal(big.toString(),0,6000);
+            assertTrue(session.chunks.isEmpty());
+            session.acceptFinal("Итак, переходим к следующей теме.",6000,7000);
+            assertEquals(1,session.chunks.size());
+            assertEquals(1,session.pending.size());
+        }
+    }
+
     @Test void markerSentenceCommitsPendingBeforeItself()throws Exception{
         Store store=new Store();store.create("mk","hash","live");
         try(var session=new Session("mk","live",store,new Models(false),new Llm())){
@@ -45,6 +69,25 @@ class DiscourseMarkersTest {
             assertEquals(1,session.pending.size());
             assertEquals("marker",session.store.events("mk",0).stream().filter(e->e.getString("type").equals("chunk")).map(e->e.getString("reason")).findFirst().orElse(""));
         }
+    }
+
+    @Test void strongTopicShiftMarkersTrigger(){
+        assertTrue(Text.startsWithMarker("Начнём с обзора архитектуры."));
+        assertTrue(Text.startsWithMarker("Первая тема — постановка задачи."));
+        assertTrue(Text.startsWithMarker("Следующий вопрос касается безопасности."));
+        assertTrue(Text.startsWithMarker("Подведём итог по разделу."));
+        assertTrue(Text.startsWithMarker("Подводя итог, отметим главное."));
+        assertTrue(Text.startsWithMarker("Итоги эксперимента таковы."));
+        assertTrue(Text.startsWithMarker("Вывод прост: локальная обработка."));
+        assertTrue(Text.startsWithMarker("Отдельная тема — масштабирование."));
+        assertTrue(Text.startsWithMarker("Поговорим о производительности."));
+        assertTrue(Text.startsWithMarker("Давайте начнём с демонстрации."));
+        assertTrue(Text.startsWithMarker("Переходим к практической части."));
+    }
+
+    @Test void riskyWeakMarkersStayExcluded(){
+        assertFalse(Text.startsWithMarker("Кстати, об этом позже."));
+        assertFalse(Text.startsWithMarker("Между прочим, важный момент."));
     }
 
     @Test void markerWithShortPendingDoesNotCommit()throws Exception{

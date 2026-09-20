@@ -7,10 +7,12 @@ class ModelsChunkSizeConfigTest {
     @Test void defaultsMatchSegmentationAnalysis()throws Exception{
         var m=new Models(false); // demo mode → empty config → defaults apply
         assertEquals(60,m.chunkSizeMin());
-        assertEquals(200,m.chunkSizeTarget());
-        assertEquals(300,m.chunkSizeMax());
+        assertEquals(120,m.chunkSizeTarget());
+        assertEquals(180,m.chunkSizeMax());
         assertEquals(500,m.chunkSizeEmergency());
         assertEquals(250,m.chunkCoalesceMax());
+        assertEquals(12,m.chunkSentencesMax());
+        assertEquals(30,m.markerMinWords());
     }
 
     @Test void sizeTargetsIncreaseProgressively()throws Exception{

@@ -121,7 +121,7 @@ public final class Session implements AutoCloseable {
         for(int i=0;i<list.size();i++){
             String sentence=list.get(i);long end=i==list.size()-1?t1:Math.min(t1,cursor+(t1-t0)*sentence.length()/total);
             // T-S9: explicit discourse marker at sentence start commits accumulated pending first.
-            if(Text.startsWithMarker(sentence)&&!pending.isEmpty()){int w=0;for(String pid:pending)w+=Text.words(sentences.get(pid).getString("text"));if(w>=models.chunkSizeMin())commit("marker");}
+            if(Text.startsWithMarker(sentence)&&!pending.isEmpty()){int w=0;for(String pid:pending)w+=Text.words(sentences.get(pid).getString("text"));if(w>=models.markerMinWords())commit("marker");}
             var s=new JsonObject().put("id",UUID.randomUUID().toString()).put("text",sentence).put("t0",cursor).put("t1",end);
             event("final",new JsonObject().put("sentence",s));cursor=end;
             // T-S2: block-embed the last 1–3 sentences. Block text captured on state worker before crossing into inference pool.
@@ -158,21 +158,22 @@ public final class Session implements AutoCloseable {
             int words=pending.stream().map(sentences::get).mapToInt(v->Text.words(v.getString("text"))).sum();
             long sincePhraseEnd=now-(epoch+end);
             long sinceLastFinal=now-lastFinalWall;
-            // T-S5: size-cap (300 words) wins over target (200) wins over deadline (1.2–2 s).
+            // T-S5/T1a: size-cap (180 words) > sentences-cap (12 sentences) > target (120 words) > deadline (1.2–2 s).
             if(words>=models.chunkSizeMax()&&sinceLastFinal>100)commit("size-cap");
+            else if(pending.size()>=models.chunkSentencesMax()&&sinceLastFinal>100)commit("sentences-cap");
             else if(words>=models.chunkSizeTarget()&&sinceLastFinal>=600)commit("size-target");
             else if(sincePhraseEnd>=2000||sinceLastFinal>=1200)commit("deadline");
         }
         generate();
     }
-    JsonObject chunk(List<String> ids,String id,int rev,String status){
-        return new JsonObject().put("id",id).put("rev",rev).put("status",status).put("sentence_ids",new JsonArray(ids))
+    JsonObject chunk(List<String> ids,String id,int rev,String status,String reason){
+        return new JsonObject().put("id",id).put("rev",rev).put("status",status).put("reason",reason).put("sentence_ids",new JsonArray(ids))
             .put("text",String.join(" ",ids.stream().map(sentences::get).map(s->s.getString("text")).toList()))
             .put("t0",sentences.get(ids.getFirst()).getLong("t0")).put("t1",sentences.get(ids.getLast()).getLong("t1")).put("updated_at",System.currentTimeMillis());
     }
     void commit(String reason){if(!pending.isEmpty())commitIds(new ArrayList<>(pending),reason);}
     void commitIds(List<String> ids,String reason){
-        JsonObject c=chunk(ids,UUID.randomUUID().toString(),1,"provisional");
+        JsonObject c=chunk(ids,UUID.randomUUID().toString(),1,"provisional",reason);
         long latency=Math.max(0,System.currentTimeMillis()-(epoch+c.getLong("t1")));
         event("chunk",new JsonObject().put("chunk",c).put("reason",reason).put("latency_ms",latency));
         Metrics.observe("chunk_latency",latency);
@@ -191,7 +192,7 @@ public final class Session implements AutoCloseable {
         boolean continuation=!a.getString("text").matches("(?s).*[.!?…][»\"]?$"),related=av!=null&&bv!=null&&Text.cosine(av,bv)>models.coalesceThreshold();
         if(!continuation&&!related)return;
         List<String> ids=new ArrayList<>(left);ids.addAll(right);
-        event("chunk_revise",new JsonObject().put("operation","merge").put("source","drift").put("replace_ids",new JsonArray().add(a.getString("id")).add(b.getString("id"))).put("chunks",new JsonArray().add(chunk(ids,a.getString("id"),a.getInteger("rev")+1,"provisional").put("source","drift"))));
+        event("chunk_revise",new JsonObject().put("operation","merge").put("source","drift").put("replace_ids",new JsonArray().add(a.getString("id")).add(b.getString("id"))).put("chunks",new JsonArray().add(chunk(ids,a.getString("id"),a.getInteger("rev")+1,"provisional","merge").put("source","drift"))));
     }
     void flush(boolean stop){
         if(mode.equals("live"))audioWorker.execute(()->{try{if(audio!=null)audio.flush();}catch(Exception e){submit(()->warning("Не удалось завершить аудиофразу"));}submit(()->finishFlush(stop));});
@@ -216,7 +217,7 @@ public final class Session implements AutoCloseable {
         if(groups.size()<=1)return;
         JsonArray replaced=new JsonArray(),updated=new JsonArray();
         for(var c:orderedChunks())replaced.add(c.getString("id"));
-        for(List<String> g:groups)updated.add(chunk(g,UUID.randomUUID().toString(),1,"confirmed").put("source","offline"));
+        for(List<String> g:groups)updated.add(chunk(g,UUID.randomUUID().toString(),1,"confirmed","offline").put("source","offline"));
         event("chunk_revise",new JsonObject().put("operation","offline").put("source","offline").put("replace_ids",replaced).put("chunks",updated));
     }
     List<JsonObject> orderedChunks(){return chunks.values().stream().sorted(Comparator.comparingLong(c->c.getLong("t0"))).toList();}
@@ -233,9 +234,9 @@ public final class Session implements AutoCloseable {
         String op=m.getString("operation");List<String> ids=new ArrayList<>(c.getJsonArray("sentence_ids").getList());
         JsonArray replaced=new JsonArray().add(c.getString("id")),updated=new JsonArray();
         switch(op){
-            case "confirm" -> updated.add(chunk(ids,c.getString("id"),rev,"confirmed").put("source",source));
-            case "split" -> {int at=m.getInteger("split_at",-1);if(at<1||at>=ids.size())throw new IllegalArgumentException("Invalid split index");updated.add(chunk(ids.subList(0,at),c.getString("id"),rev,"confirmed").put("source",source));updated.add(chunk(ids.subList(at,ids.size()),UUID.randomUUID().toString(),1,"confirmed").put("source",source));}
-            case "merge" -> {var ordered=orderedChunks();int at=ordered.indexOf(c);if(at==ordered.size()-1)throw new IllegalArgumentException("Нет следующего куска");var next=ordered.get(at+1);if(System.currentTimeMillis()-next.getLong("updated_at")>180000)throw new IllegalArgumentException("Окно ревизии истекло");ids.addAll(next.getJsonArray("sentence_ids").getList());if(ids.stream().map(sentences::get).mapToInt(s->Text.words(s.getString("text"))).sum()>models.chunkSizeEmergency())throw new IllegalArgumentException("Слияние превысит лимит слов");replaced.add(next.getString("id"));updated.add(chunk(ids,c.getString("id"),rev,"confirmed").put("source",source));}
+            case "confirm" -> updated.add(chunk(ids,c.getString("id"),rev,"confirmed","confirm").put("source",source));
+            case "split" -> {int at=m.getInteger("split_at",-1);if(at<1||at>=ids.size())throw new IllegalArgumentException("Invalid split index");updated.add(chunk(ids.subList(0,at),c.getString("id"),rev,"confirmed","split").put("source",source));updated.add(chunk(ids.subList(at,ids.size()),UUID.randomUUID().toString(),1,"confirmed","split").put("source",source));}
+            case "merge" -> {var ordered=orderedChunks();int at=ordered.indexOf(c);if(at==ordered.size()-1)throw new IllegalArgumentException("Нет следующего куска");var next=ordered.get(at+1);if(System.currentTimeMillis()-next.getLong("updated_at")>180000)throw new IllegalArgumentException("Окно ревизии истекло");ids.addAll(next.getJsonArray("sentence_ids").getList());if(ids.stream().map(sentences::get).mapToInt(s->Text.words(s.getString("text"))).sum()>models.chunkSizeEmergency())throw new IllegalArgumentException("Слияние превысит лимит слов");replaced.add(next.getString("id"));updated.add(chunk(ids,c.getString("id"),rev,"confirmed","merge").put("source",source));}
             default -> throw new IllegalArgumentException("Unknown revision operation");
         }
         event("chunk_revise",new JsonObject().put("operation",op).put("source",source).put("replace_ids",replaced).put("chunks",updated));

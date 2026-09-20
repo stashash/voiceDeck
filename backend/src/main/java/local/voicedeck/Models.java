@@ -130,9 +130,11 @@ public final class Models implements AutoCloseable {
     }
     // T-S5 chunk size policy, read from models/config.json. Defaults match §2.5 of the segmentation analysis.
     public int chunkSizeMin(){return config.getInteger("chunkSizeMin",60);}
-    public int chunkSizeTarget(){return config.getInteger("chunkSizeTarget",200);}
-    public int chunkSizeMax(){return config.getInteger("chunkSizeMax",300);}
+    public int chunkSizeTarget(){return config.getInteger("chunkSizeTarget",120);}
+    public int chunkSizeMax(){return config.getInteger("chunkSizeMax",180);}
     public int chunkSizeEmergency(){return config.getInteger("chunkSizeEmergency",500);}
+    public int chunkSentencesMax(){return config.getInteger("chunkSentencesMax",12);} // T1a: sentence-count cap for slide-sized chunks.
+    public int markerMinWords(){return config.getInteger("markerMinWords",30);} // T1a: marker commit threshold, was chunkSizeMin (60).
     public int chunkCoalesceMax(){return config.getInteger("chunkCoalesceMax",250);}
     public double coalesceThreshold(){return config.getDouble("coalesceThreshold",0.65);}
     public double emergencyThreshold(){return config.getDouble("emergencyThreshold",0.2);}

@@ -7,7 +7,7 @@ public final class Text {
     private Text() {}
     private static final Pattern ABBR = Pattern.compile("(?iu).*(?<!\\p{L})(?:т\\.е|т\\.д|т\\.п|т\\.к|рис|стр|им|руб|г|гг|см|др|проф|доц|ул|д|кв|[а-яa-z])\\.$");
     // T-S9: presentation register discourse markers. Strong topic-shift signal when at sentence start.
-    private static final List<String> DISCOURSE_MARKERS = List.of("итак","теперь","далее","наконец","перейдём","переходим","следующий пункт","следующая тема","давайте поговорим","давайте обсудим","ещё про","вернёмся к");
+    private static final List<String> DISCOURSE_MARKERS = List.of("итак","теперь","далее","наконец","перейдём","переходим","следующий пункт","следующая тема","следующий вопрос","давайте поговорим","давайте обсудим","давайте начнём","ещё про","вернёмся к","начнём с","первая тема","подведём итог","подводя итог","итоги","вывод","отдельная тема","поговорим о","переходим к");
     public static boolean startsWithMarker(String sentence) {
         if (sentence == null) return false;
         String t = sentence.trim().toLowerCase();

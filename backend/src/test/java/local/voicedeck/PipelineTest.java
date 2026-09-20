@@ -45,6 +45,30 @@ class PipelineTest {
   assertThrows(IllegalArgumentException.class,()->Llm.validateSlide(new JsonObject().put("title",42).put("bullets",new JsonArray()).put("notes","")));
   assertThrows(IllegalArgumentException.class,()->Llm.validateSlide(new JsonObject().put("title","Title").put("bullets",new JsonArray().add(4)).put("notes","")));
  }
+ @Test void sentencesCapCommitsTwelveSentences()throws Exception {
+  Store store=new Store();store.create("sent","hash","demo");
+  try(var session=new Session("sent","demo",store,new Models(false),new Llm())){
+   session.clock.shutdownNow();session.generating=true;
+   StringBuilder text=new StringBuilder();
+   for(int i=0;i<12;i++)text.append("Короткая фраза номер ").append(i).append(". ");
+   session.acceptFinal(text.toString(),0,12000); // 36 words < target(120), 12 sentences = cap
+   assertTrue(session.chunks.isEmpty());
+   session.epoch=System.currentTimeMillis();session.lastFinalWall=System.currentTimeMillis()-200; // >100 ms pause, <600
+   session.tick();
+   assertEquals(1,session.chunks.size());
+   assertEquals("sentences-cap",session.orderedChunks().getFirst().getString("reason"));
+  }
+ }
+ @Test void chunkCarriesReasonField()throws Exception {
+  Store store=new Store();store.create("reason","hash","demo");
+  try(var session=new Session("reason","demo",store,new Models(false),new Llm())){
+   session.clock.shutdownNow();session.generating=true;
+   session.acceptFinal("Первая тема раскрыта полностью.",0,1000);session.commit("flush");
+   JsonObject chunk=session.orderedChunks().getFirst();
+   assertEquals("flush",chunk.getString("reason"));
+   assertEquals("flush",session.store.events("reason",0).stream().filter(e->e.getString("type").equals("chunk")).findFirst().get().getString("reason"));
+  }
+ }
  @Test void shortSpeechContinuationsBecomeOneMeaningfulChunk()throws Exception {
   Store store=new Store();store.create("meaning","hash","live");
   try(var session=new Session("meaning","live",store,new Models(false),new Llm())){

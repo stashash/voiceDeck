@@ -23,7 +23,7 @@ WebSocket `/ws/session`: первый текстовый кадр не позж�
 Долговечные события содержат `type, session_id, seq, emitted_at` (Unix milliseconds):
 
 * `final`: `sentence:{id,text,t0,t1}`; времена — мс от аудионачала сессии.
-* `chunk`: `chunk:{id,rev,status,sentence_ids,text,t0,t1,updated_at}`, `reason`, `latency_ms`.
+* `chunk`: `chunk:{id,rev,status,reason,sentence_ids,text,t0,t1,updated_at}`, `reason`, `latency_ms`. Поле `reason` дублируется внутри объекта куска (additive, с версии T1a 2026-09-20; старые журналы без него валидны): при `chunk` — причина коммита (`marker`, `size-cap`, `sentences-cap`, `size-target`, `deadline`, `drift`, `drift-emergency`, `flush`, `recovered`), при `chunk_revise` — операция (`merge`, `split`, `offline`, `confirm`).
 * `chunk_revise`: `operation`, `replace_ids`, `chunks`. Все удаления и вставки применяются атомарно. Источник текста — исходные предложения. Порядок определяется `t0`.
 * `slide`: `slide:{chunk_id,rev,title,bullets,notes,source,t0?,t1?}`. Применять только к совпадающей текущей ревизии куска. `title:null` означает отсутствие слайда. `source:quota` — квота, `extractive-demo` — цитаты деморежима, `local-llm` — модель.
 * `stopped`: запись завершена.
