@@ -1,0 +1,144 @@
+"""Проверки вёрстки: границы, наложения, переполнение текста, поля, направляющие, пропорции.
+
+Владелец: задача T-03.
+"""
+from designer.contracts import Box, DesignSystem, Finding, Scene
+
+_EPS = 1e-6
+_OVERLAP_TYPES = {"text", "image", "chart", "table", "icon"}
+_GUIDE_TYPES = {"text", "image", "chart", "table"}
+_GUIDE_TOLERANCE = 0.01
+_CHAR_WIDTH_RATIO = 0.52
+_LINE_HEIGHT_RATIO = 1.2
+_ASPECT_TOLERANCE = 0.03
+_EMU_PER_PT = 12700
+
+
+def _slide_size_pt(ds: DesignSystem) -> tuple[float, float]:
+    w_emu, h_emu = ds.slide_size_emu
+    return w_emu / _EMU_PER_PT, h_emu / _EMU_PER_PT
+
+
+def _intersect_area(a: Box, b: Box) -> float:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ix = max(0.0, min(ax + aw, bx + bw) - max(ax, bx))
+    iy = max(0.0, min(ay + ah, by + bh) - max(ay, by))
+    return ix * iy
+
+
+def check_out_of_bounds(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    findings: list[Finding] = []
+    for scene in scenes:
+        for el in scene.elements:
+            x, y, w, h = el.box
+            if x < -_EPS or y < -_EPS or x + w > 1 + _EPS or y + h > 1 + _EPS:
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="layout.out_of_bounds", kind="deterministic",
+                    severity="error", message=f"Элемент «{el.id}» выходит за границы слайда",
+                    element_ids=[el.id], box=el.box, fixable=False,
+                ))
+    return findings
+
+
+def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    findings: list[Finding] = []
+    for scene in scenes:
+        els = [el for el in scene.elements if el.type in _OVERLAP_TYPES]
+        for i in range(len(els)):
+            for j in range(i + 1, len(els)):
+                a, b = els[i], els[j]
+                if _intersect_area(a.box, b.box) > _EPS:
+                    findings.append(Finding(
+                        id="", slide_id=scene.slide_id, check_id="layout.overlap", kind="deterministic",
+                        severity="error", message=f"Блоки «{a.id}» и «{b.id}» накладываются друг на друга",
+                        element_ids=[a.id, b.id], box=None, fixable=False,
+                    ))
+    return findings
+
+
+def check_text_overflow(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    slide_w_pt, slide_h_pt = _slide_size_pt(ds)
+    findings: list[Finding] = []
+    for scene in scenes:
+        for el in scene.elements:
+            if el.type != "text" or not el.text or el.style is None or el.style.size_pt is None:
+                continue
+            size_pt = el.style.size_pt
+            x, y, w, h = el.box
+            char_w_pt = _CHAR_WIDTH_RATIO * size_pt
+            line_h_pt = size_pt * _LINE_HEIGHT_RATIO
+            if char_w_pt <= 0 or line_h_pt <= 0:
+                continue
+            chars_per_line = int((w * slide_w_pt) // char_w_pt)
+            lines_fit = int((h * slide_h_pt) // line_h_pt)
+            capacity = chars_per_line * lines_fit
+            if len(el.text) > capacity:
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="layout.text_overflow", kind="deterministic",
+                    severity="error",
+                    message=f"Текст в «{el.id}» не помещается в рамку при кегле {size_pt:g} pt",
+                    element_ids=[el.id], box=el.box, fixable=True,
+                    fix_hint="уменьшить кегль до ступени шкалы",
+                ))
+    return findings
+
+
+def check_in_margins(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    m = ds.tokens.margins
+    findings: list[Finding] = []
+    for scene in scenes:
+        for el in scene.elements:
+            x, y, w, h = el.box
+            if (x < m.left - _EPS or y < m.top - _EPS
+                    or x + w > 1 - m.right + _EPS or y + h > 1 - m.bottom + _EPS):
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="layout.in_margins", kind="deterministic",
+                    severity="warning", message=f"«{el.id}» заходит в поля слайда",
+                    element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
+                ))
+    return findings
+
+
+def check_off_guides(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    guides = ds.tokens.guides_x
+    if not guides:
+        return []
+    findings: list[Finding] = []
+    for scene in scenes:
+        for el in scene.elements:
+            if el.type not in _GUIDE_TYPES:
+                continue
+            left = el.box[0]
+            if min(abs(left - g) for g in guides) > _GUIDE_TOLERANCE:
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="layout.off_guides", kind="deterministic",
+                    severity="warning", message=f"Левый край «{el.id}» не совпадает ни с одной направляющей",
+                    element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
+                ))
+    return findings
+
+
+def check_image_aspect(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    slide_w_pt, slide_h_pt = _slide_size_pt(ds)
+    assets_by_id = {a.id: a for a in ds.assets}
+    findings: list[Finding] = []
+    for scene in scenes:
+        for el in scene.elements:
+            if el.type != "image" or not el.asset:
+                continue
+            asset = assets_by_id.get(el.asset)
+            if asset is None or not asset.height_px or not asset.width_px:
+                continue
+            x, y, w, h = el.box
+            if h <= 0:
+                continue
+            box_aspect = (w * slide_w_pt) / (h * slide_h_pt)
+            asset_aspect = asset.width_px / asset.height_px
+            if abs(box_aspect - asset_aspect) / asset_aspect > _ASPECT_TOLERANCE:
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="layout.image_aspect", kind="deterministic",
+                    severity="warning", message=f"Картинка «{el.id}» растянута относительно исходных пропорций",
+                    element_ids=[el.id], box=el.box, fixable=False,
+                ))
+    return findings
