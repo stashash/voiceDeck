@@ -7,3 +7,9 @@ models/*
 !models/README.md
 *.log
 test-results/
+
+.venv-designer/
+__pycache__/
+.pytest_cache/
+designer/out/
+*.egg-info/
