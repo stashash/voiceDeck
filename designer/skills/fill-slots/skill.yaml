@@ -1,0 +1,5 @@
+name: fill-slots
+version: "1"
+temperature: 0.3
+max_tokens: 1200
+reasoning_effort: none
