@@ -541,12 +541,20 @@ def _build_type_scale(sizes: list[float]) -> list[TypeStep]:
     counts: dict[float, int] = defaultdict(int)
     for size in sizes:
         counts[size] += 1
-    distinct = sorted(counts.keys(), reverse=True)[:6]
+    # Шкала это шесть самых ходовых кеглей, а не шесть самых крупных: редкое «43 %» в 166 pt ступенью не считается.
+    top = sorted(counts, key=lambda s: (-counts[s], -s))[:6]
+    distinct = sorted(top, reverse=True)
     total = sum(counts[size] for size in distinct) or 1
-    roles = ["display", "title", "heading", "body", "caption"]
+    body_at = distinct.index(max(distinct, key=lambda s: counts[s]))
+    above = {1: "heading", 2: "title"}
     steps = []
     for i, size in enumerate(distinct):
-        role = roles[min(i, len(roles) - 1)]
+        if i == body_at:
+            role = "body"
+        elif i < body_at:
+            role = above.get(body_at - i, "display")
+        else:
+            role = "caption"
         steps.append(TypeStep(size_pt=size, role=role, share=counts[size] / total))
     return steps
 

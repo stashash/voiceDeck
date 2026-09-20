@@ -3,7 +3,8 @@ import time
 
 from designer.parse.package import build_package, load_package
 
-_ABS_PATH_RE = re.compile(r"[A-Za-z]:")
+# Одиночная буква диска с двоеточием и слэшем; «https://» и текст образцов со слайдов сюда не попадают.
+_ABS_PATH_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]:[\\/]")
 
 
 def test_manifest_roundtrips_without_loss(templates, tmp_path):
