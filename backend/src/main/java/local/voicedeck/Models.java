@@ -112,13 +112,17 @@ public final class Models implements AutoCloseable {
             }
         }
     }
-    /** Join the last 3 sentences with spaces; used as the embedding unit (TextTiling-style block). */
+    /** Join the last 3 sentences with spaces; used as the embedding unit (TextTiling-style block).
+     *  @deprecated T1b: per-sentence embeddings replaced the 1–3-sentence block unit; kept for ModelsEmbedBlockTest. */
+    @Deprecated
     public static String joinBlock(java.util.List<String> sentences){
         if(sentences==null||sentences.isEmpty())return null;
         int from=Math.max(0,sentences.size()-3);
         return String.join(" ",sentences.subList(from,sentences.size()));
     }
-    /** Embed a sliding block of 1–3 sentences. {@code null}/empty → {@code null}. */
+    /** Embed a sliding block of 1–3 sentences. {@code null}/empty → {@code null}.
+     *  @deprecated T1b: Session embeds single sentences via {@link #embed(String)}; kept for ModelsEmbedBlockTest. */
+    @Deprecated
     public synchronized float[] embedBlock(java.util.List<String> sentences)throws Exception{
         String text=joinBlock(sentences);
         if(text==null)return null;
@@ -138,6 +142,10 @@ public final class Models implements AutoCloseable {
     public int chunkCoalesceMax(){return config.getInteger("chunkCoalesceMax",250);}
     public double coalesceThreshold(){return config.getDouble("coalesceThreshold",0.65);}
     public double emergencyThreshold(){return config.getDouble("emergencyThreshold",0.2);}
+    // T1b: adaptive dip threshold floor (absolute cos guard removed from the stream detector).
+    public double depthFloor(){return config.getDouble("depthFloor",0.12);}
+    // T1b: absolute cos guard, 1.0 disables it pending bge-m3 calibration (T3).
+    public double deepDipCosFloor(){return config.getDouble("deepDipCosFloor",1.0);}
     public void close() throws Exception {
         if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");
         if(frida!=null)frida.close();if(tokenizer!=null)tokenizer.close();

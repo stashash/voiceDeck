@@ -13,6 +13,8 @@ class ModelsChunkSizeConfigTest {
         assertEquals(250,m.chunkCoalesceMax());
         assertEquals(12,m.chunkSentencesMax());
         assertEquals(30,m.markerMinWords());
+        assertEquals(0.12,m.depthFloor(),1e-9);
+        assertEquals(1.0,m.deepDipCosFloor(),1e-9);
     }
 
     @Test void sizeTargetsIncreaseProgressively()throws Exception{

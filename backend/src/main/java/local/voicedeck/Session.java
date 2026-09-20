@@ -26,8 +26,12 @@ public final class Session implements AutoCloseable {
     volatile boolean closed;
     long epoch=System.currentTimeMillis(),lastFinalWall,committedAt,lastSlideEnd=-45000,retryAt;
     boolean generating,curating,stopped;
-    // T-S3: depth-score EMA state (mutated only on the state worker thread).
+    // T-S3/T1b: depth-score EMA state (mutated only on the state worker thread); depth is computed before the EMA update.
     double emaBaseline=0.0,emaDispersion=0.0;long emaCount=0;
+    // T1b: stream-level boundary detector state (state worker only): valley-confirmation candidate.
+    final boolean semanticDebug=Main.env("SEMANTIC_DEBUG","false").equalsIgnoreCase("true");
+    final List<String> streamIds=new ArrayList<>();
+    String candidateSid;double candidateDepth,candidateCos;int candidateAge;
     Audio audio;
     public Session(String id,String mode,Store store,Models models,Llm llm)throws Exception {
         this.id=id;this.mode=mode;this.store=store;this.models=models;this.llm=llm;
@@ -55,7 +59,7 @@ public final class Session implements AutoCloseable {
     }
     void apply(JsonObject e){
         switch(e.getString("type")) {
-            case "final" -> {JsonObject s=e.getJsonObject("sentence");sentences.put(s.getString("id"),s);pending.add(s.getString("id"));}
+            case "final" -> {JsonObject s=e.getJsonObject("sentence");sentences.put(s.getString("id"),s);pending.add(s.getString("id"));streamIds.add(s.getString("id"));}
             case "chunk" -> {JsonObject c=e.getJsonObject("chunk");chunks.put(c.getString("id"),c);pending.removeAll(c.getJsonArray("sentence_ids").getList());}
             case "chunk_revise" -> {
                 for(Object key:e.getJsonArray("replace_ids")){chunks.remove(key.toString());slides.remove(key.toString());}
@@ -124,32 +128,75 @@ public final class Session implements AutoCloseable {
             if(Text.startsWithMarker(sentence)&&!pending.isEmpty()){int w=0;for(String pid:pending)w+=Text.words(sentences.get(pid).getString("text"));if(w>=models.markerMinWords())commit("marker");}
             var s=new JsonObject().put("id",UUID.randomUUID().toString()).put("text",sentence).put("t0",cursor).put("t1",end);
             event("final",new JsonObject().put("sentence",s));cursor=end;
-            // T-S2: block-embed the last 1–3 sentences. Block text captured on state worker before crossing into inference pool.
-            List<String> blockTexts=new ArrayList<>();
-            int blockFrom=Math.max(0,pending.size()-3);
-            for(int j=blockFrom;j<pending.size();j++)blockTexts.add(sentences.get(pending.get(j)).getString("text"));
+            // T1b: per-sentence embedding — honest sentence vectors feed the stream detector and offline TextTiling.
             String latestSid=s.getString("id");
-            try{inference.execute(()->{try{long start=System.nanoTime();float[] vector=models.embedBlock(blockTexts);Metrics.observe("embedding_inference",TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start));submit(()->{if(vector!=null){embeddings.put(latestSid,vector);semantic(latestSid);}});try{if(vector!=null)store.embedding(id,latestSid,vector);}catch(Exception e){submit(()->warning("Эмбеддинг не сохранён в БД"));}}catch(Exception e){submit(()->warning("Эмбеддинг недоступен: используются паузы и дедлайн"));}});}catch(RejectedExecutionException e){warning("Очередь эмбеддингов заполнена: используются паузы и дедлайн");}
+            try{inference.execute(()->{try{long start=System.nanoTime();float[] vector=models.embed(sentence);Metrics.observe("embedding_inference",TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start));submit(()->{if(vector!=null){embeddings.put(latestSid,vector);detectBoundary(latestSid);}});try{if(vector!=null)store.embedding(id,latestSid,vector);}catch(Exception e){submit(()->warning("Эмбеддинг не сохранён в БД"));}}catch(Exception e){submit(()->warning("Эмбеддинг недоступен: используются паузы и дедлайн"));}});}catch(RejectedExecutionException e){warning("Очередь эмбеддингов заполнена: используются паузы и дедлайн");}
             int words=pending.stream().map(sentences::get).mapToInt(v->Text.words(v.getString("text"))).sum();
             if(words>=models.chunkSizeEmergency())commit("size-emergency"); // T-S5: emergency ceiling, do not commit per-sentence otherwise.
         }
         lastFinalWall=System.currentTimeMillis();
     }
-    void semantic(String sid){
-        int at=pending.indexOf(sid);if(at<0){coalesce();return;}if(at<1)return;
+    /** T1b: stream-level boundary detector over per-sentence vectors. Runs on every new sentence embedding.
+     *  Depth is computed BEFORE the EMA update (order fix): the dip is measured against the baseline that existed
+     *  when the pair arrived. A candidate dip is not cut immediately — valley confirmation waits for recovery,
+     *  tracks a deeper dip, or times out after 3 flat sentences. */
+    void detectBoundary(String sid){
+        if(stopped)return;
+        int at=streamIds.indexOf(sid);if(at<1)return;
         float[] vector=embeddings.get(sid);if(vector==null)return;
-        float[] prev=embeddings.get(pending.get(at-1));if(prev==null)return;
-        double cosine=Text.cosine(prev,vector);
-        // T-S3: depth-score = EMA baseline − cosine. Adaptive to speaker style; absolute 0.3 removed.
-        double alpha=0.1;
-        if(emaCount==0){emaBaseline=cosine;emaDispersion=0.05;emaCount=1;}
-        else{double dev=Math.abs(cosine-emaBaseline);emaBaseline+=alpha*(cosine-emaBaseline);emaDispersion+=alpha*(dev-emaDispersion);emaCount++;}
-        double depth=emaBaseline-cosine;
-        int words=0;for(int i=0;i<at;i++)words+=Text.words(sentences.get(pending.get(i)).getString("text"));
+        String prevId=null;
+        for(int i=at-1;i>=Math.max(0,at-20);i--){if(embeddings.containsKey(streamIds.get(i))){prevId=streamIds.get(i);break;}}
+        if(prevId==null)return;
+        double cosine=Text.cosine(embeddings.get(prevId),vector);
+        double alpha=0.1,depth;
+        // Threshold and depth both come from the pre-update snapshot: the dip is judged against the state
+        // that existed when the pair arrived, before baseline/dispersion move.
+        double threshold=Math.max(models.depthFloor(),1.6*emaDispersion);
+        if(emaCount==0){depth=0;emaBaseline=cosine;emaDispersion=0.05;emaCount=1;}
+        else{
+            depth=emaBaseline-cosine; // BEFORE update: measure against the previous baseline.
+            double dev=Math.abs(cosine-emaBaseline);
+            emaBaseline+=alpha*(cosine-emaBaseline);emaDispersion+=alpha*(dev-emaDispersion);emaCount++;
+        }
         boolean emergency=cosine<models.emergencyThreshold();
-        boolean deepDip=emaCount>=5&&depth>Math.max(0.12,1.6*emaDispersion)&&cosine<0.55;
-        if(words>=models.chunkSizeMin()&&(emergency||deepDip))
+        boolean dip=emaCount>=5&&depth>threshold&&cosine<models.deepDipCosFloor();
+        String decision="none";
+        if(emergency)decision=applyBoundaryAt(sid,true)?"confirmed-boundary":"none";
+        else if(dip){
+            if(candidateSid==null||depth>candidateDepth){candidateSid=sid;candidateDepth=depth;candidateCos=cosine;candidateAge=0;decision="candidate";}
+            else if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
+            else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
+        }
+        else if(candidateSid!=null){
+            if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
+            else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
+        }
+        if(semanticDebug)wire(new JsonObject().put("type","semantic_debug").put("sid",sid).put("cosine",cosine).put("depth",depth).put("ema_baseline",emaBaseline).put("ema_dispersion",emaDispersion).put("decision",decision));
+    }
+    /** T1b: a confirmed valley applies the boundary at the remembered candidate, then clears it. */
+    boolean applyCandidate(){String sid=candidateSid;candidateSid=null;candidateDepth=0;candidateCos=0;candidateAge=0;return applyBoundaryAt(sid,false);}
+    /** T1b: apply a boundary immediately before {@code sid}. Inside pending → drift commit (chunkSizeMin words preserved);
+     *  inside the last provisional chunk → revise-split with source "drift" (halves ≥ markerMinWords).
+     *  Confirmed chunks and chunk junctions are never touched (arbiter: drift priority 0 < confirmer 1). */
+    boolean applyBoundaryAt(String sid,boolean emergency){
+        int at=pending.indexOf(sid);
+        if(at>0){
+            int words=0;for(int i=0;i<at;i++)words+=Text.words(sentences.get(pending.get(i)).getString("text"));
+            if(words<models.chunkSizeMin())return false; // no micro-chunks from drift
             commitIds(new ArrayList<>(pending.subList(0,at)),emergency?"drift-emergency":"drift");
+            return true;
+        }
+        if(at==0)return false; // junction pending/committed already carries a boundary.
+        var ordered=orderedChunks();if(ordered.isEmpty())return false;
+        JsonObject last=ordered.get(ordered.size()-1);
+        if(!"provisional".equals(last.getString("status")))return false; // confirmed junctions are not touched.
+        List<String> ids=last.getJsonArray("sentence_ids").getList();
+        int idx=ids.indexOf(sid);if(idx<1)return false; // chunk start or an older chunk: junction of provisionals needs no split.
+        int leftWords=0;for(int i=0;i<idx;i++)leftWords+=Text.words(sentences.get(ids.get(i)).getString("text"));
+        int rightWords=0;for(int i=idx;i<ids.size();i++)rightWords+=Text.words(sentences.get(ids.get(i)).getString("text"));
+        if(leftWords<models.markerMinWords()||rightWords<models.markerMinWords())return false; // minimal half size for committed splits
+        revise(new JsonObject().put("type","revise").put("operation","split").put("source","drift").put("chunk_id",last.getString("id")).put("rev",last.getInteger("rev")+1).put("split_at",idx));
+        return true;
     }
     void tick(){
         long now=System.currentTimeMillis();
