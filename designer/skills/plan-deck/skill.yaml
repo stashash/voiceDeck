@@ -1,0 +1,4 @@
+name: plan-deck
+version: "1"
+temperature: 0.4
+max_tokens: 4000
