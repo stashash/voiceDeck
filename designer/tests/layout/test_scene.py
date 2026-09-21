@@ -1,4 +1,4 @@
-"""Сборка сцены слайда: фигуры образца, новый текст, переложенные блоки. Задача T-07."""
+"""Сборка сцены слайда: фигуры образца, новый текст, переложенные блоки. Задачи T-07 и T-19."""
 import re
 
 import pytest
@@ -7,14 +7,16 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.util import Emu, Pt
 
 from designer.audit.deterministic import run_checks
-from designer.contracts import Item, SlideIntent, SlideKind, TableSpec
+from designer.contracts import ChartSpec, Item, Series, SlideIntent, SlideKind, TableSpec
 from designer.layout.compose import compose
-from designer.layout.match import choose_pattern
+from designer.layout.match import SAMPLE_MIN, choose_pattern
 from designer.layout.scene import build_scene
+from designer.parse import geometry as geo
 from designer.parse.package import build_package
 
 _UNIT_ID = re.compile(r"^u(\d+)s\d+$")
 _SAMPLE_MIN = 8
+_VIZ_MIN = 0.35
 
 
 def _textbox(slide, left, top, width, height, text, size_pt):
@@ -40,6 +42,21 @@ def _sample_pptx(path):
     return path
 
 
+def _steps_pptx(path):
+    """Шаблон из ряда номеров и ряда подписей под ними: две группы одной смысловой строки."""
+    prs = Presentation()
+    prs.slide_width = Emu(9144000)
+    prs.slide_height = Emu(5143500)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    _textbox(slide, 457200, 228600, 6000000, 700000, "Образцовый заголовок этого шаблона", 32)
+    for i in range(3):
+        left = 457200 + i * 2743200
+        _textbox(slide, left + 800000, 1500000, 800000, 600000, f"0{i + 1}", 40)
+        _textbox(slide, left, 2600000, 2400000, 700000, f"Образцовая подпись шага {i + 1}", 16)
+    prs.save(str(path))
+    return path
+
+
 @pytest.fixture(scope="module")
 def sample_package(tmp_path_factory):
     root = tmp_path_factory.mktemp("obrazec")
@@ -47,8 +64,15 @@ def sample_package(tmp_path_factory):
     return ds, root / "paket"
 
 
+@pytest.fixture(scope="module")
+def steps_package(tmp_path_factory):
+    root = tmp_path_factory.mktemp("shagi")
+    ds = build_package(_steps_pptx(root / "shagi.pptx"), root / "paket")
+    return ds, root / "paket"
+
+
 def _plan() -> list[SlideIntent]:
-    """Шесть намерений разных типов: титул, карточки, шаги, крупное число, таблица, финал."""
+    """Восемь намерений: титул, карточки, шаги, крупное число, диаграмма, таблица, список, финал."""
     return [
         SlideIntent(id="s1", kind=SlideKind.title, title="Цифровой дизайнер презентаций",
                     key_message="Колода из брифа в стиле вашего шаблона"),
@@ -60,29 +84,41 @@ def _plan() -> list[SlideIntent]:
                     items=[Item(number="1", heading="Разбор", body="Читаем шаблон"),
                            Item(number="2", heading="План", body="Делим бриф на слайды"),
                            Item(number="3", heading="Вёрстка", body="Кладём слова в слоты"),
-                           Item(number="4", heading="Аудит", body="Считаем наезды"),
-                           Item(number="5", heading="Экспорт", body="Отдаём файлы")]),
+                           Item(number="4", heading="Аудит", body="Считаем наезды")]),
         SlideIntent(id="s4", kind=SlideKind.big_number, title="Сколько это занимает",
                     key_message="Столько идёт сборка колоды целиком",
                     items=[Item(number="5", heading="минут на колоду")]),
-        SlideIntent(id="s5", kind=SlideKind.table, title="Что смотрит аудит",
+        SlideIntent(id="s5", kind=SlideKind.chart, title="Как растёт скорость",
+                    chart=ChartSpec(type="column", categories=["Руками", "Пополам", "Сервисом"],
+                                    series=[Series(name="минут", values=[40, 12, 5])], unit="мин")),
+        SlideIntent(id="s6", kind=SlideKind.table, title="Что смотрит аудит",
                     table=TableSpec(columns=["Проверка", "Что ловит", "Итог"],
                                     rows=[["Границы", "выход за кадр", "ошибка"],
                                           ["Наезд", "пересечение блоков", "ошибка"],
                                           ["Плотность", "слишком много пунктов", "замечание"]])),
-        SlideIntent(id="s6", kind=SlideKind.thanks, title="Спасибо за внимание",
+        SlideIntent(id="s7", kind=SlideKind.bullets, title="Что дальше",
+                    items=[Item(body="Три варианта одной колоды"),
+                           Item(body="Живой режим на сцене"),
+                           Item(body="Починка находок по выбору")]),
+        SlideIntent(id="s8", kind=SlideKind.thanks, title="Спасибо за внимание",
                     key_message="Вопросы и связь"),
     ]
 
 
 def _deck(ds, package_dir):
+    """Колода по плану: намерение, выбранный паттерн, инструкция сборки и сцена."""
     used: list[str] = []
-    scenes = []
+    rows = []
     for intent in _plan():
         pattern = choose_pattern(intent, ds, used)
         used.append(pattern.id)
-        scenes.append(build_scene(compose(intent, pattern, ds), pattern, ds, package_dir))
-    return scenes
+        spec = compose(intent, pattern, ds)
+        rows.append((intent, pattern, spec, build_scene(spec, pattern, ds, package_dir)))
+    return rows
+
+
+def _scenes(deck):
+    return [scene for _, _, _, scene in deck]
 
 
 def _samples(ds) -> set[str]:
@@ -90,6 +126,10 @@ def _samples(ds) -> set[str]:
     texts |= {slot.sample_text.strip()
               for pattern in ds.patterns for group in pattern.groups for slot in group.unit_slots}
     return {text for text in texts if len(text) >= _SAMPLE_MIN}
+
+
+def _center(box) -> float:
+    return box[0] + box[2] / 2
 
 
 def _unit_overlaps(findings) -> list:
@@ -135,6 +175,46 @@ def test_sample_text_does_not_reach_the_scene(sample_package):
     assert all("Образц" not in text and "Образец" not in text for text in texts)
 
 
+def test_numbers_stand_on_the_axis_of_their_captions(steps_package):
+    ds, package_dir = steps_package
+    pattern = ds.patterns[0]
+    heads = next(g for g in pattern.groups if any(s.role == "heading" for s in g.unit_slots))
+    numbers = next(g for g in pattern.groups if any(s.role == "number" for s in g.unit_slots))
+    pattern.primary_group_id = heads.id
+    heads.linked_group_ids = [numbers.id]
+
+    intent = SlideIntent(id="s3", kind=SlideKind.steps, title="Как идёт работа",
+                         items=[Item(number="1", heading="Разбор"),
+                                Item(number="2", heading="План")])
+    spec = compose(intent, pattern, ds)
+    scene = build_scene(spec, pattern, ds, package_dir)
+
+    digits = sorted((el for el in scene.elements if el.role == "number"), key=lambda el: el.box[0])
+    captions = sorted((el for el in scene.elements if el.role == "heading"), key=lambda el: el.box[0])
+    assert [el.text for el in digits] == ["1", "2"]
+    assert [el.text for el in captions] == ["Разбор", "План"]
+    for digit, caption in zip(digits, captions):
+        assert abs(_center(digit.box) - _center(caption.box)) <= 0.03
+
+
+def test_blocks_leave_the_slide_when_it_gets_a_table(sample_package):
+    ds, package_dir = sample_package
+    intent = SlideIntent(id="s5", kind=SlideKind.table, title="Что смотрит аудит",
+                         table=TableSpec(columns=["Проверка", "Что ловит"],
+                                         rows=[["Границы", "выход за кадр"],
+                                               ["Наезд", "пересечение блоков"]]))
+    pattern = choose_pattern(intent, ds, [])
+    spec = compose(intent, pattern, ds)
+    scene = build_scene(spec, pattern, ds, package_dir)
+
+    assert not [el for el in scene.elements if _UNIT_ID.match(el.id)]
+    viz = [el for el in scene.elements if el.type == "table"]
+    assert len(viz) == 1 and geo.area(viz[0].box) >= _VIZ_MIN
+    under = [el.text for el in scene.elements
+             if el.type == "text" and el.text.strip() and geo.overlap(el.box, viz[0].box) > 0]
+    assert not under
+
+
 def test_scene_keeps_the_link_to_the_source_shapes(sample_package):
     ds, package_dir = sample_package
     intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Две причины",
@@ -157,19 +237,24 @@ def packages(templates, foreign_pptx, tmp_path_factory):
     return built
 
 
-def test_six_intents_give_six_scenes_on_every_template(packages):
-    for name, ds, package_dir in packages:
-        scenes = _deck(ds, package_dir)
-        assert len(scenes) == 6, name
-        for scene in scenes:
+@pytest.fixture(scope="module")
+def decks(packages):
+    """Колода из восьми слайдов на каждом шаблоне: собирается один раз на весь разбор."""
+    return [(name, ds, _deck(ds, package_dir)) for name, ds, package_dir in packages]
+
+
+def test_every_intent_gives_a_scene_on_every_template(decks):
+    for name, _, deck in decks:
+        assert len(deck) == len(_plan()), name
+        for _, _, _, scene in deck:
             assert scene.elements, f"{name}, слайд {scene.slide_id}"
             assert any(el.type in ("text", "chart", "table") for el in scene.elements), name
 
 
-def test_no_sample_text_of_the_template_on_every_template(packages):
-    for name, ds, package_dir in packages:
+def test_no_sample_text_of_the_template_on_every_template(decks):
+    for name, ds, deck in decks:
         samples = _samples(ds)
-        for scene in _deck(ds, package_dir):
+        for scene in _scenes(deck):
             for el in scene.elements:
                 if el.type != "text":
                     continue
@@ -177,11 +262,84 @@ def test_no_sample_text_of_the_template_on_every_template(packages):
                 assert not found, f"{name}, слайд {scene.slide_id}: {found[:1]}"
 
 
-def test_audit_finds_no_out_of_bounds_and_no_overlap_inside_groups(packages):
-    for name, ds, package_dir in packages:
-        scenes = _deck(ds, package_dir)
-        findings = run_checks(scenes, ds)
+def test_audit_finds_no_out_of_bounds_and_no_overlap_inside_groups(decks):
+    for name, ds, deck in decks:
+        findings = run_checks(_scenes(deck), ds)
         out_of_bounds = [f for f in findings if f.check_id == "layout.out_of_bounds"]
         assert not out_of_bounds, f"{name}: {[f.message for f in out_of_bounds[:3]]}"
         overlaps = _unit_overlaps(findings)
         assert not overlaps, f"{name}: {[f.message for f in overlaps[:3]]}"
+
+
+# ---------- качество вёрстки на выданных шаблонах ----------
+
+def test_no_slide_stands_on_a_pattern_that_holds_on_photos(decks):
+    for name, _, deck in decks:
+        for intent, pattern, _, _ in deck:
+            assert not pattern.needs_images, f"{name}, слайд {intent.id}"
+
+
+def test_title_and_final_stand_on_patterns_without_blocks_and_samples(decks):
+    for name, _, deck in decks:
+        for intent, pattern, _, _ in deck:
+            if intent.kind not in (SlideKind.title, SlideKind.thanks):
+                continue
+            assert not pattern.groups, f"{name}, слайд {intent.id}: блоки образца"
+            samples = [area.kind for area in pattern.areas
+                       if area.kind in ("chart", "table")
+                       or (area.kind == "image" and geo.area(area.box) >= SAMPLE_MIN)]
+            assert not samples, f"{name}, слайд {intent.id}: {samples}"
+
+
+def test_chart_and_table_get_a_big_clean_frame(decks):
+    for name, ds, deck in decks:
+        for intent, _, spec, scene in deck:
+            if intent.chart is None and intent.table is None:
+                continue
+            box = spec.viz_box
+            where = f"{name}, слайд {intent.id}"
+            assert box is not None, where
+            assert geo.area(box) >= _VIZ_MIN, f"{where}: рамка {geo.area(box):.2f}"
+            margins = ds.tokens.margins
+            assert box[0] >= margins.left - 1e-6 and box[1] >= margins.top - 1e-6, where
+            assert geo.right(box) <= 1 - margins.right + 1e-6, where
+            assert geo.bottom(box) <= 1 - margins.bottom + 1e-6, where
+            viz = [el for el in scene.elements if el.type in ("chart", "table")]
+            assert len(viz) == 1 and geo.overlap(viz[0].box, box) > 0.99, where
+            under = [el.text for el in scene.elements
+                     if el.type == "text" and el.text.strip() and geo.overlap(el.box, box) > 0]
+            assert not under, f"{where}: в рамке текст {under[:2]}"
+
+
+def test_no_card_loses_its_words(decks):
+    for name, _, deck in decks:
+        for intent, _, _, scene in deck:
+            if intent.kind is not SlideKind.cards:
+                continue
+            said = " ".join(el.text for el in scene.elements if el.type == "text")
+            for item in intent.items:
+                assert item.heading in said, f"{name}, слайд {intent.id}: {item.heading}"
+                assert item.body in said, f"{name}, слайд {intent.id}: {item.body}"
+
+
+def test_audit_finds_no_placeholder_text_and_no_overlap_with_the_visualisation(decks):
+    for name, ds, deck in decks:
+        scenes = _scenes(deck)
+        findings = run_checks(scenes, ds)
+        stubs = [f for f in findings if f.check_id == "integrity.placeholder_text"]
+        assert not stubs, f"{name}: {[f.message for f in stubs[:3]]}"
+        viz_ids = {el.id for scene in scenes for el in scene.elements
+                   if el.type in ("chart", "table")}
+        hits = [f for f in findings
+                if f.check_id == "layout.overlap" and viz_ids & set(f.element_ids)]
+        assert not hits, f"{name}: {[f.message for f in hits[:3]]}"
+
+
+def test_removed_shapes_do_not_reach_the_scene(decks):
+    for name, _, deck in decks:
+        for intent, _, spec, scene in deck:
+            removed = set(spec.remove_shape_ids)
+            if not removed:
+                continue
+            left = {el.source_shape_id for el in scene.elements} & removed
+            assert not left, f"{name}, слайд {intent.id}: {sorted(left)[:3]}"

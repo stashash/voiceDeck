@@ -1,4 +1,4 @@
-"""Подбор паттерна под намерение. Задача T-07."""
+"""Подбор паттерна под намерение. Задачи T-07 и T-19."""
 import random
 
 import pytest
@@ -56,7 +56,8 @@ def _cards(pid="p002", max_units=6):
 def _steps(pid="p003"):
     slots = [_slot(1, "title", (0.05, 0.08, 0.6, 0.12), 36)]
     unit_slots = [_slot(201, "number", (0.0, 0.0, 0.1, 0.06), 28),
-                  _slot(202, "heading", (0.0, 0.08, 0.24, 0.06), 20)]
+                  _slot(202, "heading", (0.0, 0.08, 0.24, 0.06), 20),
+                  _slot(203, "body", (0.0, 0.16, 0.24, 0.12), 12)]
     return _pattern(pid, SlideKind.steps, slots=slots,
                     groups=[_group("g1", 4, 6, unit_slots, step=(0.23, 0.0), size=(0.21, 0.30))])
 
@@ -123,3 +124,89 @@ def test_design_system_without_patterns_raises():
     intent = SlideIntent(id="s1", kind=SlideKind.title, title="Заголовок колоды")
     with pytest.raises(ValueError):
         choose_pattern(intent, _ds([]), [])
+
+
+# ---------- качество подбора: без чужих образцов, заглушек и тесных рамок ----------
+
+def test_pattern_that_holds_on_photos_is_skipped():
+    photo = _cards("p002")
+    photo.needs_images = True
+    ds = _ds([photo, _cards("p005")])
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_sample_chart_is_not_taken_for_a_slide_without_one():
+    ds = _ds([_cards(), _chart()])
+    intent = SlideIntent(id="s1", kind=SlideKind.chart, title="Динамика", items=_items(2))
+    assert choose_pattern(intent, ds, []).id == "p002"
+
+
+def test_big_photo_of_the_sample_is_not_taken():
+    photo = _pattern("p002", SlideKind.cards,
+                     areas=[Area(id="a9", kind="image", box=(0.5, 0.3, 0.45, 0.5), shape_id=9)],
+                     groups=[_group("g1", 3, 6, _unit_slots())])
+    ds = _ds([photo, _cards("p005")])
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_photo_placeholder_does_not_forbid_the_pattern():
+    stub = _pattern("p002", SlideKind.cards,
+                    areas=[Area(id="a9", kind="image", box=(0.5, 0.3, 0.45, 0.5), shape_id=9,
+                                placeholder=True)],
+                    groups=[_group("g1", 3, 6, _unit_slots())])
+    ds = _ds([stub, _cards("p005", max_units=3)])
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p002"
+
+
+def test_exact_number_of_blocks_beats_reflow():
+    six = _pattern("p005", SlideKind.cards,
+                   groups=[_group("g1", 6, 6, _unit_slots(), step=(0.15, 0.0), size=(0.14, 0.30))])
+    ds = _ds([_cards("p002", max_units=6), six])
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p002"
+
+
+def test_block_with_one_slot_loses_to_a_block_with_two():
+    one = _pattern("p002", SlideKind.cards,
+                   groups=[_group("g1", 3, 6, [_slot(101, "heading", (0.0, 0.0, 0.24, 0.06), 20)])])
+    ds = _ds([one, _cards("p005")])
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_block_with_one_slot_fits_items_without_a_heading():
+    one = _pattern("p002", SlideKind.cards,
+                   groups=[_group("g1", 3, 6, [_slot(101, "heading", (0.0, 0.0, 0.24, 0.06), 20)])])
+    ds = _ds([one, _cards("p005")])
+    items = [Item(body=f"Пункт {i + 1} без заголовка") for i in range(3)]
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Что дальше", items=items)
+    assert choose_pattern(intent, ds, []).id == "p002"
+
+
+def test_big_number_needs_a_number_slot():
+    numbered = _pattern("p005", SlideKind.cards,
+                        slots=[_slot(1, "title", (0.05, 0.08, 0.6, 0.12), 36),
+                               _slot(7, "number", (0.05, 0.35, 0.4, 0.3), 72)])
+    ds = _ds([_cards("p002"), numbered])
+    intent = SlideIntent(id="s1", kind=SlideKind.big_number, title="Сколько это занимает",
+                         items=[Item(number="5", heading="минут на колоду")])
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_final_slide_avoids_blocks_and_visualisation():
+    ds = _ds([_title(), _cards(), _chart()])
+    intent = SlideIntent(id="s8", kind=SlideKind.thanks, title="Спасибо за внимание")
+    assert choose_pattern(intent, ds, []).id == "p001"
+
+
+def test_visualisation_needs_room_on_the_slide():
+    tight = _pattern("p005", SlideKind.chart, confidence=0.9,
+                     slots=[_slot(1, "title", (0.05, 0.05, 0.9, 0.8), 36)])
+    ds = _ds([_cards("p002"), tight])
+    intent = SlideIntent(id="s1", kind=SlideKind.chart, title="Динамика",
+                         chart=ChartSpec(type="column", categories=["I", "II"],
+                                         series=[Series(name="план", values=[1, 2])]))
+    assert choose_pattern(intent, ds, []).id == "p002"
