@@ -268,20 +268,53 @@ def _drop_unknown_numbers(draft: SlideIntent, allowed: set[str]) -> None:
             item.number = None
 
 
+_TRAILING_PUNCT = {",", "-", "—", "–"}
+_TRAILING_WORDS = {"и", "в", "на", "с"}
+
+
+def _strip_trailing_junk(text: str) -> str:
+    """Убирает с конца висящие союзы, предлоги и знаки: «и», «в», «на», «с», запятую, тире."""
+    result = text
+    while True:
+        stripped = result.rstrip()
+        if stripped != result:
+            result = stripped
+            continue
+        if result and result[-1] in _TRAILING_PUNCT:
+            result = result[:-1]
+            continue
+        words = result.split(" ")
+        if len(words) > 1 and words[-1] in _TRAILING_WORDS:
+            result = " ".join(words[:-1])
+            continue
+        break
+    return result.rstrip()
+
+
+def _word_boundary_cut(window: str) -> str:
+    word_end = window.rfind(" ")
+    return window[:word_end].rstrip() if word_end > 0 else window
+
+
 def _truncate(text: str, limit: int) -> str:
-    """Сокращает по границе предложения, иначе по границе слова, без многоточия."""
+    """Сокращает по границе предложения, иначе по границе слова, без обрыва посреди слова.
+
+    С конца результата убираются висящие союзы, предлоги и знаки. Если после этого
+    осталось меньше половины лимита, берётся сокращение по границе слова без чистки хвоста.
+    """
     if len(text) <= limit:
         return text
     window = text[:limit]
+
     sentence_end = -1
     for match in _SENTENCE_END.finditer(window):
         sentence_end = match.end()
-    if sentence_end > 0:
-        return window[:sentence_end].rstrip()
-    word_end = window.rfind(" ")
-    if word_end > 0:
-        return window[:word_end].rstrip()
-    return window
+    cut = window[:sentence_end].rstrip() if sentence_end > 0 else _word_boundary_cut(window)
+
+    cleaned = _strip_trailing_junk(cut)
+    if len(cleaned) < limit / 2:
+        return _word_boundary_cut(window)
+    return cleaned
 
 
 def _enforce_top_limits(draft: SlideIntent, limits: dict[str, int]) -> None:
