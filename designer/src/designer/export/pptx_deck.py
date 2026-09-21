@@ -147,7 +147,7 @@ def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern) -
             continue
         item = _live(placed, slot.shape_id)
         if item is not None:
-            set_text(item.element, text, spec.fitted_size_pt.get(slot_id))
+            set_text(item.element, text, spec.fitted_size_pt.get(slot_id), wrap=slot.role != "number")
 
 
 def _group_of(pattern: Pattern, group_id: str | None) -> RepeatGroup | None:

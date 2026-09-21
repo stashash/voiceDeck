@@ -13,7 +13,7 @@ from pptx.oxml.ns import nsdecls, qn
 _XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
 
-def set_text(shape, text: str, size_pt: float | None = None) -> None:
+def set_text(shape, text: str, size_pt: float | None = None, wrap: bool = True) -> None:
     """Пишет текст в фигуру, сохраняя оформление первого фрагмента первого абзаца.
 
     Лишние фрагменты и абзацы убираются, перевод строки даёт новый абзац с тем же оформлением.
@@ -30,6 +30,11 @@ def set_text(shape, text: str, size_pt: float | None = None) -> None:
     if size_pt is not None:
         run_props = _with_size(run_props, size_pt)
         _disable_autofit(body)
+    if not wrap:
+        # Крупное число на движке с другим шрифтом иначе ломается на две строки и ложится само на себя.
+        body_pr = body.find(qn("a:bodyPr"))
+        if body_pr is not None:
+            body_pr.set("wrap", "none")
     for para in body.findall(qn("a:p")):
         body.remove(para)
     for line in _lines(text):
