@@ -165,17 +165,16 @@ public final class Session implements AutoCloseable {
         // freshest fully-known gap is at n-1-w (left fully available, right just filled by this step).
         int latestGapIdx=n-1-w;
 
-        // Pair-wise cosine (T1b legacy) drives the EMA hint only — need at least 2 vectors in the buffer.
-        double cosine=0.0;
-        if(rollingIds.size()>=2){
-            String prevId=rollingIds.get(rollingIds.size()-2);
-            float[] prevVector=rollingVecs.get(rollingVecs.size()-2);
-            cosine=Text.cosine(prevVector,vector);
-        }
+        // T1b: pair cosine via streamIds lookup (last embedded vector within 20 back).
+        String prevId=null;
+        for(int i=at-1;i>=Math.max(0,at-20);i--){if(embeddings.containsKey(streamIds.get(i))){prevId=streamIds.get(i);break;}}
+        if(prevId==null)return;
+        double cosine=Text.cosine(embeddings.get(prevId),vector);
 
         double alpha=0.1,depth;
-        // T1b EMA-fix: depth (= emaBaseline - cosine) is captured BEFORE the EMA moves, so the dip is judged
-        // against the snapshot that existed when the pair arrived.
+        // T1b EMA-fix: depth (= emaBaseline - cosine) and threshold are captured BEFORE the EMA moves,
+        // so the dip is judged against the snapshot that existed when the pair arrived.
+        double threshold=Math.max(models.depthFloor(),models.dispersionMultiplier()*emaDispersion);
         if(emaCount==0){depth=0;emaBaseline=cosine;emaDispersion=0.05;emaCount=1;}
         else{
             depth=emaBaseline-cosine; // BEFORE update.
@@ -192,22 +191,12 @@ public final class Session implements AutoCloseable {
             lateralDepth=Math.max(0,bilateralGap-leftGap)+Math.max(0,bilateralGap-rightGap);
         }
 
-        // T4: adaptive threshold on lateral_depth; the EMA-derived cosine floor is a SEPARATE cosine-floor gate.
-        // The task formula "depthFloor = max(depthFloor, emaBaseline - 1.6*emaDispersion)" mixes units if read
-        // literally (cosine drop vs cosine value); we interpret it as: cosine must drop below the EMA-derived
-        // lower bound for the lateral-depth dip to qualify.
-        double cosineFloor=emaBaseline-models.dispersionMultiplier()*emaDispersion;
-        double lateralThreshold=Math.max(models.depthFloor(),models.dispersionMultiplier()*emaDispersion);
-
         boolean emergency=cosine<models.emergencyThreshold();
-        boolean dip=emaCount>=5
-            && lateralDepth>=lateralThreshold
-            && cosine<cosineFloor
-            && cosine<models.deepDipCosFloor();
+        boolean dip=emaCount>=5&&depth>threshold&&cosine<models.deepDipCosFloor();
         String decision="none";
         if(emergency)decision=applyBoundaryAt(sid,true)?"confirmed-boundary":"none";
         else if(dip){
-            if(candidateSid==null||lateralDepth>candidateDepth){candidateSid=sid;candidateDepth=lateralDepth;candidateCos=cosine;candidateAge=0;decision="candidate";}
+            if(candidateSid==null||depth>candidateDepth){candidateSid=sid;candidateDepth=depth;candidateCos=cosine;candidateAge=0;decision="candidate";}
             else if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
             else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
         }
