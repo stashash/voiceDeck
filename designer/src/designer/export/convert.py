@@ -190,7 +190,10 @@ $app = New-Object -ComObject PowerPoint.Application
 try {
     $pres = $app.Presentations.Open($InputPath, $true, $false, $false)
     try {
-        $pres.Export($OutputDir, "PNG", $Width, $Height)
+        # Имена задаём сами: Presentation.Export называет файлы по языку интерфейса («Слайд1.PNG»).
+        foreach ($slide in $pres.Slides) {
+            $slide.Export((Join-Path $OutputDir ('slide-{0:d3}.png' -f $slide.SlideIndex)), 'PNG', $Width, $Height)
+        }
     } finally {
         $pres.Close()
     }
@@ -239,14 +242,7 @@ def _powerpoint_to_png(pptx_path: Path, out_dir: Path, width_px: int) -> list[Pa
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", "replace").strip() if result.stderr else ""
         raise ConverterUnavailable(f"PowerPoint не создал картинки: {stderr or 'нет вывода'}")
-    raw = sorted(out_dir.glob("Slide*.PNG"), key=lambda p: int(re.search(r"\d+", p.stem).group()))
-    if not raw:
-        raw = sorted(out_dir.glob("Slide*.png"), key=lambda p: int(re.search(r"\d+", p.stem).group()))
-    if not raw:
+    pages = sorted(out_dir.glob("slide-*.png"))
+    if not pages:
         raise ConverterUnavailable("PowerPoint не создал картинки слайдов")
-    pages = []
-    for i, src in enumerate(raw, start=1):
-        dst = out_dir / f"slide-{i:03d}.png"
-        src.replace(dst)
-        pages.append(dst)
     return pages
