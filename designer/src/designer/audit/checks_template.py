@@ -4,6 +4,9 @@
 """
 from designer.contracts import DesignSystem, Finding, Scene
 
+# Помощники deterministic.py импортируются внутри функций (см. checks_layout.py):
+# на уровне модуля это закольцовывает загрузку реестра проверок.
+
 _FONT_LIMIT = 2
 _TYPE_SCALE_TOLERANCE_PT = 0.5
 _COLOR_CHANNEL_TOLERANCE = 8
@@ -43,6 +46,7 @@ def _contrast_ratio(hex_a: str, hex_b: str) -> float:
 
 
 def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     palette = {f.family for f in ds.tokens.fonts}
     findings: list[Finding] = []
     for scene in scenes:
@@ -55,7 +59,7 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.font", kind="deterministic",
                     severity="warning",
-                    message=f"Шрифт «{el.style.family}» в «{el.id}» не входит в токены дизайн-системы",
+                    message=f"Шрифт «{el.style.family}» в {describe_element(el)} не входит в токены дизайн-системы",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
         if len(used) > _FONT_LIMIT:
@@ -70,26 +74,36 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 
 
 def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    """Кегль в шкале шаблона допустим; кегль, которым этот слот набран в образце
+    паттерна, — тоже (T-29): вёрстка часто просто повторяет образец."""
+    from designer.audit.deterministic import describe_element, pattern_by_id, sample_type_size
     scale = ds.tokens.type_scale
     if not scale:
         return []
+    patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
+        pattern = patterns.get(scene.pattern_id)
         for el in scene.elements:
             if el.type != "text" or el.style is None or el.style.size_pt is None:
                 continue
             size = el.style.size_pt
-            if min(abs(size - step.size_pt) for step in scale) > _TYPE_SCALE_TOLERANCE_PT:
-                findings.append(Finding(
-                    id="", slide_id=scene.slide_id, check_id="template.type_scale", kind="deterministic",
-                    severity="warning", message=f"Кегль {size:g} pt в «{el.id}» не входит в шкалу шаблона",
-                    element_ids=[el.id], box=el.box, fixable=True,
-                    fix_hint="уменьшить кегль до ступени шкалы",
-                ))
+            if min(abs(size - step.size_pt) for step in scale) <= _TYPE_SCALE_TOLERANCE_PT:
+                continue
+            sample = sample_type_size(el, pattern)
+            if sample is not None and abs(size - sample) <= _TYPE_SCALE_TOLERANCE_PT:
+                continue
+            findings.append(Finding(
+                id="", slide_id=scene.slide_id, check_id="template.type_scale", kind="deterministic",
+                severity="warning", message=f"Кегль {size:g} pt в {describe_element(el)} не входит в шкалу шаблона",
+                element_ids=[el.id], box=el.box, fixable=True,
+                fix_hint="уменьшить кегль до ступени шкалы",
+            ))
     return findings
 
 
 def check_color(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     palette = [c.hex for c in ds.tokens.colors]
     if not palette:
         return []
@@ -101,14 +115,14 @@ def check_color(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
                         severity="warning",
-                        message=f"Цвет текста «{el.style.color}» в «{el.id}» не из палитры",
+                        message=f"Цвет текста «{el.style.color}» в {describe_element(el)} не из палитры",
                         element_ids=[el.id], box=el.box, fixable=True,
                         fix_hint="заменить цвет ближайшим из палитры",
                     ))
             if el.fill and not _color_in_palette(el.fill, palette):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
-                    severity="warning", message=f"Заливка «{el.fill}» в «{el.id}» не из палитры",
+                    severity="warning", message=f"Заливка «{el.fill}» в {describe_element(el)} не из палитры",
                     element_ids=[el.id], box=el.box, fixable=True,
                     fix_hint="заменить цвет ближайшим из палитры",
                 ))
@@ -144,20 +158,34 @@ def _background_for(el, scene: Scene) -> str | None:
 
 
 def check_contrast(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    """Цвет текста и фон под ним, взятые из образца без изменений, находки не дают (T-29):
+    вёрстка ничего не перекрашивала, а вычисленный контраст мог занизить оценку самого шаблона."""
+    from designer.audit.deterministic import describe_element, on_template, pattern_by_id, sample_type_color, template_frames
+    patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
+        pattern = patterns.get(scene.pattern_id)
+        frames = template_frames(pattern) if pattern else {}
         for el in scene.elements:
             if el.type != "text" or not el.text or el.style is None or not el.style.color:
                 continue
             bg = _background_for(el, scene)
             if not bg:
                 continue
+            sample_color = sample_type_color(el, pattern)
+            unchanged = (
+                sample_color is not None
+                and sample_color.upper() == el.style.color.upper()
+                and on_template(el, frames)
+            )
+            if unchanged:
+                continue
             ratio = _contrast_ratio(el.style.color, bg)
             if ratio < _CONTRAST_MIN:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.contrast", kind="deterministic",
                     severity="error",
-                    message=f"Контраст текста «{el.id}» к фону {ratio:.2f}:1 ниже 4,5:1",
+                    message=f"Контраст текста в {describe_element(el)} к фону {ratio:.2f}:1 ниже 4,5:1",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

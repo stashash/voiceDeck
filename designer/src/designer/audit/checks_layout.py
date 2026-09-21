@@ -4,6 +4,10 @@
 """
 from designer.contracts import Box, DesignSystem, Finding, Scene
 
+# deterministic.py собирает реестр проверок из этого модуля, поэтому его помощники
+# (describe_element, on_template и другие) импортируются внутри функций, а не здесь:
+# импорт на уровне модуля закольцовывает загрузку, если этот файл читается первым.
+
 _EPS = 1e-6
 _OVERLAP_TYPES = {"text", "image", "chart", "table", "icon"}
 _GUIDE_TYPES = {"text", "image", "chart", "table"}
@@ -28,6 +32,7 @@ def _intersect_area(a: Box, b: Box) -> float:
 
 
 def check_out_of_bounds(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -35,7 +40,7 @@ def check_out_of_bounds(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             if x < -_EPS or y < -_EPS or x + w > 1 + _EPS or y + h > 1 + _EPS:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.out_of_bounds", kind="deterministic",
-                    severity="error", message=f"Элемент «{el.id}» выходит за границы слайда",
+                    severity="error", message=f"{describe_element(el).capitalize()} выходит за границы слайда",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
@@ -60,6 +65,7 @@ def _ink_box(el, slide_w_pt: float, slide_h_pt: float) -> Box | None:
 
 
 def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     slide_w_pt, slide_h_pt = _slide_size_pt(ds)
     findings: list[Finding] = []
     for scene in scenes:
@@ -73,13 +79,15 @@ def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 if smaller > 0 and _intersect_area(box_a, box_b) > 0.05 * smaller:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="layout.overlap", kind="deterministic",
-                        severity="error", message=f"Блоки «{a.id}» и «{b.id}» накладываются друг на друга",
+                        severity="error",
+                        message=f"{describe_element(a).capitalize()} и {describe_element(b)} накладываются друг на друга",
                         element_ids=[a.id, b.id], box=None, fixable=False,
                     ))
     return findings
 
 
 def check_text_overflow(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     slide_w_pt, slide_h_pt = _slide_size_pt(ds)
     findings: list[Finding] = []
     for scene in scenes:
@@ -99,7 +107,7 @@ def check_text_overflow(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.text_overflow", kind="deterministic",
                     severity="error",
-                    message=f"Текст в «{el.id}» не помещается в рамку при кегле {size_pt:g} pt",
+                    message=f"{describe_element(el).capitalize()} не помещается в рамку при кегле {size_pt:g} pt",
                     element_ids=[el.id], box=el.box, fixable=True,
                     fix_hint="уменьшить кегль до ступени шкалы",
                 ))
@@ -107,41 +115,57 @@ def check_text_overflow(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 
 
 def check_in_margins(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    """Поля проверяются только у содержания: элемент на месте образца шаблона
+    и оформление (фон, декор, колонтитул) огрехом полей не считаются (T-29)."""
+    from designer.audit.deterministic import DECOR_ROLES, describe_element, on_template, pattern_by_id, template_frames
     m = ds.tokens.margins
+    patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
+        pattern = patterns.get(scene.pattern_id)
+        frames = template_frames(pattern) if pattern else {}
         for el in scene.elements:
+            if el.role in DECOR_ROLES or on_template(el, frames):
+                continue
             x, y, w, h = el.box
             if (x < m.left - _EPS or y < m.top - _EPS
                     or x + w > 1 - m.right + _EPS or y + h > 1 - m.bottom + _EPS):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.in_margins", kind="deterministic",
-                    severity="warning", message=f"«{el.id}» заходит в поля слайда",
+                    severity="warning", message=f"{describe_element(el).capitalize()} заходит в поля слайда",
                     element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
                 ))
     return findings
 
 
 def check_off_guides(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    """Элемент на месте образца шаблона направляющей не проверяется (T-29):
+    шаблон сам и есть источник направляющих."""
+    from designer.audit.deterministic import describe_element, on_template, pattern_by_id, template_frames
     guides = ds.tokens.guides_x
     if not guides:
         return []
+    patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
+        pattern = patterns.get(scene.pattern_id)
+        frames = template_frames(pattern) if pattern else {}
         for el in scene.elements:
-            if el.type not in _GUIDE_TYPES:
+            if el.type not in _GUIDE_TYPES or on_template(el, frames):
                 continue
             left = el.box[0]
             if min(abs(left - g) for g in guides) > _GUIDE_TOLERANCE:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.off_guides", kind="deterministic",
-                    severity="warning", message=f"Левый край «{el.id}» не совпадает ни с одной направляющей",
+                    severity="warning",
+                    message=f"{describe_element(el).capitalize()}: левый край не совпадает ни с одной направляющей",
                     element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
                 ))
     return findings
 
 
 def check_image_aspect(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     slide_w_pt, slide_h_pt = _slide_size_pt(ds)
     assets_by_id = {a.id: a for a in ds.assets}
     findings: list[Finding] = []
@@ -160,7 +184,8 @@ def check_image_aspect(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             if abs(box_aspect - asset_aspect) / asset_aspect > _ASPECT_TOLERANCE:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.image_aspect", kind="deterministic",
-                    severity="warning", message=f"Картинка «{el.id}» растянута относительно исходных пропорций",
+                    severity="warning",
+                    message=f"{describe_element(el).capitalize()} растянута относительно исходных пропорций",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

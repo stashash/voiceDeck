@@ -4,17 +4,23 @@
 """
 from designer.audit import checks_density
 from designer.contracts import (
-    ChartSpec, DesignSystem, Element, Margins, Scene, Series, TableSpec, Tokens,
+    ChartSpec, DesignSystem, Element, Margins, Pattern, Scene, Series, SlideKind, TableSpec, Tokens,
 )
 
 _SLIDE_EMU = (1270000, 1270000)
 
 
-def _ds() -> DesignSystem:
+def _ds(*, patterns=()) -> DesignSystem:
     return DesignSystem(
         id="ds1", source_file="tpl.pptx", slide_size_emu=_SLIDE_EMU,
         tokens=Tokens(colors=[], fonts=[], type_scale=[], margins=Margins(left=0, top=0, right=0, bottom=0)),
+        patterns=list(patterns),
     )
+
+
+def _pattern(pattern_id: str, kind: SlideKind) -> Pattern:
+    return Pattern(id=pattern_id, source_slide=1, layout_name="L1", kind=kind,
+                    kind_confidence=0.9, theme="light")
 
 
 def _scene(slide_id: str, elements: list[Element]) -> Scene:
@@ -87,3 +93,23 @@ def test_fill_clean():
     el = Element(id="e1", type="text", box=(0.2, 0.2, 0.6, 0.5), text="x")
     findings = checks_density.check_fill([_scene("s1", [el])], _ds())
     assert findings == []
+
+
+def test_fill_ignores_decor_role():
+    """T-29: оформление в расчёт заполнения не идёт — без него слайд пуст, но это не огрех."""
+    content = Element(id="e1", type="text", box=(0.4, 0.4, 0.05, 0.05), text="x")
+    decor = Element(id="d1", type="shape", role="decor", box=(0.0, 0.0, 1.0, 1.0), fill="000000")
+    findings = checks_density.check_fill([_scene("s1", [content, decor])], _ds())
+    assert len(findings) == 1
+    assert findings[0].element_ids == ["e1"]
+
+
+def test_fill_skips_title_and_quote_slides():
+    """T-29: титул, раздел, цитата и финал по жанру держатся на малом тексте."""
+    ds = _ds(patterns=[_pattern("title1", SlideKind.title), _pattern("quote1", SlideKind.quote)])
+    el = Element(id="e1", type="text", box=(0.4, 0.4, 0.05, 0.05), text="x")
+    scenes = [
+        Scene(slide_id="s1", pattern_id="title1", elements=[el]),
+        Scene(slide_id="s2", pattern_id="quote1", elements=[el]),
+    ]
+    assert checks_density.check_fill(scenes, ds) == []
