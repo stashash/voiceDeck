@@ -90,6 +90,29 @@ def test_too_long_response_prefers_sentence_boundary():
     assert result.title == "Предложение раз."
 
 
+def test_truncate_avoids_word_break_and_strips_trailing_conjunction():
+    responses = [
+        {"title": "Z" * 60, "items": []},
+        {"title": "Потоковая загрузка быстрее и стабильнее пакетной", "items": []},
+    ]
+    client = _client_returning(*responses)
+    result = fill_slots(BASE_INTENT, {"title": 32}, {}, 0, client)
+
+    assert result.title == "Потоковая загрузка быстрее"
+    assert len(client.call_durations_ms) == 2
+
+
+def test_truncate_strips_trailing_comma():
+    responses = [
+        {"title": "Z" * 30, "items": []},
+        {"title": "Быстрее, но дороже вариант с доставкой", "items": []},
+    ]
+    client = _client_returning(*responses)
+    result = fill_slots(BASE_INTENT, {"title": 10}, {}, 0, client)
+
+    assert result.title == "Быстрее"
+
+
 def test_item_count_is_forced_to_n_units():
     payload = {"title": "Итог", "items": [
         {"heading": "Раз", "body": "Текст"},

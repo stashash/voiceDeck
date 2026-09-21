@@ -20,6 +20,7 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     plan = DeckPlan.model_validate(data)
 
     violations = _structural_violations(plan, slide_count)
+    violations += _visualization_violations(plan, brief)
     if violations:
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
         data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
@@ -51,6 +52,26 @@ def _structural_violations(plan: DeckPlan, slide_count: int | None) -> list[str]
         if plan.slides[-1].kind not in (SlideKind.thanks, SlideKind.cta):
             violations.append("последний слайд должен быть thanks или cta")
     return violations
+
+
+_VIZ_KINDS = (SlideKind.chart, SlideKind.table, SlideKind.big_number)
+
+
+def _brief_has_comparable_numbers(brief: str) -> bool:
+    """Пара сопоставимых чисел — два и больше разных числа в одном предложении брифа
+    (было-стало, план-факт, ряд по периодам)."""
+    for sentence in re.split(r"[.!?]", brief):
+        if len(_numbers_in(sentence)) >= 2:
+            return True
+    return False
+
+
+def _visualization_violations(plan: DeckPlan, brief: str) -> list[str]:
+    if not _brief_has_comparable_numbers(brief):
+        return []
+    if any(slide.kind in _VIZ_KINDS for slide in plan.slides):
+        return []
+    return ["в брифе есть сопоставимые числа, а в плане нет слайда с диаграммой, таблицей или крупным числом"]
 
 
 def _numbers_in(text: str) -> set[str]:
