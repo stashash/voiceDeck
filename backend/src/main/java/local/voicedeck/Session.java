@@ -32,6 +32,10 @@ public final class Session implements AutoCloseable {
     final boolean semanticDebug=Main.env("SEMANTIC_DEBUG","false").equalsIgnoreCase("true");
     final List<String> streamIds=new ArrayList<>();
     String candidateSid;double candidateDepth,candidateCos;int candidateAge;
+    // T4: bilateral TextTiling-style rolling buffer of the last K sentence vectors (state worker only).
+    // The buffer drops oldest entries, so gap[i] is always evaluated within a recent window.
+    final List<String> rollingIds=new ArrayList<>();
+    final List<float[]> rollingVecs=new ArrayList<>();
     Audio audio;
     public Session(String id,String mode,Store store,Models models,Llm llm)throws Exception {
         this.id=id;this.mode=mode;this.store=store;this.models=models;this.llm=llm;
@@ -136,42 +140,74 @@ public final class Session implements AutoCloseable {
         }
         lastFinalWall=System.currentTimeMillis();
     }
-    /** T1b: stream-level boundary detector over per-sentence vectors. Runs on every new sentence embedding.
-     *  Depth is computed BEFORE the EMA update (order fix): the dip is measured against the baseline that existed
-     *  when the pair arrived. A candidate dip is not cut immediately — valley confirmation waits for recovery,
-     *  tracks a deeper dip, or times out after 3 flat sentences. */
+    /** T4: online bilateral TextTiling-style boundary detector over per-sentence vectors.
+     *  Rolling buffer of the last K sentence vectors (oldest dropped when > K). For each new embedding:
+     *  - gap[i] = 1 - cosine(mean(window_left), mean(window_right)) with half-width w (TextTiling.java-style).
+     *  - lateral_depth = max(0, gap[i]-gap[i-1]) + max(0, gap[i]-gap[i+1]) — valley prominence in cosine-distance units.
+     *  - Pair-wise cosine (T1b legacy) feeds the EMA; EMA acts as an adaptive cosine-floor hint:
+     *    cosine must drop below (emaBaseline - dispersionMultiplier*emaDispersion) for a dip to qualify.
+     *  - Depth (= emaBaseline - cosine) is computed BEFORE the EMA update (T1b order fix preserved).
+     *  - Cos-floor 0.55 removed from primary path; deepDipCosFloor (default 1.0=off) kept as optional guard.
+     *  - Valley confirmation: candidate remembered, confirmed on cosine recovery / replaced by deeper lateral_depth / timed out after 3 flat sentences. */
     void detectBoundary(String sid){
         if(stopped)return;
         int at=streamIds.indexOf(sid);if(at<1)return;
         float[] vector=embeddings.get(sid);if(vector==null)return;
-        String prevId=null;
-        for(int i=at-1;i>=Math.max(0,at-20);i--){if(embeddings.containsKey(streamIds.get(i))){prevId=streamIds.get(i);break;}}
-        if(prevId==null)return;
-        double cosine=Text.cosine(embeddings.get(prevId),vector);
-        // T4: bilateral cosine-distance (TextTiling-style, windowed mean on each side of `at`).
-        // Independent of EMA: emitted as telemetry; also used as a secondary threshold when EMA noise dominates.
-        int bWin=models.bilateralWindow();
-        double bilateralGap=0;
-        java.util.List<float[]> leftVecs=new java.util.ArrayList<>(),rightVecs=new java.util.ArrayList<>();
-        for(int i=Math.max(0,at-bWin);i<at;i++){float[] v=embeddings.get(streamIds.get(i));if(v!=null)leftVecs.add(v);}
-        for(int i=at;i<Math.min(streamIds.size(),at+bWin);i++){float[] v=embeddings.get(streamIds.get(i));if(v!=null)rightVecs.add(v);}
-        if(!leftVecs.isEmpty()&&!rightVecs.isEmpty())bilateralGap=1-Text.cosine(Text.mean(leftVecs),Text.mean(rightVecs));
+
+        // T4: rolling buffer (last K sentence vectors). Oldest entry is dropped when buffer grows past K.
+        rollingIds.add(sid);
+        rollingVecs.add(vector);
+        int K=models.rollingBufferSize();
+        while(rollingIds.size()>K){rollingIds.remove(0);rollingVecs.remove(0);}
+        int n=rollingVecs.size();
+        int w=models.bilateralWindow();
+        // Latest valid bilateral gap position: rolling buffer must hold indices [idx-w, idx+w), so the
+        // freshest fully-known gap is at n-1-w (left fully available, right just filled by this step).
+        int latestGapIdx=n-1-w;
+
+        // Pair-wise cosine (T1b legacy) drives the EMA hint only — need at least 2 vectors in the buffer.
+        double cosine=0.0;
+        if(rollingIds.size()>=2){
+            String prevId=rollingIds.get(rollingIds.size()-2);
+            float[] prevVector=rollingVecs.get(rollingVecs.size()-2);
+            cosine=Text.cosine(prevVector,vector);
+        }
+
         double alpha=0.1,depth;
-        // Threshold and depth both come from the pre-update snapshot: the dip is judged against the state
-        // that existed when the pair arrived, before baseline/dispersion move.
-        double threshold=Math.max(models.depthFloor(),1.6*emaDispersion);
+        // T1b EMA-fix: depth (= emaBaseline - cosine) is captured BEFORE the EMA moves, so the dip is judged
+        // against the snapshot that existed when the pair arrived.
         if(emaCount==0){depth=0;emaBaseline=cosine;emaDispersion=0.05;emaCount=1;}
         else{
-            depth=emaBaseline-cosine; // BEFORE update: measure against the previous baseline.
+            depth=emaBaseline-cosine; // BEFORE update.
             double dev=Math.abs(cosine-emaBaseline);
             emaBaseline+=alpha*(cosine-emaBaseline);emaDispersion+=alpha*(dev-emaDispersion);emaCount++;
         }
+
+        // T4: bilateral gap and lateral depth (cosine-distance units, valley prominence).
+        double bilateralGap=0.0,lateralDepth=0.0;
+        if(latestGapIdx>=w+1){
+            bilateralGap=Text.bilateralGap(rollingVecs,latestGapIdx,w);
+            double leftGap=Text.bilateralGap(rollingVecs,latestGapIdx-1,w);
+            double rightGap=Text.bilateralGap(rollingVecs,latestGapIdx+1,w);
+            lateralDepth=Math.max(0,bilateralGap-leftGap)+Math.max(0,bilateralGap-rightGap);
+        }
+
+        // T4: adaptive threshold on lateral_depth; the EMA-derived cosine floor is a SEPARATE cosine-floor gate.
+        // The task formula "depthFloor = max(depthFloor, emaBaseline - 1.6*emaDispersion)" mixes units if read
+        // literally (cosine drop vs cosine value); we interpret it as: cosine must drop below the EMA-derived
+        // lower bound for the lateral-depth dip to qualify.
+        double cosineFloor=emaBaseline-models.dispersionMultiplier()*emaDispersion;
+        double lateralThreshold=Math.max(models.depthFloor(),models.dispersionMultiplier()*emaDispersion);
+
         boolean emergency=cosine<models.emergencyThreshold();
-        boolean dip=emaCount>=5&&depth>threshold&&cosine<models.deepDipCosFloor();
+        boolean dip=emaCount>=5
+            && lateralDepth>=lateralThreshold
+            && cosine<cosineFloor
+            && cosine<models.deepDipCosFloor();
         String decision="none";
         if(emergency)decision=applyBoundaryAt(sid,true)?"confirmed-boundary":"none";
         else if(dip){
-            if(candidateSid==null||depth>candidateDepth){candidateSid=sid;candidateDepth=depth;candidateCos=cosine;candidateAge=0;decision="candidate";}
+            if(candidateSid==null||lateralDepth>candidateDepth){candidateSid=sid;candidateDepth=lateralDepth;candidateCos=cosine;candidateAge=0;decision="candidate";}
             else if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
             else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
         }
@@ -179,7 +215,16 @@ public final class Session implements AutoCloseable {
             if(cosine>candidateCos)decision=applyCandidate()?"confirmed-boundary":"none";
             else if(++candidateAge>=3)decision=applyCandidate()?"confirmed-boundary":"none";
         }
-        if(semanticDebug)wire(new JsonObject().put("type","semantic_debug").put("sid",sid).put("cosine",cosine).put("depth",depth).put("ema_baseline",emaBaseline).put("ema_dispersion",emaDispersion).put("bilateral_gap",bilateralGap).put("decision",decision));
+        if(semanticDebug)wire(new JsonObject().put("type","semantic_debug")
+            .put("sid",sid)
+            .put("cosine",cosine)
+            .put("depth",depth)
+            .put("bilateral_gap",bilateralGap)
+            .put("lateral_depth",lateralDepth)
+            .put("ema_baseline",emaBaseline)
+            .put("ema_dispersion",emaDispersion)
+            .put("ema_baseline_distance",1.0-emaBaseline)
+            .put("decision",decision));
     }
     /** T1b: a confirmed valley applies the boundary at the remembered candidate, then clears it. */
     boolean applyCandidate(){String sid=candidateSid;candidateSid=null;candidateDepth=0;candidateCos=0;candidateAge=0;return applyBoundaryAt(sid,false);}
@@ -351,7 +396,7 @@ public final class Session implements AutoCloseable {
         var prov=orderedChunks().stream().filter(c->"provisional".equals(c.getString("status"))).toList();
         if(prov.isEmpty())return;
         JsonObject last=prov.get(prov.size()-1);
-        if(System.currentTimeMillis()-last.getLong("updated_at")<2000)return; // chunk still growing
+        if(System.currentTimeMillis()-last.getLong("updated_at")<models.confirmerDelayMs())return; // chunk still growing
         List<String> lastIds=new ArrayList<>(last.getJsonArray("sentence_ids").getList());
         // 1) merge with previous provisional when look-ahead agrees
         if(prov.size()>=2){

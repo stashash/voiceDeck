@@ -17,12 +17,12 @@
   "chunkSizeMax": 180,
   "chunkSizeEmergency": 500,
   "chunkSentencesMax": 12,
-  "markerMinWords": 30,
+  "markerMinWords": 60,
+  "confirmerDelayMs": 10000,
   "chunkCoalesceMax": 250,
   "depthFloor": 0.12,
   "deepDipCosFloor": 1.0,
   "bilateralWindow": 2,
   "rollingBufferSize": 20,
-  "dispersionMultiplier": 1.6,
-  "bilateralFloor": 0.12
+  "dispersionMultiplier": 1.6
 }
