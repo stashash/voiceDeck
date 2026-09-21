@@ -183,3 +183,11 @@ def test_speech_skill_params_are_sent_in_request_body():
     assert body["reasoning_effort"] == "none"
     assert body["max_tokens"] == 400
     assert body["temperature"] == 0.2
+
+
+def test_speech_to_slide_keeps_digits_for_spoken_numerals():
+    payload = {"kind": "big_number", "title": "Отчёт готов к 8:30", "key_message": "", "items": []}
+    client = _client_returning(payload)
+    intent = speech_to_slide("Отчёт стал готов к восьми тридцати", [SlideKind.big_number], client)
+
+    assert "8:30" in intent.title

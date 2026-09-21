@@ -1,9 +1,10 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {useVirtualizer} from '@tanstack/react-virtual';
-import {Mic,Square,Download,Plus,ArrowRight,Check,Layers,FileText,Presentation,Radio,ChevronDown,Scissors,Combine,Play,Trash2,ArrowDown} from 'lucide-react';
+import {Mic,Square,Download,Plus,ArrowRight,Check,Layers,FileText,Presentation,Radio,ChevronDown,Scissors,Combine,Play,Trash2,ArrowDown,MonitorPlay} from 'lucide-react';
 import {initial,reduce,State,Chunk,Event} from './store';
 import {Credentials,Transport,Microphone} from './transport';
+import {Router} from './router';
 import './style.css';
 
 const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Math.floor(ms/1000%60).toString().padStart(2,'0')}`;
@@ -59,7 +60,7 @@ function App(){
  async function remove(){if(!credentials||!window.confirm('Удалить транскрипт, фрагменты и слайды этой сессии?'))return;try{await mic.current?.stop();const r=await fetch(`/api/sessions/${credentials.id}/data`,{method:'DELETE',headers:{Authorization:`Bearer ${credentials.token}`}});if(!r.ok)throw new Error('Удаление не выполнено');transport.current?.close();sessionStorage.removeItem('voicedeck-session');setCredentials(null);current.current=initial();setState(current.current);setConnection('Нет сессии');setRecording(false);}catch(e){setError(String(e));}}
  const active=chunks.find(c=>c.id===selected)??deck.at(-1)??chunks.at(-1),slide=active?state.slides[active.id]:null;
  return <div className="app">
-   <aside className="rail"><div className="brand-mark"><Radio size={24}/></div><button className="rail-active" title="Рабочая сессия"><Layers size={22}/></button><div className="rail-bottom">VD</div></aside>
+   <aside className="rail"><div className="brand-mark"><Radio size={24}/></div><button className="rail-active" title="Рабочая сессия"><Layers size={22}/></button><a className="rail-link" href="#/deck" title="Колода"><Presentation size={22}/></a><a className="rail-link" href="#/stage" title="Сцена"><MonitorPlay size={22}/></a><div className="rail-bottom">VD</div></aside>
    <div className="workspace">
     <header><a className="brand" href="/">voice<span>deck</span><i>LOCAL STUDIO</i></a><div className="private"><span className="dot"/>Ваши мысли остаются здесь</div><div className="avatar">Я</div></header>
     <main>
@@ -94,6 +95,6 @@ function App(){
    </div>
  </div>;
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<Router home={<App/>}/>);
 
 

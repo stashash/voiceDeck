@@ -68,9 +68,17 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
 
     data = client.complete_json(system=system, user=chunk_text, schema=schema, params=skill.params)
     intent = _speech_intent(data, kinds)
-    if intent.title:
+    # В распознанной речи числа идут словами («к восьми тридцати»), модель пишет их цифрами.
+    # Сверить цифры слайда с такими словами нечем: вычистка превращала «к 8:30» в «к :».
+    # Поэтому сверяем только фрагменты без числительных: там любое число на слайде выдумано.
+    if intent.title and not _NUMBER_WORDS.search(chunk_text):
         _drop_unknown_numbers(intent, _numbers_in_text(chunk_text))
     return intent
+
+
+_NUMBER_WORDS = re.compile(
+    r"\b(ноль|один|одн[аоуи]|дв[аеу]|двух|три|тр[её]х|четыр|пят|шест|сем[ьи]|восем|восьм|девят|десят|сорок|девяност"
+    r"|сто\b|ста\b|сот|тысяч|миллион|миллиард|полтор|процент)", re.IGNORECASE)
 
 
 # ---------- схема ответа ----------
