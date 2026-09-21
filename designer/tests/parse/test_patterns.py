@@ -11,6 +11,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu
 
 from designer.contracts import SlideKind
+from designer.parse import geometry as geo
 from designer.parse.patterns import extract_layouts, extract_patterns
 
 _parsed: dict[Path, list] = {}
@@ -182,6 +183,38 @@ def test_linked_groups_answer_each_other(templates):
                     assert len(other.units) == len(group.units)
 
 
+# ---------- дефекты живой колоды: оформление с рамкой и образец диаграммы из фигур ----------
+
+def test_decor_carries_a_frame_for_every_shape(templates):
+    """По рамке оформления вёрстка решает, мешает ли оно содержимому слайда."""
+    for path in templates:
+        for pattern in parse(path):
+            where = f"{path.stem}, слайд {pattern.source_slide}"
+            assert {d.shape_id for d in pattern.decor} == set(pattern.decor_shape_ids), where
+            for shape in pattern.decor:
+                long_side = max(shape.box[2], shape.box[3])
+                assert long_side > 0, where
+                flat = min(shape.box[2], shape.box[3]) <= 0.01 < long_side
+                assert not flat or shape.kind in ("line", "image"), where
+
+
+def test_row_of_bars_of_the_template_is_a_place_for_a_chart(templates):
+    """Полосы разной длины на общей оси это образец диаграммы, а не пять картинок."""
+    pattern = slide_of(templates, "VK Tech", 52)
+    charts = [area for area in pattern.areas if area.kind == "chart"]
+    assert len(charts) == 1
+    box = charts[0].box
+    assert geo.area(box) >= 0.2
+    left = [area for area in pattern.areas
+            if area.kind == "image" and geo.covered(area.box, box) > 0.5]
+    assert not left, [area.id for area in left]
+
+
+def test_slide_without_bars_gets_no_chart_area(templates):
+    pattern = slide_of(templates, "VK Tech", 17)
+    assert not [area for area in pattern.areas if area.kind == "chart"]
+
+
 def test_layouts_carry_placeholders(templates):
     layouts = extract_layouts(pick(templates, "VK Tech"))
     assert layouts
@@ -298,6 +331,18 @@ def test_large_flat_gray_picture_asks_for_an_own_photo(tmp_path):
     area = next(a for a in pattern.areas if a.shape_id == shape.shape_id)
     assert area.placeholder
     assert pattern.needs_images
+
+
+def test_flat_shape_of_the_decor_is_a_line(tmp_path):
+    presentation, slide = _blank_deck()
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Emu(500000), Emu(2000000), Emu(6000000), Emu(12700)
+    )
+    deck = tmp_path / "liniya.pptx"
+    presentation.save(str(deck))
+
+    decor = extract_patterns(deck)[0].decor
+    assert [(d.shape_id, d.kind) for d in decor] == [(shape.shape_id, "line")]
 
 
 def test_font_size_falls_back_to_default(tmp_path):

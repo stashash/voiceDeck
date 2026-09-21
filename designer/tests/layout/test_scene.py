@@ -9,7 +9,7 @@ from pptx.util import Emu, Pt
 from designer.audit.deterministic import run_checks
 from designer.contracts import ChartSpec, Item, Series, SlideIntent, SlideKind, TableSpec
 from designer.layout.capacity import title_step
-from designer.layout.compose import compose
+from designer.layout.compose import EDGE_AREA, VIZ_INSIDE, compose
 from designer.layout.match import SAMPLE_MIN, choose_pattern
 from designer.layout.scene import build_scene
 from designer.parse import geometry as geo
@@ -376,6 +376,52 @@ def test_no_block_of_the_deck_stands_empty(decks):
                 shapes = {sid for unit in group.units for sid in unit.shape_ids}
                 left = shapes - set(spec.remove_shape_ids)
                 assert not left, f"{name}, слайд {intent.id}: {sorted(left)[:3]}"
+
+
+# ---------- дефекты живой колоды: число, оформление под диаграммой, немые блоки ----------
+
+def test_big_number_slide_shows_its_number(decks, templates):
+    """Крупное число стоит в слоте number и набрано не мельче ступени title."""
+    given = {path.stem for path in templates}
+    for name, ds, deck in decks:
+        if name not in given:
+            continue
+        for intent, _, _, scene in deck:
+            if intent.kind is not SlideKind.big_number:
+                continue
+            value = next(item.number for item in intent.items if item.number)
+            digits = [el for el in scene.elements if el.role == "number" and el.text.strip()]
+            assert [el.text for el in digits] == [value], f"{name}, слайд {intent.id}"
+            floor = title_step(ds.tokens.type_scale)
+            assert digits[0].style.size_pt >= floor - 1e-6, f"{name}: {digits[0].style.size_pt}"
+
+
+def test_no_decor_of_the_sample_stands_under_the_visualisation(decks):
+    """Оформление образца под диаграммой просвечивает сквозь неё; фон и логотип остаются."""
+    for name, _, deck in decks:
+        for intent, _, spec, scene in deck:
+            if spec.viz_box is None:
+                continue
+            under = [el for el in scene.elements
+                     if el.role == "decor" and geo.area(el.box) > EDGE_AREA
+                     and not (el.box[2] >= geo.FULL_BLEED and el.box[3] >= geo.FULL_BLEED)
+                     and geo.covered(el.box, spec.viz_box) >= VIZ_INSIDE]
+            assert not under, f"{name}, слайд {intent.id}: {[el.id for el in under][:3]}"
+
+
+def test_no_block_of_a_scene_stands_without_words(decks):
+    """Блок, которому слов не досталось, уходит со слайда вместе со своими маркерами."""
+    for name, _, deck in decks:
+        for intent, _, _, scene in deck:
+            words: dict[str, bool] = {}
+            for el in scene.elements:
+                found = _UNIT_ID.match(el.id)
+                if found is None:
+                    continue
+                index = found.group(1)
+                words[index] = words.get(index, False) or bool(el.text.strip())
+            mute = sorted(index for index, said in words.items() if not said)
+            assert not mute, f"{name}, слайд {intent.id}: блоки {mute}"
 
 
 def test_removed_shapes_do_not_reach_the_scene(decks):

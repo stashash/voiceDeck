@@ -14,6 +14,7 @@ from designer.contracts import (
     Item,
     Pattern,
     RepeatGroup,
+    RepeatUnit,
     SlideIntent,
     SlideSpec,
     Slot,
@@ -24,6 +25,7 @@ from designer.layout.capacity import (
     free_box,
     head_top,
     ink_box,
+    lead_number,
     line_capacity,
     linked_groups,
     primary_group,
@@ -53,14 +55,42 @@ AREA_KEEP = 0.6
 INSIDE = 0.6
 """Доля фигуры внутри рамки, с которой фигура считается лежащей в ней."""
 
+VIZ_INSIDE = 0.5
+"""Доля площади фигуры оформления в рамке визуализации, с которой фигура оттуда уходит."""
+
+EDGE_BAND = 0.1
+"""Полоса у края кадра: там стоят логотип и колонтитул."""
+
+EDGE_AREA = 0.02
+"""Доля слайда, до которой фигура у края это логотип или колонтитул, а не оформление."""
+
+MARKER_AREA = 0.002
+"""Доля слайда, до которой фигура оформления это маркер строки: точка списка, значок."""
+
+MARKER_GAP = 0.04
+"""Насколько маркер отстоит от своей строки, доли кадра."""
+
 
 def _inside(box: Box, frame: Box) -> bool:
-    own = geo.area(box)
-    wide = min(geo.right(box), geo.right(frame)) - max(box[0], frame[0])
-    high = min(geo.bottom(box), geo.bottom(frame)) - max(box[1], frame[1])
-    if own <= 0 or wide <= 0 or high <= 0:
+    return geo.covered(box, frame) >= INSIDE
+
+
+def _edge_furniture(box: Box) -> bool:
+    """Фон на весь кадр, логотип и колонтитул: рамка визуализации их не трогает."""
+    if box[2] >= geo.FULL_BLEED and box[3] >= geo.FULL_BLEED:
+        return True
+    if geo.area(box) > EDGE_AREA:
         return False
-    return (wide * high) / own >= INSIDE
+    return (geo.right(box) <= EDGE_BAND or box[0] >= 1 - EDGE_BAND
+            or geo.bottom(box) <= EDGE_BAND or box[1] >= 1 - EDGE_BAND)
+
+
+def _on_line(box: Box, line: Box) -> bool:
+    """Маркер стоит на той же строке: по высоте внутри строки и рядом по горизонтали."""
+    high = min(geo.bottom(box), geo.bottom(line)) - max(box[1], line[1])
+    if high <= 0 or high < box[3] / 2:
+        return False
+    return geo.gap(box, line) <= MARKER_GAP
 
 
 def _take(
@@ -115,7 +145,9 @@ def _unit_texts(
     pairs = [(group.id, slot) for group in groups for slot in group.unit_slots]
     numbers = [pair for pair in pairs if pair[1].role == "number"]
     heads = [pair for pair in pairs if pair[1].role in _HEAD_ROLES]
-    bodies = [pair for pair in pairs if pair[1].role in _BODY_ROLES]
+    # Пояснение идёт в слот body; подпись и метка берут его, только когда body в блоке нет.
+    bodies = sorted((pair for pair in pairs if pair[1].role in _BODY_ROLES),
+                    key=lambda pair: pair[1].role != "body")
     out: dict[str, list[dict[str, str]]] = {group.id: [] for group in groups}
     for index in range(n):
         texts = {group.id: {slot.id: "" for slot in group.unit_slots} for group in groups}
@@ -163,6 +195,45 @@ def _viz_place(
     return None, frame
 
 
+def _decor_in(pattern: Pattern, frame: Box) -> set[int]:
+    """Оформление образца, лежащее в рамке больше чем наполовину своей площади.
+
+    Под диаграммой оно просвечивает водяными знаками. Фон на весь кадр, логотип
+    и колонтитул остаются: их рамка задевает краем, а не накрывает.
+    """
+    return {shape.shape_id for shape in pattern.decor
+            if not _edge_furniture(shape.box) and geo.covered(shape.box, frame) >= VIZ_INSIDE}
+
+
+def _slot_line(unit: RepeatUnit, slot: Slot) -> Box:
+    """Рамка слота в блоке образца: слот задан от левого верхнего угла первого блока."""
+    return (unit.box[0] + slot.box[0], unit.box[1] + slot.box[1], slot.box[2], slot.box[3])
+
+
+def _blank_units(pattern: Pattern, spec: SlideSpec) -> tuple[set[int], list[Box], list[Box]]:
+    """Блоки, которым слов не досталось, и строки образца: пустые и заполненные.
+
+    Блок без единого слова уходит целиком. Пустые строки нужны, чтобы убрать их маркеры,
+    заполненные — чтобы маркер живой строки на слайде остался.
+    """
+    shapes: set[int] = set()
+    blank: list[Box] = []
+    live: list[Box] = []
+    for group in pattern.groups:
+        if not group.unit_slots:
+            continue  # блоки без текстовых слотов это оформление, пустыми они не бывают
+        texts = (spec.unit_text if group.id == spec.group_id
+                 else spec.linked_unit_text.get(group.id) or [])
+        for unit in group.units:
+            said = texts[unit.index] if unit.index < len(texts) else {}
+            if not any(said.get(slot.id) for slot in group.unit_slots):
+                shapes.update(unit.shape_ids)
+            for slot in group.unit_slots:
+                line = _slot_line(unit, slot)
+                (live if said.get(slot.id) else blank).append(line)
+    return shapes, blank, live
+
+
 def _removed(pattern: Pattern, spec: SlideSpec, texts: dict[str, str], n: int) -> list[int]:
     """Фигуры образца, которых на слайде не будет: пустые блоки, заглушки, чужие образцы."""
     out: set[int] = set()
@@ -177,7 +248,12 @@ def _removed(pattern: Pattern, spec: SlideSpec, texts: dict[str, str], n: int) -
                 out.update(unit.shape_ids)
 
     for area in pattern.areas:
-        if area.shape_id is None or area.id == spec.viz_area_id:
+        if area.id == spec.viz_area_id:
+            continue
+        if area.shape_id is None:
+            # Образец диаграммы собран из фигур оформления: своей фигуры у него нет.
+            if area.kind in _SAMPLE_VIZ:
+                out |= _decor_in(pattern, area.box)
             continue
         if area.placeholder or area.kind in _SAMPLE_VIZ:
             out.add(area.shape_id)
@@ -189,6 +265,17 @@ def _removed(pattern: Pattern, spec: SlideSpec, texts: dict[str, str], n: int) -
         for slot in pattern.slots:
             if not texts.get(slot.id) and _inside(slot.box, spec.viz_box):
                 out.add(slot.shape_id)
+        out |= _decor_in(pattern, spec.viz_box)
+
+    empty, blank, live = _blank_units(pattern, spec)
+    out |= empty
+    for shape in pattern.decor:
+        if geo.area(shape.box) > MARKER_AREA:
+            continue
+        if any(_on_line(shape.box, line) for line in live):
+            continue
+        if any(_on_line(shape.box, line) for line in blank):
+            out.add(shape.shape_id)
     return sorted(out)
 
 
@@ -347,7 +434,7 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     if title is not None:
         texts[title.id] = intent.title
 
-    lead = next((item.number for item in intent.items if item.number), None)
+    lead = lead_number(intent)
     lead_slot = _take(free, ("number",), avoid=region) if lead else None
     if lead_slot is not None:
         texts[lead_slot.id] = lead

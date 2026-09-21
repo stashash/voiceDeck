@@ -243,6 +243,17 @@ def test_short_value_fits_the_narrow_slot_too():
     assert choose_pattern(intent, ds, []).id == "p002"
 
 
+def test_chart_made_of_shapes_is_not_taken_for_a_slide_without_one():
+    """Полосы образца это диаграмма: у области нет своей фигуры, но подбор её видит."""
+    bars = _pattern("p002", SlideKind.bullets,
+                    areas=[Area(id="c9", kind="chart", box=(0.33, 0.26, 0.63, 0.53))],
+                    groups=[_group("g1", 3, 6, _unit_slots())])
+    ds = _ds([bars, _cards("p005")])
+    intent = SlideIntent(id="s1", kind=SlideKind.bullets, title="Как готовится отчёт",
+                         items=_items(2))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
 def test_visualisation_needs_room_on_the_slide():
     tight = _pattern("p005", SlideKind.chart, confidence=0.9,
                      slots=[_slot(1, "title", (0.05, 0.05, 0.9, 0.8), 36)])
