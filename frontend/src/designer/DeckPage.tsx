@@ -45,7 +45,8 @@ export default function DeckPage(_: PageProps) {
  const [slideCount, setSlideCount] = useState('');
  const [starting, setStarting] = useState(false);
 
- const [deckId, setDeckId] = useState<string | null>(null);
+ // Последняя колода переживает перезагрузку страницы: сборка идёт минуты, терять её из-за F5 нельзя.
+ const [deckId, setDeckId] = useState<string | null>(() => { try { return localStorage.getItem('designer.deckId'); } catch { return null; } });
  const [deckState, setDeckState] = useState<DeckStateResponse | null>(null);
  const [events, setEvents] = useState<DeckEvent[]>([]);
  const [variant, setVariant] = useState('a');
@@ -71,6 +72,11 @@ export default function DeckPage(_: PageProps) {
 
  useEffect(() => {
   if (!deckId) return;
+  try { localStorage.setItem('designer.deckId', deckId); } catch { /* хранилище недоступно */ }
+  getDeckState(deckId).then(setDeckState).catch(() => {
+   try { localStorage.removeItem('designer.deckId'); } catch { /* хранилище недоступно */ }
+   setDeckId(null);
+  });
   const seen = new Set<string>();
   const source = watchDeckEvents(deckId, e => {
    const key = `${e.variant}-${e.step}-${e.slide_index}-${e.at}`;
@@ -164,6 +170,9 @@ export default function DeckPage(_: PageProps) {
  }
 
  const done = activeVariant?.status === 'done';
+ // Упавшая сборка показывается словами сервиса: без этого экран вечно стоит на шаге «План».
+ const failure = activeVariant?.status === 'error' ? (activeVariant.error || 'Сборка не удалась') : '';
+ useEffect(() => { if (failure) setError(failure); }, [failure]);
  const stepsForVariant = events.filter(e => e.variant === null || e.variant === variant);
 
  return <div className="deck-shell">
