@@ -21,8 +21,15 @@ from designer.contracts import (
     SlideSpec,
     TextStyle,
 )
-from designer.layout.capacity import fit_size, main_group, slide_pt, unit_count
-from designer.layout.units import map_shape_box, place_units
+from designer.layout.capacity import (
+    fit_size,
+    primary_group,
+    size_floor,
+    slide_pt,
+    unit_boxes,
+    unit_count,
+)
+from designer.layout.units import map_shape_box
 from designer.parse import geometry as geo
 from designer.parse import patterns as parse
 from designer.parse.package import SOURCE_NAME
@@ -92,13 +99,18 @@ def _text_element(
     shape_id: int | None,
     ds: DesignSystem,
     slide: tuple[float, float],
+    size_pt: float | None = None,
 ) -> Element | None:
-    """Текстовый элемент с кеглем, опущенным на ступень шкалы, если текст не помещается."""
+    """Текстовый элемент с кеглем, который выбрала вёрстка; без него кегль считается тут же."""
     clipped = _clip(box)
     if clipped is None or not text:
         return None
     size = style.size_pt or 0.0
-    fitted = fit_size(text, clipped, size, ds.tokens.type_scale, slide) if size else size
+    if size_pt:
+        fitted = size_pt
+    else:
+        scale = ds.tokens.type_scale
+        fitted = fit_size(text, clipped, size, scale, slide, size_floor(scale, role)) if size else size
     return Element(
         id=el_id,
         type="text",
@@ -138,7 +150,9 @@ def _decor_element(el_id: str, info, box: Box, z: int, shape, part, theme) -> El
 
 
 def _viz_box(spec: SlideSpec, pattern: Pattern, group: RepeatGroup | None, ds: DesignSystem) -> Box | None:
-    """Где встанет диаграмма или таблица: область, место блоков или крупный слот."""
+    """Где встанет диаграмма или таблица. Рамку выбирает вёрстка, здесь её только исполняют."""
+    if spec.viz_box is not None:
+        return spec.viz_box
     target = spec.viz_area_id
     if target:
         for area in pattern.areas:
@@ -157,6 +171,8 @@ def _viz_box(spec: SlideSpec, pattern: Pattern, group: RepeatGroup | None, ds: D
 
 def _unit_elements(
     group: RepeatGroup,
+    unit_text: list[dict[str, str]],
+    boxes: list[Box],
     spec: SlideSpec,
     infos: dict,
     raw: dict,
@@ -166,17 +182,17 @@ def _unit_elements(
     ds: DesignSystem,
     slide: tuple[float, float],
 ) -> list[Element]:
-    """Блоки группы по рамкам place_units: лишние блоки образца в сцену не попадают."""
-    n = unit_count(group, len(spec.unit_text))
+    """Блоки группы по готовым рамкам: лишние блоки образца в сцену не попадают."""
     old = group.units[0].box
     slots = {slot.shape_id: slot for slot in group.unit_slots}
     areas = {area.shape_id: area for area in group.unit_areas}
+    removed = set(spec.remove_shape_ids)
     out: list[Element] = []
-    for index, new_box in enumerate(place_units(group, n)):
-        texts = spec.unit_text[index] if index < len(spec.unit_text) else {}
+    for index, new_box in enumerate(boxes):
+        texts = unit_text[index] if index < len(unit_text) else {}
         for shape_id in group.units[0].shape_ids:
             info = infos.get(shape_id)
-            if info is None:
+            if info is None or shape_id in removed:
                 continue
             slot = slots.get(shape_id)
             area = areas.get(shape_id)
@@ -190,7 +206,8 @@ def _unit_elements(
             z = order.get(shape_id, 0)
             if slot is not None:
                 element = _text_element(
-                    el_id, slot.role, box, texts.get(slot.id, ""), slot.style, z, shape_id, ds, slide
+                    el_id, slot.role, box, texts.get(slot.id, ""), slot.style, z, shape_id, ds,
+                    slide, spec.fitted_size_pt.get(slot.id),
                 )
                 if element is not None:
                     out.append(element)
@@ -215,7 +232,11 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
     order = {shape_id: i for i, shape_id in enumerate(infos)}
     slide_size = slide_pt(ds.slide_size_emu)
 
-    group = main_group(pattern)
+    removed = set(spec.remove_shape_ids)
+    group = next((g for g in pattern.groups if g.id == spec.group_id), None)
+    if group is None and not spec.group_id:
+        group = primary_group(pattern)
+    linked = [g for g in pattern.groups if g.id in spec.linked_unit_text]
     has_viz = spec.chart is not None or spec.table is not None
     viz_id = spec.viz_area_id if has_viz else None
     viz = _clip(_viz_box(spec, pattern, group, ds)) if has_viz else None
@@ -223,7 +244,7 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
 
     for shape_id in pattern.decor_shape_ids:
         info = infos.get(shape_id)
-        if info is None:
+        if info is None or shape_id in removed:
             continue
         box = _clip(info.box)
         if box is None:
@@ -238,7 +259,7 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
         )
 
     for slot in pattern.slots:
-        if slot.id == viz_id:
+        if slot.id == viz_id or slot.shape_id in removed:
             continue
         element = _text_element(
             slot.id,
@@ -250,12 +271,13 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
             slot.shape_id,
             ds,
             slide_size,
+            spec.fitted_size_pt.get(slot.id),
         )
         if element is not None:
             elements.append(element)
 
     for area in pattern.areas:
-        if area.id == viz_id or area.kind in _SAMPLE_VIZ:
+        if area.id == viz_id or area.kind in _SAMPLE_VIZ or area.shape_id in removed:
             continue
         box = _clip(area.box)
         if box is None:
@@ -270,9 +292,14 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
         )
 
     if group is not None and spec.unit_text and viz_id != group.id:
-        elements.extend(
-            _unit_elements(group, spec, infos, raw, slide.part, theme, order, ds, slide_size)
-        )
+        n = unit_count(group, len(spec.unit_text))
+        main_boxes, linked_boxes = unit_boxes(group, linked, n)
+        for item in (group, *linked):
+            boxes = main_boxes if item is group else linked_boxes[item.id]
+            texts = spec.unit_text if item is group else spec.linked_unit_text[item.id]
+            elements.extend(_unit_elements(
+                item, texts, boxes, spec, infos, raw, slide.part, theme, order, ds, slide_size
+            ))
 
     if viz is not None:
         elements.append(Element(

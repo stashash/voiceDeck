@@ -5,8 +5,9 @@
 """
 from __future__ import annotations
 
-from designer.contracts import DesignSystem, Pattern, SlideIntent, SlideKind
-from designer.layout.capacity import main_group
+from designer.contracts import DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
+from designer.layout.capacity import content_region, linked_groups, main_group, primary_group, unit_text_slots
+from designer.parse import geometry as geo
 
 # Семьи типов: внутри семьи замена читается естественно.
 _FAMILIES: tuple[tuple[SlideKind, ...], ...] = (
@@ -43,6 +44,10 @@ _NEAR: dict[SlideKind, tuple[SlideKind, ...]] = {
 
 _ITEM_ROLES = ("body", "heading", "caption", "label")
 _TITLE_ROLES = ("title", "heading")
+_SAMPLE_KINDS = ("chart", "table", "image")
+
+# Слайды, которые несут одну мысль: блоки и визуализация на них лишние.
+_PLAIN_KINDS = (SlideKind.title, SlideKind.section, SlideKind.thanks)
 
 W_KIND = 3.0
 W_UNITS = 2.0
@@ -51,6 +56,19 @@ W_TITLE = 0.6
 W_CONFIDENCE = 0.5
 P_REPEAT = 0.8
 P_REPEAT_LAST = 2.5
+P_UNIT_SLOTS = 1.0
+
+VIZ_ROOM = 0.4
+"""Доля слайда, с которой свободной рамки хватает под диаграмму или таблицу."""
+
+SAMPLE_MIN = 0.05
+"""Доля слайда, с которой картинка образца читается содержанием, а не значком."""
+
+SAMPLE_TOTAL = 0.15
+"""Доля слайда под мелкими картинками, с которой слайд держится на них целиком."""
+
+REFLOW_FREE = 2
+"""На сколько блоков перекладка ещё дёшева."""
 
 
 def _family(kind: SlideKind) -> tuple[SlideKind, ...]:
@@ -76,24 +94,28 @@ def _item_slots(pattern: Pattern) -> int:
 
 
 def _units_score(pattern: Pattern, n_items: int) -> float:
+    """Совпадение числа блоков. Точное ценится выше перекладки, дальняя перекладка штрафуется."""
     if n_items <= 0:
         # Паттерн с блоками под слайд без пунктов годится, но хуже простого.
         return 1.0 if not pattern.groups else 0.45
     best = 0.0
     for group in pattern.groups:
-        if group.min_units <= n_items <= group.max_units:
+        if len(group.units) == n_items:
             best = max(best, 1.0)
+        elif group.min_units <= n_items <= group.max_units:
+            near = abs(len(group.units) - n_items) <= REFLOW_FREE
+            best = max(best, 0.85 if near else 0.55)
         elif n_items > group.max_units:
-            best = max(best, group.max_units / n_items)
+            best = max(best, 0.4 * group.max_units / n_items)
         else:
-            best = max(best, n_items / group.min_units)
+            best = max(best, 0.4 * n_items / group.min_units)
     free = _item_slots(pattern)
     if free:
         best = max(best, 0.45 if free >= n_items else 0.45 * free / n_items)
     return best
 
 
-def _viz_score(pattern: Pattern, intent: SlideIntent) -> float:
+def _viz_score(pattern: Pattern, intent: SlideIntent, ds: DesignSystem | None = None) -> float:
     kinds = {area.kind for area in pattern.areas}
     want = "chart" if intent.chart is not None else "table" if intent.table is not None else None
     if want is None:
@@ -103,11 +125,83 @@ def _viz_score(pattern: Pattern, intent: SlideIntent) -> float:
         return 1.0
     if kinds & {"chart", "table"}:
         return 0.8
+    if ds is not None:
+        # Своей области нет: чем просторнее место содержимого, тем крупнее встанет визуализация.
+        return min(1.0, 0.4 + geo.area(content_region(pattern, ds.tokens.margins)))
     if "image" in kinds:
         return 0.7
     if main_group(pattern) is not None:
         return 0.5
     return 0.3 if _item_slots(pattern) else 0.1
+
+
+def _samples(pattern: Pattern) -> set[str]:
+    """Образцы шаблона, которые без своего содержания останутся на слайде чужими.
+
+    Одна мелкая картинка это значок оформления. Но когда такой мелочи набирается
+    на шестую часть слайда, слайд держится на ней, и своё содержание там не разместить.
+    """
+    areas = [a for a in (*pattern.areas, *(a for g in pattern.groups for a in g.unit_areas))
+             if a.kind in _SAMPLE_KINDS and not a.placeholder]
+    out = {a.kind for a in areas if a.kind != "image" or geo.area(a.box) >= SAMPLE_MIN}
+    if sum(geo.area(a.box) for a in areas if a.kind == "image") >= SAMPLE_TOTAL:
+        out.add("image")
+    return out
+
+
+def _viz_room(pattern: Pattern, ds: DesignSystem) -> bool:
+    """Остаётся ли после удаления блоков и образцов рамка под диаграмму или таблицу."""
+    return geo.area(content_region(pattern, ds.tokens.margins)) >= VIZ_ROOM
+
+
+def _units_collide(group: RepeatGroup) -> bool:
+    """Наезжают ли блоки группы друг на друга: перекладка такой сетки наезд только повторит."""
+    boxes = [unit.box for unit in group.units]
+    return any(
+        geo.overlap(boxes[a], boxes[b]) > 0
+        for a in range(len(boxes)) for b in range(a + 1, len(boxes))
+    )
+
+
+def _fit_penalty(pattern: Pattern, items: list[Item]) -> float:
+    """Штраф за блок, который не вмещает пункт по слотам.
+
+    Пункту с заголовком и пояснением нужны два текстовых слота: в блоке с одним слотом
+    они сойдутся в одну строку. Блок с одним слотом годится пунктам без заголовка.
+    """
+    group = primary_group(pattern)
+    if group is None or not items:
+        return 0.0
+    if not any(item.heading and item.body for item in items):
+        return 0.0
+    slots = unit_text_slots(group, linked_groups(pattern, group))
+    return 0.0 if len(slots) >= 2 else P_UNIT_SLOTS
+
+
+def _number_slot(pattern: Pattern) -> bool:
+    """Есть ли на слайде место под крупное число."""
+    return (any(slot.role == "number" for slot in pattern.slots)
+            or any(slot.role == "number" for g in pattern.groups for slot in g.unit_slots))
+
+
+def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
+    """Годится ли паттерн под намерение. Негодный берут, только когда годных нет совсем."""
+    if pattern.needs_images:
+        return False  # паттерн держится на фото, а своих картинок у намерения нет
+    if intent.kind in _PLAIN_KINDS and (pattern.groups or _samples(pattern)):
+        return False
+    if intent.kind is SlideKind.big_number and not _number_slot(pattern):
+        return False
+    want = "chart" if intent.chart is not None else "table" if intent.table is not None else None
+    if want is None:
+        if _samples(pattern):
+            return False  # чужой образец останется на слайде
+    elif _samples(pattern) - {want} or not _viz_room(pattern, ds):
+        return False
+    group = primary_group(pattern)
+    if group is None or not intent.items:
+        return True
+    return bool(unit_text_slots(group, linked_groups(pattern, group))) and not _units_collide(group)
 
 
 def _title_score(pattern: Pattern, intent: SlideIntent) -> float:
@@ -124,14 +218,17 @@ def _penalty(pattern: Pattern, used: list[str]) -> float:
     return P_REPEAT * used.count(pattern.id)
 
 
-def score_pattern(intent: SlideIntent, pattern: Pattern, used: list[str]) -> float:
+def score_pattern(
+    intent: SlideIntent, pattern: Pattern, used: list[str], ds: DesignSystem | None = None
+) -> float:
     """Оценка кандидата: тип, вместимость блоков, место под визуализацию, уверенность, повтор."""
     total = (
         W_KIND * _kind_score(intent.kind, pattern.kind)
         + W_UNITS * _units_score(pattern, len(intent.items))
-        + W_VIZ * _viz_score(pattern, intent)
+        + W_VIZ * _viz_score(pattern, intent, ds)
         + W_TITLE * _title_score(pattern, intent)
         + W_CONFIDENCE * pattern.kind_confidence
+        - _fit_penalty(pattern, intent.items)
         - _penalty(pattern, used)
     )
     return round(total, 6)
@@ -142,4 +239,5 @@ def choose_pattern(intent: SlideIntent, ds: DesignSystem, used: list[str] | None
     if not ds.patterns:
         raise ValueError("в дизайн-системе нет ни одного паттерна")
     seen = list(used or [])
-    return min(ds.patterns, key=lambda p: (-score_pattern(intent, p, seen), p.id))
+    suitable = [p for p in ds.patterns if fits(intent, p, ds)]
+    return min(suitable or ds.patterns, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))

@@ -1,4 +1,4 @@
-"""Намерение -> инструкция сборки слайда. Задача T-07."""
+"""Намерение -> инструкция сборки слайда. Задачи T-07 и T-19."""
 from designer.contracts import (
     Area, ChartSpec, DesignSystem, Item, Margins, Pattern, RepeatGroup, RepeatUnit,
     Series, SlideIntent, SlideKind, Slot, TableSpec, TextStyle, Tokens, TypeStep,
@@ -108,11 +108,15 @@ def test_table_goes_to_the_table_area():
     assert spec.unit_text == []
 
 
-def test_without_an_area_visualisation_takes_the_place_of_blocks():
+def test_without_an_area_visualisation_gets_the_free_frame():
     chart = ChartSpec(type="column", categories=["I", "II"], series=[Series(name="план", values=[1, 2])])
-    spec = compose(_intent(kind=SlideKind.chart, items=_items(3), chart=chart), _cards(), _ds())
-    assert spec.viz_area_id == "g1"
+    pattern = _cards()
+    spec = compose(_intent(kind=SlideKind.chart, items=_items(3), chart=chart), pattern, _ds())
+    assert spec.viz_area_id is None
     assert spec.unit_text == []
+    assert spec.viz_box is not None and spec.viz_box[2] * spec.viz_box[3] >= 0.35
+    blocks = {sid for unit in pattern.groups[0].units for sid in unit.shape_ids}
+    assert blocks <= set(spec.remove_shape_ids)
 
 
 def test_items_land_in_free_slots_when_there_is_no_group():
@@ -131,3 +135,116 @@ def test_lead_number_goes_to_the_number_slot():
     intent = _intent(kind=SlideKind.big_number, items=[Item(number="5", heading="минут на колоду")])
     spec = compose(intent, pattern, _ds())
     assert spec.slot_text["s6"] == "5"
+
+
+# ---------- решения вёрстки: что убрать, где визуализация, каким кеглем набрать ----------
+
+def _second_group():
+    """Вторая группа паттерна со своими фигурами: содержания ей не достанется."""
+    units = [RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.72, 0.28, 0.12), shape_ids=[300 + i])
+             for i in range(3)]
+    return RepeatGroup(id="g2", direction="row", cols=3, rows=1, step=(0.30, 0.0),
+                       unit_size=(0.28, 0.12), units=units, max_units=3,
+                       unit_slots=[_slot(301, "caption", (0.0, 0.0, 0.26, 0.10), 12)])
+
+
+def _linked_steps():
+    """Ряд номеров и ряд подписей под ними: подписи главные, номера идут за ними."""
+    numbers = RepeatGroup(
+        id="g1", direction="row", cols=3, rows=1, step=(0.30, 0.0), unit_size=(0.10, 0.10),
+        units=[RepeatUnit(index=i, box=(0.14 + i * 0.30, 0.35, 0.10, 0.10), shape_ids=[400 + i])
+               for i in range(3)],
+        max_units=3, unit_slots=[_slot(401, "number", (0.0, 0.0, 0.10, 0.10), 40)])
+    heads = RepeatGroup(
+        id="g2", direction="row", cols=3, rows=1, step=(0.30, 0.0), unit_size=(0.28, 0.14),
+        units=[RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.50, 0.28, 0.14), shape_ids=[410 + i])
+               for i in range(3)],
+        max_units=3, unit_slots=[_slot(411, "heading", (0.0, 0.0, 0.28, 0.06), 20),
+                                 _slot(412, "body", (0.0, 0.08, 0.28, 0.06), 12)],
+        linked_group_ids=["g1"])
+    pattern = _cards()
+    pattern.groups = [numbers, heads]
+    pattern.primary_group_id = "g2"
+    return pattern
+
+
+def test_group_without_content_is_removed_whole():
+    pattern = _cards()
+    pattern.groups.append(_second_group())
+    spec = compose(_intent(items=_items(3)), pattern, _ds())
+    assert spec.group_id == "g1"
+    assert {300, 301, 302} <= set(spec.remove_shape_ids)
+
+
+def test_blocks_beyond_the_content_are_removed():
+    pattern = _cards()
+    pattern.groups[0].units = [RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.35, 0.28, 0.30),
+                                          shape_ids=[500 + i]) for i in range(3)]
+    spec = compose(_intent(items=_items(2)), pattern, _ds())
+    assert len(spec.unit_text) == 2
+    assert 502 in spec.remove_shape_ids
+    assert 500 not in spec.remove_shape_ids
+
+
+def test_photo_placeholder_is_removed():
+    area = Area(id="a9", kind="image", box=(0.6, 0.3, 0.3, 0.4), shape_id=9, placeholder=True)
+    spec = compose(_intent(items=_items(3)), _cards(areas=[area]), _ds())
+    assert 9 in spec.remove_shape_ids
+
+
+def test_sample_chart_of_the_pattern_is_removed():
+    area = Area(id="a9", kind="chart", box=(0.6, 0.3, 0.3, 0.4), shape_id=9)
+    spec = compose(_intent(items=_items(3)), _cards(areas=[area]), _ds())
+    assert 9 in spec.remove_shape_ids
+
+
+def test_linked_group_gets_the_same_number_of_blocks():
+    items = [Item(number="01", heading="Разбор", body="Читаем шаблон"),
+             Item(number="02", heading="План", body="Делим бриф на слайды")]
+    spec = compose(_intent(kind=SlideKind.steps, items=items), _linked_steps(), _ds())
+    assert spec.group_id == "g2"
+    assert list(spec.linked_unit_text) == ["g1"]
+    assert len(spec.linked_unit_text["g1"]) == len(spec.unit_text) == 2
+    assert [unit["s401"] for unit in spec.linked_unit_text["g1"]] == ["01", "02"]
+    assert spec.unit_text[1]["s411"] == "План"
+    assert spec.unit_text[1]["s412"] == "Делим бриф на слайды"
+    # Третий блок обеих групп лишний: он уходит, первые два остаются.
+    assert not set(spec.remove_shape_ids) & {400, 401, 410, 411}
+    assert {402, 412} <= set(spec.remove_shape_ids)
+
+
+def test_single_slot_keeps_both_heading_and_body():
+    pattern = _cards()
+    pattern.groups[0].unit_slots = [_slot(102, "heading", (0.0, 0.07, 0.26, 0.06), 20)]
+    spec = compose(_intent(items=_items(2)), pattern, _ds())
+    assert "Короткое пояснение" in spec.unit_text[0]["s102"]
+    assert "Причина 1" in spec.unit_text[0]["s102"]
+
+
+def test_visualisation_frame_is_roomy_and_clears_what_is_under_it():
+    stray = _slot(7, "caption", (0.1, 0.5, 0.3, 0.1), 12)
+    table = TableSpec(columns=["Проверка", "Что ловит"], rows=[["Наезд", "пересечение блоков"]])
+    spec = compose(_intent(kind=SlideKind.table, items=[], table=table),
+                   _cards(extra_slots=[stray]), _ds())
+    box = spec.viz_box
+    assert box is not None and box[2] * box[3] >= 0.35
+    assert box[0] >= 0.05 and box[1] + box[3] <= 0.95
+    assert spec.slot_text["s7"] == "" and 7 in spec.remove_shape_ids
+    assert spec.slot_text["s2"] == "Почему это работает"
+
+
+def test_visualisation_frame_goes_around_the_filled_slot():
+    message = _slot(8, "body", (0.05, 0.32, 0.9, 0.12), 16)
+    chart = ChartSpec(type="column", categories=["I", "II"], series=[Series(name="план", values=[1, 2])])
+    pattern = _cards(extra_slots=[message])
+    pattern.slots = [slot for slot in pattern.slots if slot.id != "s2"]
+    spec = compose(_intent(kind=SlideKind.chart, items=[], chart=chart), pattern, _ds())
+    assert spec.slot_text["s8"] == "Почему это работает"
+    assert spec.viz_box is not None and spec.viz_box[1] >= 0.44 - 1e-9
+
+
+def test_fitted_size_steps_down_for_a_long_heading():
+    items = [Item(heading="Причина, у которой очень длинное название", body="Коротко"), *_items(2)]
+    spec = compose(_intent(items=items), _cards(), _ds())
+    assert spec.fitted_size_pt["s102"] == 18.0  # один кегль на все блоки ряда
+    assert spec.fitted_size_pt["s1"] == 36.0

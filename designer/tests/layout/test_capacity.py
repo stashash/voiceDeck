@@ -1,8 +1,11 @@
-"""Вместимость слотов при перекладке блоков. Задача T-07."""
+"""Вместимость слотов при перекладке блоков. Задачи T-07 и T-19."""
 from designer.contracts import (
-    Pattern, RepeatGroup, RepeatUnit, SlideKind, Slot, TextStyle, TypeStep,
+    Margins, Pattern, RepeatGroup, RepeatUnit, SlideKind, Slot, TextStyle, TypeStep,
 )
-from designer.layout.capacity import box_capacity, fit_size, main_group, slide_pt, slot_limits
+from designer.layout.capacity import (
+    box_capacity, content_region, fit_size, free_box, linked_groups, main_group, primary_group,
+    size_floor, slide_pt, slot_limits, unit_boxes, unit_text_slots,
+)
 
 SLIDE = (9144000, 5143500)
 SLIDE_PT = slide_pt(SLIDE)
@@ -10,6 +13,7 @@ SCALE = [TypeStep(size_pt=36, role="title", share=0.2),
          TypeStep(size_pt=24, role="heading", share=0.2),
          TypeStep(size_pt=18, role="body", share=0.4),
          TypeStep(size_pt=12, role="caption", share=0.2)]
+MARGINS = Margins(left=0.05, top=0.06, right=0.05, bottom=0.07)
 
 
 def _slot(shape_id, role, box, size=18.0):
@@ -73,3 +77,84 @@ def test_font_steps_down_until_text_fits():
 def test_font_never_goes_below_the_smallest_step():
     box = (0.05, 0.1, 0.2, 0.06)
     assert fit_size("и" * 5000, box, 36.0, SCALE, SLIDE_PT) == 12.0
+
+
+# ---------- решения вёрстки: место содержимого, свободная рамка, кегль заголовка ----------
+
+def test_content_region_starts_below_the_title():
+    region = content_region(_pattern(), MARGINS)
+    assert region[0] == MARGINS.left
+    assert region[1] > 0.20  # заголовок образца кончается на 0,20
+    assert round(region[1] + region[3], 6) == round(1 - MARGINS.bottom, 6)
+    assert round(region[0] + region[2], 6) == round(1 - MARGINS.right, 6)
+
+
+def test_content_region_of_a_slide_without_a_title_starts_at_the_margin():
+    pattern = _pattern()
+    pattern.slots = []
+    assert content_region(pattern, MARGINS)[1] == MARGINS.top
+
+
+def test_free_box_goes_around_a_filled_slot():
+    box = free_box((0.05, 0.30, 0.90, 0.60), [(0.05, 0.30, 0.90, 0.10)])
+    assert box is not None
+    assert abs(box[1] - 0.40) < 1e-9 and abs(box[3] - 0.50) < 1e-9
+
+
+def test_free_box_takes_the_roomiest_part():
+    box = free_box((0.0, 0.0, 1.0, 1.0), [(0.0, 0.0, 0.3, 1.0)])
+    assert box is not None and abs(box[2] - 0.7) < 1e-9
+
+
+def test_free_box_is_none_when_the_place_is_busy():
+    assert free_box((0.05, 0.30, 0.90, 0.60), [(0.0, 0.0, 1.0, 1.0)]) is None
+
+
+def test_heading_stops_at_its_own_step_of_the_scale():
+    box = (0.05, 0.1, 0.2, 0.06)
+    assert size_floor(SCALE, "heading") == 24.0
+    assert size_floor(SCALE, "body") is None
+    assert fit_size("и" * 5000, box, 36.0, SCALE, SLIDE_PT, size_floor(SCALE, "heading")) == 24.0
+
+
+def test_step_above_the_current_size_does_not_hold_the_font():
+    scale = [TypeStep(size_pt=36, role="title", share=0.5), TypeStep(size_pt=18, role="body", share=0.5)]
+    assert size_floor(scale, "heading") == 36.0
+    assert fit_size("и" * 500, (0.05, 0.1, 0.2, 0.06), 20.0, scale, SLIDE_PT, 36.0) == 18.0
+
+
+# ---------- связанные группы ----------
+
+def _linked_pair():
+    """Ряд номеров и ряд подписей под ними: одна смысловая строка из двух групп."""
+    numbers = RepeatGroup(
+        id="g1", direction="row", cols=3, rows=1, step=(0.30, 0.0), unit_size=(0.10, 0.10),
+        units=[RepeatUnit(index=i, box=(0.14 + i * 0.30, 0.35, 0.10, 0.10), shape_ids=[200 + i])
+               for i in range(3)],
+        max_units=3, unit_slots=[_slot(201, "number", (0.0, 0.0, 0.10, 0.10), 40)])
+    heads = RepeatGroup(
+        id="g2", direction="row", cols=3, rows=1, step=(0.30, 0.0), unit_size=(0.28, 0.14),
+        units=[RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.50, 0.28, 0.14), shape_ids=[210 + i])
+               for i in range(3)],
+        max_units=3, unit_slots=[_slot(211, "heading", (0.0, 0.0, 0.28, 0.14), 20)],
+        linked_group_ids=["g1"])
+    pattern = _pattern()
+    pattern.groups = [numbers, heads]
+    pattern.primary_group_id = "g2"
+    return pattern
+
+
+def test_primary_group_is_the_one_the_pattern_names():
+    pattern = _linked_pair()
+    assert primary_group(pattern).id == "g2"
+    assert [g.id for g in linked_groups(pattern, primary_group(pattern))] == ["g1"]
+    assert [s.id for s in unit_text_slots(primary_group(pattern), [])] == ["s211"]
+
+
+def test_linked_blocks_keep_the_axis_of_the_main_ones():
+    pattern = _linked_pair()
+    group = primary_group(pattern)
+    main, linked = unit_boxes(group, linked_groups(pattern, group), 2)
+    assert len(main) == len(linked["g1"]) == 2
+    for head, number in zip(main, linked["g1"]):
+        assert abs((head[0] + head[2] / 2) - (number[0] + number[2] / 2)) < 0.001
