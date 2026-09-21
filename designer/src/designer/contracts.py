@@ -146,6 +146,13 @@ class RepeatGroup(BaseModel):
     linked_group_ids: list[str] = Field(default_factory=list, description="группы, которые повторяются синхронно с этой: ряд номеров и ряд подписей под ними это один смысловой блок")
 
 
+class DecorShape(BaseModel):
+    """Фигура оформления с рамкой: вёрстка решает по ней, мешает ли оформление содержимому."""
+    shape_id: int
+    box: Box
+    kind: Literal["shape", "image", "line", "text", "other"] = "shape"
+
+
 class Pattern(BaseModel):
     """Слайд-образец как паттерн вёрстки."""
     id: str
@@ -163,6 +170,7 @@ class Pattern(BaseModel):
     areas: list[Area] = Field(default_factory=list)
     groups: list[RepeatGroup] = Field(default_factory=list)
     decor_shape_ids: list[int] = Field(default_factory=list, description="фигуры оформления, которые при сборке не трогаем")
+    decor: list[DecorShape] = Field(default_factory=list, description="те же фигуры оформления с рамками; у блоков групп оформление лежит в RepeatUnit.shape_ids")
     preview: str | None = None
 
 
