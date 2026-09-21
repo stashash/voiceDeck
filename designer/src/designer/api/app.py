@@ -1,6 +1,7 @@
 """FastAPI-сервис: пакеты дизайн-систем, генерация колоды, живой режим. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 from collections.abc import Iterator
@@ -24,9 +25,8 @@ from designer.api.schemas import (
     LiveSlideRequest,
     LiveSlideResponse,
 )
-from designer.contracts import Deck, DeckPlan, DesignSystem, RunManifest
+from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
-from designer.export.html import render_deck
 from designer.llm.client import LlmClient
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
@@ -143,13 +143,21 @@ def get_deck(deck_id: str) -> DeckStateResponse:
     if not variant_codes:
         raise _not_found()
 
-    variant_states = {code: DeckVariantState(**store.load_deck_state(deck_id, code)) for code in variant_codes}
+    variant_states = {code: _variant_state(deck_id, code) for code in variant_codes}
     primary = variant_states.get("a") or next(iter(variant_states.values()))
     return DeckStateResponse(
         status=primary.status, design_system_id=primary.design_system_id, plan=primary.plan,
         specs=primary.specs, scenes=primary.scenes, findings=primary.findings, error=primary.error,
-        variants=variant_states,
+        slide_images=primary.slide_images, variants=variant_states,
     )
+
+
+def _variant_state(deck_id: str, variant: str) -> DeckVariantState:
+    """Состояние варианта с адресами картинок слайдов: их пишет конвейер после экспорта pptx."""
+    state = DeckVariantState(**store.load_deck_state(deck_id, variant))
+    state.slide_images = [f"/decks/{deck_id}/{variant}/slides/{number}.png"
+                           for number in store.deck_variant_slide_numbers(deck_id, variant)]
+    return state
 
 
 @app.get("/decks/{deck_id}/run", response_model=RunManifest)
@@ -183,6 +191,20 @@ def get_deck_variant_file(deck_id: str, variant: str, name: str) -> FileResponse
     return FileResponse(str(path))
 
 
+@app.get("/decks/{deck_id}/{variant}/slides/{number}.png")
+def get_deck_slide_image(deck_id: str, variant: str, number: str) -> FileResponse:
+    """Картинка слайда: ровно то, что откроется в PowerPoint."""
+    try:
+        path = store.deck_variant_slide_path(deck_id, variant, number)
+    except store.InvalidId:
+        raise HTTPException(400, "недопустимый путь")
+    if path is None:
+        raise HTTPException(400, "недопустимый путь")
+    if not path.is_file():
+        raise HTTPException(404, "картинка слайда не найдена")
+    return FileResponse(str(path), media_type="image/png")
+
+
 @app.post("/decks/{deck_id}/{variant}/audit-contextual", response_model=AuditContextualResponse)
 def audit_deck_variant(deck_id: str, variant: str,
                         client: LlmClient = Depends(get_llm_client)) -> AuditContextualResponse:
@@ -208,20 +230,14 @@ def fix_deck_variant(deck_id: str, variant: str, payload: DeckFixRequest) -> Dec
 
 @app.post("/live/slide")
 def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_llm_client)):
-    scene = pipeline.live_slide(
+    result = pipeline.live_slide(
         payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
     )
-    if scene is None:
+    if result is None:
         return Response(status_code=204)
 
-    package_dir = store.design_system_dir(payload.design_system_id)
-    ds = load_package(package_dir)
-    solo_deck = Deck(
-        id="live", design_system_id=payload.design_system_id, variant="a",
-        plan=DeckPlan(title="", purpose="", slides=[]), specs=[], scenes=[scene],
-    )
-    html_text = render_deck(solo_deck, ds, package_dir)
-    return LiveSlideResponse(scene=scene, html=html_text)
+    image = base64.b64encode(result.png).decode("ascii") if result.png else None
+    return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=image)
 
 
 # ---------- здоровье ----------
