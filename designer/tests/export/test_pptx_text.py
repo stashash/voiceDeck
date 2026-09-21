@@ -1,6 +1,7 @@
-"""Тесты set_text: оформление образца, абзацы, очистка фигуры. Задача T-08."""
+"""Тесты set_text: оформление образца, абзацы, очистка фигуры, кегль подгонки. Задача T-08, кегль — T-20."""
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.oxml.ns import qn
 from pptx.util import Emu, Pt
 
 from designer.export.pptx_text import set_text
@@ -104,3 +105,35 @@ def test_set_text_leaves_shapes_without_text_frame_alone():
     set_text(picture_free_shape, "мимо")
 
     assert picture_free_shape.has_table
+
+
+def test_set_text_with_size_applies_it_to_every_fragment(tmp_path):
+    prs, box = _textbox()
+
+    set_text(box, "Первая\nВторая", size_pt=14)
+
+    shape = _reopen(prs, tmp_path)
+    paragraphs = shape.text_frame.paragraphs
+    assert [p.text for p in paragraphs] == ["Первая", "Вторая"]
+    for paragraph in paragraphs:
+        assert paragraph.runs[0].font.size == Pt(14)
+
+
+def test_set_text_with_size_disables_autofit(tmp_path):
+    prs, box = _textbox()
+
+    set_text(box, "Подогнанный текст", size_pt=12)
+
+    shape = _reopen(prs, tmp_path)
+    body_pr = shape.text_frame._txBody.find(qn("a:bodyPr"))
+    assert body_pr.find(qn("a:noAutofit")) is not None
+    assert body_pr.find(qn("a:normAutofit")) is None
+
+
+def test_set_text_without_size_keeps_sample_size(tmp_path):
+    prs, box = _textbox()
+
+    set_text(box, "Без подгонки")
+
+    shape = _reopen(prs, tmp_path)
+    assert shape.text_frame.paragraphs[0].runs[0].font.size == SAMPLE_SIZE

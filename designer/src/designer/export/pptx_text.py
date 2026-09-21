@@ -13,17 +13,23 @@ from pptx.oxml.ns import nsdecls, qn
 _XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
 
-def set_text(shape, text: str) -> None:
+def set_text(shape, text: str, size_pt: float | None = None) -> None:
     """Пишет текст в фигуру, сохраняя оформление первого фрагмента первого абзаца.
 
     Лишние фрагменты и абзацы убираются, перевод строки даёт новый абзац с тем же оформлением.
     Пустая строка очищает фигуру, сама фигура остаётся на слайде.
     Принимает и фигуру python-pptx, и её XML.
+
+    size_pt — кегль после подгонки вёрстки. Если задан, ставится всем фрагментам,
+    а автоподбор кегля PowerPoint у фигуры выключается: иначе размер поплывёт при открытии.
     """
     body = _text_body(shape)
     if body is None:
         return
     run_props, para_props = _sample_props(body)
+    if size_pt is not None:
+        run_props = _with_size(run_props, size_pt)
+        _disable_autofit(body)
     for para in body.findall(qn("a:p")):
         body.remove(para)
     for line in _lines(text):
@@ -61,6 +67,26 @@ def _retag(element, tag: str):
     copied = copy.deepcopy(element)
     copied.tag = qn(tag)
     return copied
+
+
+def _with_size(run_props, size_pt: float):
+    """Свойства фрагмента с проставленным кеглем: sz в OOXML это сотые доли пункта."""
+    node = copy.deepcopy(run_props) if run_props is not None else parse_xml("<a:rPr %s/>" % nsdecls("a"))
+    node.set("sz", str(round(size_pt * 100)))
+    return node
+
+
+def _disable_autofit(body) -> None:
+    """Выключает автоподбор кегля PowerPoint у фигуры: заданный размер иначе поплывёт при открытии."""
+    body_pr = body.find(qn("a:bodyPr"))
+    if body_pr is None:
+        return
+    for tag in ("a:normAutofit", "a:spAutoFit"):
+        node = body_pr.find(qn(tag))
+        if node is not None:
+            body_pr.remove(node)
+    if body_pr.find(qn("a:noAutofit")) is None:
+        body_pr.append(parse_xml("<a:noAutofit %s/>" % nsdecls("a")))
 
 
 def _lines(text: str) -> list[str]:

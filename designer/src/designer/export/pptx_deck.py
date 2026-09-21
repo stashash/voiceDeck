@@ -147,7 +147,7 @@ def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern) -
             continue
         item = _live(placed, slot.shape_id)
         if item is not None:
-            set_text(item.element, text)
+            set_text(item.element, text, spec.fitted_size_pt.get(slot_id))
 
 
 def _group_of(pattern: Pattern, group_id: str | None) -> RepeatGroup | None:
@@ -239,11 +239,11 @@ def _renumber(element, issue) -> int:
     return first
 
 
-def _fill_group(placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem, issue) -> None:
-    group = _group_of(pattern, spec.group_id)
-    if group is None or not group.units or not spec.unit_text:
-        return
-    count = len(spec.unit_text)
+def _fill_repeat_group(
+    placed, group: RepeatGroup, unit_texts: list[dict[str, str]], count: int,
+    fitted_size_pt: dict[str, float], ds: DesignSystem, issue,
+) -> None:
+    """Перекладывает и заполняет блоки одной группы на count блоков. Общая часть для главной и связанных групп."""
     boxes = place_units(group, count)
     units = group.units
     kept = min(count, len(units))
@@ -261,11 +261,27 @@ def _fill_group(placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem, iss
                 boxes[kept - 1], boxes[i], ds.slide_size_emu, issue,
             )
         )
-    for unit_texts, unit_map in zip(spec.unit_text, maps):
-        for slot_id, text in unit_texts.items():
+    for unit_text, unit_map in zip(unit_texts, maps):
+        for slot_id, text in unit_text.items():
             item = _live(placed, unit_map.get(slot_id, -1))
             if item is not None:
-                set_text(item.element, text)
+                set_text(item.element, text, fitted_size_pt.get(slot_id))
+
+
+def _fill_group(placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem, issue) -> None:
+    group = _group_of(pattern, spec.group_id)
+    if group is None or not group.units or not spec.unit_text:
+        return
+    count = len(spec.unit_text)
+    _fill_repeat_group(placed, group, spec.unit_text, count, spec.fitted_size_pt, ds, issue)
+
+    groups = {g.id: g for g in pattern.groups}
+    for linked_id in group.linked_group_ids:  # связанная группа перекладывается тем же числом блоков
+        linked_group = groups.get(linked_id)
+        unit_texts = spec.linked_unit_text.get(linked_id)
+        if linked_group is None or not linked_group.units or not unit_texts:
+            continue
+        _fill_repeat_group(placed, linked_group, unit_texts, count, spec.fitted_size_pt, ds, issue)
 
 
 def _content_box(pattern: Pattern, ds: DesignSystem) -> Box:
@@ -295,14 +311,14 @@ def _covered(box: Box, area: Box) -> float:
 def _fill_viz(slide, placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     if spec.chart is None and spec.table is None:
         return
-    box = _viz_box(pattern, spec.viz_area_id, ds)
+    box = spec.viz_box if spec.viz_box is not None else _viz_box(pattern, spec.viz_area_id, ds)
     for item in list(placed.values()):
         if not item.dropped and _covered(item.box, box) >= VIZ_COVER:
             _drop(item)
     if spec.chart is not None:
-        add_chart(slide, spec.chart, box, ds.slide_size_emu, ds.tokens)
+        add_chart(slide, spec.chart, box, ds.slide_size_emu, ds.tokens, theme=pattern.theme)
     else:
-        add_table(slide, spec.table, box, ds.slide_size_emu, ds.tokens)
+        add_table(slide, spec.table, box, ds.slide_size_emu, ds.tokens, theme=pattern.theme)
 
 
 def _prune_groups(slide) -> None:
@@ -315,9 +331,16 @@ def _prune_groups(slide) -> None:
             parent.remove(group)
 
 
+def _remove_shapes(placed: dict[int, _Placed], shape_ids: list[int]) -> None:
+    """Фигуры, которые решила убрать вёрстка: пустые группы, образцы в рамке визуализации, заглушки."""
+    for shape_id in shape_ids:
+        _drop(placed.get(shape_id))
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
+    _remove_shapes(placed, spec.remove_shape_ids)
     _fill_slots(placed, spec, pattern)
     _fill_group(placed, spec, pattern, ds, issue)
     _fill_viz(slide, placed, spec, pattern, ds)
