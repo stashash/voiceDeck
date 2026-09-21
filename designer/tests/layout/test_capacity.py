@@ -1,11 +1,12 @@
 """Вместимость слотов при перекладке блоков. Задачи T-07, T-19 и T-22."""
 from designer.contracts import (
-    Margins, Pattern, RepeatGroup, RepeatUnit, SlideKind, Slot, TextStyle, TypeStep,
+    Item, Margins, Pattern, RepeatGroup, RepeatUnit, SlideIntent, SlideKind, Slot, TextStyle,
+    TypeStep,
 )
 from designer.layout.capacity import (
-    box_capacity, content_region, fit_size, free_box, head_top, line_capacity, linked_groups,
-    main_group, primary_group, size_floor, slide_pt, slot_limits, slot_size, text_lines,
-    title_step, unit_boxes, unit_text_slots, word_size,
+    box_capacity, content_region, fit_size, free_box, head_top, lead_number, line_capacity,
+    linked_groups, main_group, primary_group, size_floor, slide_pt, slot_limits, slot_size,
+    text_lines, title_step, unit_boxes, unit_text_slots, word_size,
 )
 
 SLIDE = (9144000, 5143500)
@@ -169,6 +170,36 @@ def test_text_lines_count_the_wrapped_lines():
     box = (0.05, 0.10, 0.20, 0.30)
     assert text_lines("коротко", box, 12.0, SLIDE_PT) == 1
     assert text_lines("и" * 60, box, 12.0, SLIDE_PT) == 3
+
+
+# ---------- дефекты живой колоды: число, на котором держится слайд ----------
+
+def _numbered(title, key="", items=(), kind=SlideKind.big_number):
+    return SlideIntent(id="s1", kind=kind, title=title, key_message=key, items=list(items))
+
+
+def test_lead_number_is_the_number_of_the_item():
+    intent = _numbered("Сколько это занимает", items=[Item(number="5", heading="минут на колоду")])
+    assert lead_number(intent) == "5"
+
+
+def test_lead_number_comes_from_the_title_when_the_item_has_none():
+    intent = _numbered("Затраты на инфраструктуру выросли на 12 %",
+                       items=[Item(heading="Показатель", body="Рост затрат")])
+    assert lead_number(intent) == "12 %"
+
+
+def test_lead_number_falls_back_to_the_key_message():
+    intent = _numbered("Отчёты стали быстрее", key="В месяц фиксируется 9 опозданий")
+    assert lead_number(intent) == "9"
+
+
+def test_slide_that_is_not_about_a_number_takes_none_from_the_title():
+    assert lead_number(_numbered("9 опозданий в месяц", kind=SlideKind.bullets)) is None
+
+
+def test_big_number_holds_the_title_step():
+    assert size_floor(SCALE, "number") == title_step(SCALE)
 
 
 # ---------- связанные группы ----------

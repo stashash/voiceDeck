@@ -144,6 +144,46 @@ def test_content_box_drops_full_bleed_backing():
     assert geo.content_box(boxes) == pytest.approx((0.10, 0.20, 0.80, 0.50))
 
 
+# ---------- образец диаграммы из фигур ----------
+
+def test_covered_counts_the_share_of_the_first_frame():
+    small = (0.30, 0.30, 0.10, 0.10)
+    big = (0.20, 0.20, 0.40, 0.40)
+    assert geo.covered(small, big) == pytest.approx(1.0)
+    assert geo.covered(big, small) == pytest.approx(0.0625)
+    assert geo.covered(small, (0.80, 0.80, 0.10, 0.10)) == 0.0
+
+
+def test_row_of_bars_of_different_length_is_a_chart():
+    boxes = [(0.30, 0.20 + i * 0.15, 0.20 + i * 0.15, 0.08) for i in range(4)]
+    assert geo.chart_sample(boxes) == pytest.approx(geo.union(boxes))
+
+
+def test_columns_on_one_base_are_a_chart():
+    boxes = [(0.20 + i * 0.20, 0.70 - i * 0.15, 0.12, 0.15 + i * 0.15) for i in range(3)]
+    assert geo.chart_sample(boxes) == pytest.approx(geo.union(boxes))
+
+
+def test_bars_of_one_length_are_just_decoration():
+    boxes = [(0.30, 0.20 + i * 0.15, 0.40, 0.08) for i in range(4)]
+    assert geo.chart_sample(boxes) is None
+
+
+def test_two_bars_are_not_a_chart():
+    boxes = [(0.30, 0.20, 0.30, 0.08), (0.30, 0.40, 0.60, 0.08)]
+    assert geo.chart_sample(boxes) is None
+
+
+def test_a_tiny_row_of_bars_is_a_sign_not_a_chart():
+    boxes = [(0.05, 0.05 + i * 0.02, 0.02 + i * 0.02, 0.01) for i in range(3)]
+    assert geo.chart_sample(boxes) is None
+
+
+def test_columns_hanging_at_different_heights_are_not_a_chart():
+    boxes = [(0.20 + i * 0.20, 0.30 + i * 0.05, 0.12, 0.15 + i * 0.15) for i in range(3)]
+    assert geo.chart_sample(boxes) is None
+
+
 def test_overlap_gap_and_union():
     a = (0.0, 0.0, 0.40, 0.40)
     b = (0.20, 0.20, 0.40, 0.40)

@@ -8,6 +8,7 @@ from __future__ import annotations
 from designer.contracts import DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
 from designer.layout.capacity import (
     content_region,
+    lead_number,
     line_capacity,
     linked_groups,
     main_group,
@@ -197,7 +198,7 @@ def _number_slot(pattern: Pattern) -> bool:
 
 def _number_penalty(pattern: Pattern, intent: SlideIntent, ds: DesignSystem | None) -> float:
     """Штраф за слот, в который число намерения не встаёт даже на ступени title."""
-    value = next((item.number for item in intent.items if item.number), None)
+    value = lead_number(intent)
     slots = [slot for slot in pattern.slots if slot.role == "number"]
     if not value or ds is None or not slots:
         return 0.0

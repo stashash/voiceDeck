@@ -1,9 +1,9 @@
 """Намерение -> инструкция сборки слайда. Задачи T-07, T-19 и T-22."""
 from designer.contracts import (
-    Area, ChartSpec, DesignSystem, Item, Margins, Pattern, RepeatGroup, RepeatUnit,
+    Area, ChartSpec, DecorShape, DesignSystem, Item, Margins, Pattern, RepeatGroup, RepeatUnit,
     Series, SlideIntent, SlideKind, Slot, TableSpec, TextStyle, Tokens, TypeStep,
 )
-from designer.layout.capacity import box_capacity, slide_pt
+from designer.layout.capacity import box_capacity, slide_pt, title_step
 from designer.layout.compose import compose
 
 SLIDE = (9144000, 5143500)
@@ -321,6 +321,106 @@ def test_number_drops_the_leading_zero_in_a_tight_slot():
     items = [Item(number="01", heading="Разбор"), Item(number="02", heading="Сборка")]
     spec = compose(_intent(kind=SlideKind.steps, items=items), pattern, _ds())
     assert [unit["s101"] for unit in spec.unit_text] == ["1", "2"]
+
+
+# ---------- дефекты живой колоды: число из заголовка, оформление, маркеры, пояснения ----------
+
+def _decorated(shapes: list[DecorShape], **kwargs) -> Pattern:
+    pattern = _cards(**kwargs)
+    pattern.decor = shapes
+    pattern.decor_shape_ids = [shape.shape_id for shape in shapes]
+    return pattern
+
+
+def test_number_of_a_big_number_slide_comes_from_the_title():
+    """План назвал число только словами заголовка: слот под крупную цифру берёт его оттуда."""
+    pattern = _cards(extra_slots=[_slot(6, "number", (0.05, 0.4, 0.3, 0.25), 72)])
+    pattern.groups = []
+    intent = _intent(kind=SlideKind.big_number, title="Затраты выросли на 12 %", key_message="",
+                     items=[Item(heading="Показатель", body="Рост затрат")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s6"] == "12 %"
+    assert spec.fitted_size_pt["s6"] >= title_step(_ds().tokens.type_scale)
+
+
+def test_narrow_number_slot_stops_at_the_title_step():
+    pattern = _cards(extra_slots=[_slot(6, "number", (0.05, 0.4, 0.03, 0.25), 72)])
+    pattern.groups = []
+    intent = _intent(kind=SlideKind.big_number, title="Сколько витрин осталось", key_message="",
+                     items=[Item(number="120", heading="витрин")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s6"] == "120"
+    assert spec.fitted_size_pt["s6"] == title_step(_ds().tokens.type_scale)
+
+
+def test_decor_under_the_visualisation_leaves_the_slide():
+    """Оформление образца под диаграммой просвечивает водяными знаками; логотип и фон остаются."""
+    pattern = _decorated([DecorShape(shape_id=20, box=(0.10, 0.40, 0.30, 0.20)),
+                          DecorShape(shape_id=21, box=(0.94, 0.92, 0.03, 0.05)),
+                          DecorShape(shape_id=22, box=(0.0, 0.0, 1.0, 1.0), kind="image")])
+    table = TableSpec(columns=["Проверка", "Что ловит"], rows=[["Наезд", "пересечение блоков"]])
+    spec = compose(_intent(kind=SlideKind.table, items=[], table=table), pattern, _ds())
+    assert spec.viz_box is not None
+    assert 20 in spec.remove_shape_ids
+    assert not {21, 22} & set(spec.remove_shape_ids)
+
+
+def test_bars_of_a_sample_chart_leave_the_slide():
+    """Образец диаграммы собран из полос: своей фигуры у области нет, полосы лежат в оформлении."""
+    bars = [DecorShape(shape_id=30 + i, box=(0.35, 0.30 + i * 0.15, 0.20 + i * 0.15, 0.08))
+            for i in range(3)]
+    pattern = _decorated(bars, areas=[Area(id="c30", kind="chart", box=(0.35, 0.30, 0.50, 0.38))])
+    spec = compose(_intent(items=_items(3)), pattern, _ds())
+    assert {30, 31, 32} <= set(spec.remove_shape_ids)
+
+
+def test_marker_of_an_empty_line_leaves_the_slide():
+    """Точка списка без своей строки висит на слайде одна: она уходит вместе с пустой строкой."""
+    pattern = _decorated([DecorShape(shape_id=40, box=(0.035, 0.435, 0.010, 0.015)),
+                          DecorShape(shape_id=41, box=(0.035, 0.520, 0.010, 0.015))])
+    spec = compose(_intent(items=[Item(heading="Причина 1")]), pattern, _ds())
+    assert spec.unit_text[0]["s102"] == "Причина 1" and spec.unit_text[0]["s103"] == ""
+    assert 41 in spec.remove_shape_ids
+    assert 40 not in spec.remove_shape_ids
+
+
+def _two_head_rows() -> Pattern:
+    """Две связанные группы по слоту-заголовку: слота под пояснение в блоке нет."""
+    first = RepeatGroup(
+        id="g1", direction="row", cols=2, rows=1, step=(0.35, 0.0), unit_size=(0.30, 0.06),
+        units=[RepeatUnit(index=i, box=(0.05 + i * 0.35, 0.40, 0.30, 0.06), shape_ids=[601 + i])
+               for i in range(2)],
+        max_units=2, unit_slots=[_slot(601, "heading", (0.0, 0.0, 0.30, 0.06), 18)],
+        linked_group_ids=["g2"])
+    second = RepeatGroup(
+        id="g2", direction="row", cols=2, rows=1, step=(0.35, 0.0), unit_size=(0.30, 0.05),
+        units=[RepeatUnit(index=i, box=(0.05 + i * 0.35, 0.52, 0.30, 0.05), shape_ids=[611 + i])
+               for i in range(2)],
+        max_units=2, unit_slots=[_slot(611, "heading", (0.0, 0.0, 0.30, 0.05), 12)],
+        linked_group_ids=["g1"])
+    pattern = _cards()
+    pattern.groups = [first, second]
+    pattern.primary_group_id = "g1"
+    return pattern
+
+
+def test_block_without_a_single_word_leaves_the_slide():
+    spec = compose(_intent(items=_items(2)), _two_head_rows(), _ds())
+    assert spec.unit_text[0]["s601"] == "Причина 1\nКороткое пояснение"
+    assert [unit["s611"] for unit in spec.linked_unit_text["g2"]] == ["", ""]
+    assert {611, 612} <= set(spec.remove_shape_ids)
+    assert not {601, 602} & set(spec.remove_shape_ids)
+
+
+def test_explanation_goes_to_the_body_slot_not_to_the_caption():
+    pattern = _cards()
+    pattern.groups[0].unit_slots = [_slot(102, "heading", (0.0, 0.07, 0.26, 0.06), 20),
+                                    _slot(104, "caption", (0.0, 0.24, 0.26, 0.05), 10),
+                                    _slot(103, "body", (0.0, 0.15, 0.26, 0.14), 12)]
+    spec = compose(_intent(items=_items(2)), pattern, _ds())
+    assert spec.unit_text[0]["s102"] == "Причина 1"
+    assert spec.unit_text[0]["s103"] == "Короткое пояснение"
+    assert spec.unit_text[0]["s104"] == ""
 
 
 def test_big_number_shrinks_to_the_room_above_the_caption():

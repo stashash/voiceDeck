@@ -14,6 +14,7 @@ from pptx.oxml.ns import qn
 
 from designer.contracts import (
     Area,
+    DecorShape,
     LayoutInfo,
     Pattern,
     RepeatGroup,
@@ -80,6 +81,12 @@ PLACEHOLDER_SHARE = 0.15
 
 TEAM_CAPTION_CHARS = 40
 """Длина подписи блока, которая читается как имя и должность, а не как абзац."""
+
+LINE_THIN = 0.01
+"""Толщина фигуры в долях слайда, ниже которой это линия, а не фигура."""
+
+LINE_GEOMS = ("line", "straightConnector", "bentConnector", "curvedConnector")
+"""Имена готовых форм линий и соединителей."""
 
 QUOTE_MARKS = "«“„\"'"
 
@@ -768,6 +775,52 @@ def _is_area(info: ShapeInfo) -> bool:
     return info.kind in ("image", "chart", "table") or _is_photo_placeholder(info)
 
 
+def _decor_kind(info: ShapeInfo) -> str:
+    """Вид фигуры оформления: картинка, линия, текст или фигура."""
+    if info.kind == "image":
+        return "image"
+    long_side, thin_side = max(info.box[2], info.box[3]), min(info.box[2], info.box[3])
+    if (info.geom or "").startswith(LINE_GEOMS) or (thin_side <= LINE_THIN < long_side):
+        return "line"
+    if info.has_text:
+        return "text"
+    return "shape" if info.kind in ("shape", "text") else "other"
+
+
+def _make_decor(items: list[ShapeInfo]) -> list[DecorShape]:
+    """Фигуры оформления с рамками: по ним вёрстка решает, мешает ли оформление содержимому."""
+    return [
+        DecorShape(shape_id=i.shape_id, box=i.box, kind=_decor_kind(i))
+        for i in items
+    ]
+
+
+def _bar_groups(items: list[ShapeInfo], axis: int) -> list[list[ShapeInfo]]:
+    """Фигуры одной толщины по стороне axis: полосы одного ряда не разъезжаются по сотым."""
+    out: list[list[ShapeInfo]] = []
+    for info in sorted(items, key=lambda i: -i.box[axis]):
+        for group in out:
+            head = group[0].box[axis]
+            if head > 0 and abs(head - info.box[axis]) <= geo.BAR_SIZE_TOL * head:
+                group.append(info)
+                break
+        else:
+            out.append([info])
+    return [group for group in out if len(group) >= geo.BAR_MIN]
+
+
+def _chart_sample(items: list[ShapeInfo]) -> tuple[Area, set[int]] | None:
+    """Ряд цветных полос или столбиков разной длины на общей оси: образец диаграммы из фигур."""
+    painted = [i for i in items if i.kind == "image" or i.fill_color]
+    for axis in (3, 2):
+        for group in _bar_groups(painted, axis):
+            box = geo.chart_sample([i.box for i in group])
+            if box is not None:
+                first = min(i.shape_id for i in group)
+                return Area(id=f"c{first}", kind="chart", box=box), {i.shape_id for i in group}
+    return None
+
+
 def _make_area(info: ShapeInfo, origin: geo.Box | None = None) -> Area:
     box = info.box
     if origin is not None:
@@ -975,7 +1028,14 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
     texts = [s for s in free if _is_text_slot(s)]
     roles = _slide_roles(texts)
     slots = [_make_slot(s, roles[s.shape_id], slide_pt) for s in texts]
-    areas = [_make_area(s) for s in free if _is_area(s)]
+
+    plain = [s for s in free if not _is_text_slot(s) and not _is_photo_placeholder(s)]
+    sample = _chart_sample(plain)
+    bars = sample[1] if sample is not None else set()
+    areas = [_make_area(s) for s in free if _is_area(s) and s.shape_id not in bars]
+    if sample is not None:
+        # Полосы образца сами по себе не место под картинку: они и есть диаграмма.
+        areas.append(sample[0])
 
     used = taken | {s.shape_id for s in texts} | {a.shape_id for a in areas if a.shape_id}
     decor = [s for s in shapes if s.shape_id not in used]
@@ -1003,6 +1063,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         areas=areas,
         groups=groups,
         decor_shape_ids=[s.shape_id for s in decor],
+        decor=_make_decor(decor),
     )
 
 

@@ -28,6 +28,18 @@ LINK_TOL = 0.02
 FULL_BLEED = 0.92
 """Доля слайда, с которой фигура считается подложкой на весь кадр."""
 
+BAR_MIN = 3
+"""Сколько полос или столбиков на общей оси читаются диаграммой."""
+
+BAR_SIZE_TOL = 0.15
+"""Разница поперёк оси, при которой полосы ещё считаются одной толщины."""
+
+BAR_SPREAD = 1.4
+"""Во сколько раз длинная полоса длиннее короткой: без разницы длин это не диаграмма."""
+
+CHART_MIN = 0.05
+"""Доля слайда под рядом полос, с которой он читается диаграммой, а не значком."""
+
 
 def right(box: Box) -> float:
     return box[0] + box[2]
@@ -55,6 +67,16 @@ def overlap(a: Box, b: Box) -> float:
         return 0.0
     small = min(area(a), area(b))
     return (w * h) / small if small > 0 else 0.0
+
+
+def covered(box: Box, frame: Box) -> float:
+    """Какая доля площади рамки box лежит внутри рамки frame."""
+    w = min(right(box), right(frame)) - max(box[0], frame[0])
+    h = min(bottom(box), bottom(frame)) - max(box[1], frame[1])
+    own = area(box)
+    if w <= 0 or h <= 0 or own <= 0:
+        return 0.0
+    return (w * h) / own
 
 
 def gap(a: Box, b: Box) -> float:
@@ -302,6 +324,55 @@ def in_lockstep(first: list[Box], second: list[Box]) -> bool:
         if any(abs(v - mean) > LINK_TOL for v in values):
             return False
     return True
+
+
+def _one_size(values: list[float]) -> bool:
+    """Одна толщина у всех полос: разница не больше допуска от самой толстой."""
+    top = max(values)
+    return top > 0 and all(abs(v - top) <= BAR_SIZE_TOL * top for v in values)
+
+
+def _spread(values: list[float]) -> float:
+    """Во сколько раз длинная полоса длиннее короткой."""
+    low = min(values)
+    return max(values) / low if low > 0 else 0.0
+
+
+def _rhythm(centers: list[float], size: float) -> bool:
+    """Полосы идут одна за другой с постоянным шагом и не налезают друг на друга."""
+    ordered = sorted(centers)
+    step, even = _constant_step(ordered)
+    return even and step >= size - POS_TOL
+
+
+def _one_line(values: list[float]) -> bool:
+    """Общее основание столбиков: края сходятся в одну линию."""
+    return max(values) - min(values) <= POS_TOL
+
+
+def chart_sample(boxes: list[Box]) -> Box | None:
+    """Общая рамка ряда полос или столбиков разной длины на одной оси.
+
+    Полосы: одна высота, каждая на своей строке с постоянным шагом, длина разная.
+    Столбики: одна ширина, постоянный шаг по горизонтали, общее основание, высота разная.
+    Ни того, ни другого — None: это обычное оформление.
+    """
+    if len(boxes) < BAR_MIN or area(union(boxes)) < CHART_MIN:
+        return None
+    widths = [b[2] for b in boxes]
+    heights = [b[3] for b in boxes]
+    bars = (
+        _one_size(heights)
+        and _spread(widths) >= BAR_SPREAD
+        and _rhythm([b[1] + b[3] / 2 for b in boxes], max(heights))
+    )
+    columns = (
+        _one_size(widths)
+        and _spread(heights) >= BAR_SPREAD
+        and _rhythm([b[0] + b[2] / 2 for b in boxes], max(widths))
+        and _one_line([bottom(b) for b in boxes])
+    )
+    return union(boxes) if bars or columns else None
 
 
 def fit_units(

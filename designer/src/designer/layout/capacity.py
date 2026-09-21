@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import math
+import re
 
-from designer.contracts import Box, Margins, Pattern, RepeatGroup, TypeStep
+from designer.contracts import Box, Margins, Pattern, RepeatGroup, SlideIntent, SlideKind, TypeStep
 from designer.layout.units import map_shape_box, place_units
 from designer.parse import geometry as geo
 
@@ -42,6 +43,26 @@ MIN_FREE = 0.004
 
 _HEAD_SLOT_ROLES = ("title", "subtitle")
 _HEAD_STEP_ROLES = ("display", "title", "heading")
+
+_NUMBER_RE = re.compile(r"\d+(?:[ .,]\d+)*\s*%?")
+
+
+def lead_number(intent: SlideIntent) -> str | None:
+    """Число, на котором держится слайд: из пункта, иначе из заголовка или ключевой мысли.
+
+    План часто называет число только словами заголовка, и слот под крупную цифру
+    остаётся пустым. Берём число оттуда, иначе слайд с числом встанет без числа.
+    """
+    for item in intent.items:
+        if item.number:
+            return item.number
+    if intent.kind is not SlideKind.big_number:
+        return None
+    for text in (intent.title, intent.key_message):
+        found = _NUMBER_RE.search(text or "")
+        if found:
+            return found.group().strip()
+    return None
 
 
 def slide_pt(slide_size_emu: tuple[int, int]) -> tuple[float, float]:
@@ -191,8 +212,11 @@ def size_floor(scale: list[TypeStep], role: str) -> float | None:
     """Ниже какой ступени шкалы этот слот не опускается.
 
     Заголовок, набранный кеглем подписи, читается как ошибка вёрстки, поэтому у заголовков
-    своя нижняя ступень. У остального текста её нет.
+    своя нижняя ступень. Крупное число слайда держится ступени title: мельче его не видно.
+    У остального текста нижней границы нет.
     """
+    if role == "number":
+        return title_step(scale)
     if role not in ("title", "heading"):
         return None
     steps = [step.size_pt for step in scale if step.role in _HEAD_STEP_ROLES and step.size_pt > 0]
