@@ -95,3 +95,21 @@ def test_number_pair_without_visualization_triggers_retry():
 
     assert len(client.call_durations_ms) == 2
     assert any(slide.kind.value in ("chart", "table", "big_number") for slide in plan.slides)
+
+
+def test_empty_content_slides_are_reported():
+    from designer.contracts import DeckPlan
+    from designer.plan.planner import _content_violations
+
+    plan = DeckPlan.model_validate({
+        "title": "План", "purpose": "", "audience": "",
+        "slides": [
+            {"id": "s1", "kind": "title", "title": "Старт"},
+            {"id": "s2", "kind": "agenda", "title": "Повестка", "items": []},
+            {"id": "s3", "kind": "chart", "title": "Было и стало", "notes": "данные: 9 и 2"},
+            {"id": "s4", "kind": "big_number", "title": "Срок", "items": [{"heading": "Срок", "number": "6 недель"}]},
+        ],
+    })
+    found = _content_violations(plan)
+    assert len(found) == 2
+    assert "s2" in found[0] and "s3" in found[1]

@@ -21,6 +21,7 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
 
     violations = _structural_violations(plan, slide_count)
     violations += _visualization_violations(plan, brief)
+    violations += _content_violations(plan)
     if violations:
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
         data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
@@ -55,6 +56,25 @@ def _structural_violations(plan: DeckPlan, slide_count: int | None) -> list[str]
 
 
 _VIZ_KINDS = (SlideKind.chart, SlideKind.table, SlideKind.big_number)
+_LIST_KINDS = (
+    SlideKind.agenda, SlideKind.bullets, SlideKind.cards, SlideKind.steps,
+    SlideKind.timeline, SlideKind.compare, SlideKind.team,
+)
+
+
+def _content_violations(plan: DeckPlan) -> list[str]:
+    """Слайд без содержания выходит пустым: модель склонна писать данные в notes, а items и chart оставлять пустыми."""
+    violations: list[str] = []
+    for slide in plan.slides:
+        if slide.kind in _LIST_KINDS and len(slide.items) < 2:
+            violations.append(f"слайд {slide.id} ({slide.kind.value}): в items меньше двух пунктов")
+        elif slide.kind == SlideKind.big_number and not any(item.number for item in slide.items):
+            violations.append(f"слайд {slide.id} (big_number): нет пункта с number")
+        elif slide.kind == SlideKind.chart and slide.chart is None:
+            violations.append(f"слайд {slide.id} (chart): поле chart пустое")
+        elif slide.kind == SlideKind.table and slide.table is None:
+            violations.append(f"слайд {slide.id} (table): поле table пустое")
+    return violations
 
 
 def _brief_has_comparable_numbers(brief: str) -> bool:
