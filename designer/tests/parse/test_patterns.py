@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
@@ -128,6 +129,59 @@ def test_slots_and_groups_are_well_formed(templates):
                 assert group.unit_slots or group.unit_areas
 
 
+@pytest.mark.parametrize("number", [21, 22, 23])
+def test_numbers_and_captions_under_them_are_linked_groups(templates, number):
+    pattern = slide_of(templates, "Education", number)
+    numbers = [g for g in pattern.groups if any(s.role == "number" for s in g.unit_slots)]
+    captions = [g for g in pattern.groups if g.id not in {n.id for n in numbers}]
+    assert len(numbers) == 1 and len(captions) == 1
+    circles, texts = numbers[0], captions[0]
+    assert len(circles.units) == len(texts.units)
+    assert circles.linked_group_ids == [texts.id]
+    assert texts.linked_group_ids == [circles.id]
+    assert pattern.primary_group_id == texts.id
+    assert pattern.kind is SlideKind.steps
+
+
+@pytest.mark.parametrize("number", [12, 13])
+def test_team_slides_keep_places_for_photos(templates, number):
+    pattern = slide_of(templates, "VK Tech", number)
+    assert pattern.kind is SlideKind.team
+    assert pattern.needs_images
+    main = next(g for g in pattern.groups if g.id == pattern.primary_group_id)
+    holders = [a for a in main.unit_areas if a.placeholder]
+    assert holders and all(a.kind == "image" for a in holders)
+
+
+@pytest.mark.parametrize("part,number", [("Education", 18), ("VK Tech", 33)])
+def test_slide_built_around_one_number(templates, part, number):
+    pattern = slide_of(templates, part, number)
+    assert pattern.kind is SlideKind.big_number
+    numbers = [s for s in pattern.slots if s.role == "number"]
+    assert numbers
+    assert max(s.style.size_pt for s in numbers) >= 40
+
+
+def test_pattern_with_groups_names_its_main_group(templates):
+    for path in templates:
+        for pattern in parse(path):
+            if not pattern.groups:
+                continue
+            ids = {g.id for g in pattern.groups}
+            assert pattern.primary_group_id in ids, f"{path.stem}, слайд {pattern.source_slide}"
+
+
+def test_linked_groups_answer_each_other(templates):
+    for path in templates:
+        for pattern in parse(path):
+            by_id = {g.id: g for g in pattern.groups}
+            for group in pattern.groups:
+                for other_id in group.linked_group_ids:
+                    other = by_id[other_id]
+                    assert group.id in other.linked_group_ids
+                    assert len(other.units) == len(group.units)
+
+
 def test_layouts_carry_placeholders(templates):
     layouts = extract_layouts(pick(templates, "VK Tech"))
     assert layouts
@@ -196,6 +250,54 @@ def test_group_coordinates_are_recalculated(tmp_path):
     assert slot.box == pytest.approx(
         (2000000 / 9144000, 1000000 / 5143500, 4000000 / 9144000, 2000000 / 5143500), abs=0.002
     )
+
+
+def test_gray_round_shape_is_a_place_for_a_photo(tmp_path):
+    presentation, slide = _blank_deck()
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Emu(1000000), Emu(800000), Emu(1500000), Emu(1500000)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(0xC4, 0xC4, 0xC4)
+    deck = tmp_path / "zaglushka.pptx"
+    presentation.save(str(deck))
+
+    pattern = extract_patterns(deck)[0]
+    area = next(a for a in pattern.areas if a.shape_id == shape.shape_id)
+    assert (area.kind, area.placeholder) == ("image", True)
+    assert not pattern.slots
+
+
+def test_colored_circle_with_a_number_stays_text(tmp_path):
+    presentation, slide = _blank_deck()
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.OVAL, Emu(1000000), Emu(800000), Emu(700000), Emu(700000)
+    )
+    shape.fill.solid()
+    shape.fill.fore_color.rgb = RGBColor(0x00, 0x77, 0xFF)
+    shape.text_frame.text = "1"
+    deck = tmp_path / "kruzhok.pptx"
+    presentation.save(str(deck))
+
+    pattern = extract_patterns(deck)[0]
+    assert pattern.areas == []
+    assert [s.shape_id for s in pattern.slots] == [shape.shape_id]
+
+
+def test_large_flat_gray_picture_asks_for_an_own_photo(tmp_path):
+    picture = tmp_path / "seroe.png"
+    Image.new("RGB", (64, 64), (196, 196, 196)).save(picture)
+    presentation, slide = _blank_deck()
+    shape = slide.shapes.add_picture(
+        str(picture), Emu(500000), Emu(500000), Emu(4000000), Emu(3000000)
+    )
+    deck = tmp_path / "foto.pptx"
+    presentation.save(str(deck))
+
+    pattern = extract_patterns(deck)[0]
+    area = next(a for a in pattern.areas if a.shape_id == shape.shape_id)
+    assert area.placeholder
+    assert pattern.needs_images
 
 
 def test_font_size_falls_back_to_default(tmp_path):

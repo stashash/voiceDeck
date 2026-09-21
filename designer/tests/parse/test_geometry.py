@@ -97,6 +97,40 @@ def test_signature_rounds_size_to_hundredths():
     assert len(geo.find_repeats(frames)[0].units) == 2
 
 
+def test_row_survives_a_slightly_wider_block():
+    widths = (0.19, 0.19, 0.19, 0.21)
+    frames = [frame(i + 1, "text", (0.05 + i * 0.22, 0.40, w, 0.13), True) for i, w in enumerate(widths)]
+    found = geo.find_repeats(frames)
+    assert len(found) == 1
+    assert len(found[0].units) == 4
+
+
+def test_two_blocks_of_different_size_are_not_a_repeat():
+    frames = [
+        frame(1, "text", (0.05, 0.40, 0.19, 0.13), True),
+        frame(2, "text", (0.27, 0.40, 0.21, 0.13), True),
+    ]
+    assert geo.find_repeats(frames) == []
+
+
+def test_row_of_badges_above_captions_stays_its_own_block():
+    frames = []
+    for i in range(4):
+        left = 0.05 + i * 0.22
+        frames.append(frame(10 + i, "text", (left, 0.32, 0.07, 0.12), True))
+        frames.append(frame(20 + i, "text", (left, 0.48, 0.20, 0.30), True))
+    found = geo.find_repeats(frames)
+    assert len(found) == 2
+    assert all(len(cand.units) == 4 for cand in found)
+    assert geo.in_lockstep(found[0].unit_boxes, found[1].unit_boxes)
+
+
+def test_rows_with_different_rhythm_are_not_linked():
+    first = [(0.05 + i * 0.22, 0.30, 0.20, 0.10) for i in range(3)]
+    second = [(0.05 + i * 0.30, 0.50, 0.20, 0.10) for i in range(3)]
+    assert not geo.in_lockstep(first, second)
+
+
 def test_fit_units_counts_room_in_the_field():
     origin = (0.05, 0.20, 0.20, 0.30)
     fits = geo.fit_units(origin, (0.20, 0.30), (0.22, 0.0), 2, 1, (0.05, 0.05, 0.90, 0.90))
