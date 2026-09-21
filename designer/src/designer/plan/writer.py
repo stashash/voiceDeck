@@ -22,7 +22,8 @@ _FILL_SKILL = "fill-slots"
 _SPEECH_SKILL = "speech-to-slide"
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
-_SENTENCE_END = re.compile(r"[.!?]")
+_SENTENCE_END = re.compile(r"(?<!\d)[.!?](?=\s|$)")
+"""Конец предложения: точка между цифрами это дробь, по ней фразу не режут («2.5 часа»)."""
 
 # У SlideIntent нет отдельных полей subtitle/body: подзаголовок и одиночный текстовый
 # блок — это одно и то же ключевое сообщение слайда.

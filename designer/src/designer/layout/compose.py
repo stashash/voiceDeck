@@ -70,6 +70,12 @@ MARKER_AREA = 0.002
 MARKER_GAP = 0.04
 """Насколько маркер отстоит от своей строки, доли кадра."""
 
+HINT_CHARS = 20
+"""До скольких знаков текст слота это подсказка шаблона, а не место под содержание."""
+
+HINT_AREA = 0.02
+"""Доля слайда, до которой плашка с подсказкой это значок под картинку, а не блок содержания."""
+
 
 def _inside(box: Box, frame: Box) -> bool:
     return geo.covered(box, frame) >= INSIDE
@@ -91,6 +97,29 @@ def _on_line(box: Box, line: Box) -> bool:
     if high <= 0 or high < box[3] / 2:
         return False
     return geo.gap(box, line) <= MARKER_GAP
+
+
+def _hint_plate(pattern: Pattern, slot: Slot) -> int | None:
+    """Фигура, на которой стоит подсказка «вставьте картинку»; None, если слот обычный.
+
+    Шаблон держит место под фото пустым квадратом с подписью внутри. Картинок у нас нет:
+    в такой слот текст не кладут, а квадрат уходит со слайда вместе с подписью.
+    """
+    if geo.area(slot.box) > HINT_AREA or slot.max_chars > HINT_CHARS:
+        return None
+    plates = [shape for shape in pattern.decor
+              if not _edge_furniture(shape.box)
+              and geo.area(shape.box) <= HINT_AREA * 2
+              and geo.covered(slot.box, shape.box) >= INSIDE]
+    if not plates:
+        return None
+    return min(plates, key=lambda shape: (geo.area(shape.box), shape.shape_id)).shape_id
+
+
+def _hint_slots(pattern: Pattern) -> dict[str, int]:
+    """Слоты-подсказки паттерна и фигуры, на которых они стоят."""
+    found = {slot.id: _hint_plate(pattern, slot) for slot in pattern.slots}
+    return {slot_id: plate for slot_id, plate in found.items() if plate is not None}
 
 
 def _take(
@@ -134,13 +163,16 @@ def _unit_texts(
     n: int,
     lead_taken: bool = False,
     slide: tuple[float, float] | None = None,
+    lead: str | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     """Пункты по слотам блока: номер, заголовок, пояснение.
 
     Слоты главной и связанных групп разбираются вместе: номер идёт в группу номеров,
     подпись в группу подписей. Слов пункта не теряем: когда текстовый слот один,
     заголовок и пояснение идут в него вместе. lead_taken значит, что число уже стоит
-    крупным слотом слайда и в блоке его повторять не надо.
+    крупным слотом слайда и в блоке его повторять не надо. lead это число, на котором
+    держится слайд: когда оно названо только словами заголовка, в блок идёт оно,
+    а не порядковый номер блока.
     """
     pairs = [(group.id, slot) for group in groups for slot in group.unit_slots]
     numbers = [pair for pair in pairs if pair[1].role == "number"]
@@ -161,7 +193,8 @@ def _unit_texts(
                 pass  # число уже стоит крупным слотом слайда
             elif numbers:
                 gid, slot = numbers[0]
-                texts[gid][slot.id] = _number_text(item.number or str(index + 1), slot, slide)
+                own = item.number or (lead if lead and len(items) == 1 else str(index + 1))
+                texts[gid][slot.id] = _number_text(own, slot, slide)
             elif item.number:
                 # Номера в блоке нет: число не теряем, оно идёт впереди заголовка.
                 head = f"{item.number} {head}".strip()
@@ -426,7 +459,10 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     """Инструкция сборки слайда: какой слот чем заполнить, где диаграмма и что со слайда убрать."""
     spec = SlideSpec(slide_id=intent.id, pattern_id=pattern.id, notes=intent.notes)
     texts = {slot.id: "" for slot in pattern.slots}
-    free = list(pattern.slots)
+    # Слот-подсказка под картинку содержанием не заполняется: без своей картинки он и его
+    # плашка уходят со слайда, иначе на нём остаётся пустой квадрат с мелкой надписью.
+    hints = _hint_slots(pattern)
+    free = [slot for slot in pattern.slots if slot.id not in hints]
     want = "chart" if intent.chart is not None else "table" if intent.table is not None else None
     region = content_region(pattern, ds.tokens.margins) if want else None
 
@@ -453,7 +489,8 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         n = max(n, group.min_units)
         linked = [other for other in linked if other.min_units <= n <= other.max_units]
         spread = _unit_texts([group, *linked], rest, n,
-                             lead_slot is not None and len(rest) == 1, slide_pt(ds.slide_size_emu))
+                             lead_slot is not None and len(rest) == 1, slide_pt(ds.slide_size_emu),
+                             lead)
         spec.group_id = group.id
         spec.unit_text = spread[group.id]
         spec.linked_unit_text = {other.id: spread[other.id] for other in linked}
@@ -489,5 +526,6 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     spec.fitted_size_pt = _fitted(pattern, spec, texts, ds, n)
     _room_fix(pattern, spec, texts, spec.fitted_size_pt, ds, n)
     cleared = _head_fix(pattern, title, texts, spec.fitted_size_pt, ds)
-    spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared)
+    plates = set(hints.values()) | {s.shape_id for s in pattern.slots if s.id in hints}
+    spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared | plates)
     return spec
