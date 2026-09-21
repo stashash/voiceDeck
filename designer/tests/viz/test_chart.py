@@ -1,11 +1,13 @@
-"""Тесты add_chart: тип, ряды, категории, цвета, рамка, лимит рядов. Владелец: задача T-05."""
+"""Тесты add_chart: тип, ряды, категории, цвета, рамка, лимит рядов. Владелец: T-05, тема и кегль — T-20."""
 from pathlib import Path
 
 import pytest
 from pptx import Presentation
 from pptx.enum.chart import XL_CHART_TYPE
+from pptx.util import Pt
 
 from designer.contracts import ChartSpec, ColorToken, FontToken, Margins, Series, Tokens, TypeStep
+from designer.viz import palette
 from designer.viz.pptx_native import add_chart
 
 SLIDE_SIZE = (9144000, 5143500)
@@ -109,3 +111,92 @@ def test_add_chart_more_than_five_series_raises():
 
     with pytest.raises(ValueError):
         add_chart(slide, spec, (0.1, 0.1, 0.5, 0.4), SLIDE_SIZE, tokens)
+
+
+# ---------- тема: T-20 ----------
+
+def _dark_tokens() -> Tokens:
+    return Tokens(
+        colors=[
+            ColorToken(hex="0B1220", role="background", share=0.5, source="theme"),
+            ColorToken(hex="66CCFF", role="accent", share=0.3, source="theme"),
+            ColorToken(hex="F2F2F2", role="text", share=0.2, source="usage"),
+            ColorToken(hex="4A5568", role="text_muted", share=0.1, source="usage"),
+        ],
+        fonts=[FontToken(family="PT Sans", role="body", share=0.8)],
+        type_scale=[
+            TypeStep(size_pt=28, role="heading", share=0.2),
+            TypeStep(size_pt=10, role="caption", share=0.1),
+        ],
+        margins=Margins(left=0.03, top=0.06, right=0.03, bottom=0.06),
+    )
+
+
+def test_add_chart_dark_theme_axis_labels_meet_contrast(tmp_path):
+    tokens = _dark_tokens()
+    prs, slide = _blank_slide()
+    spec = _spec("column", series_count=1)
+
+    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.4), SLIDE_SIZE, tokens, theme="dark")
+
+    reopened = _roundtrip(prs, tmp_path)
+    chart = reopened.slides[0].shapes[0].chart
+    category_hex = str(chart.category_axis.tick_labels.font.color.rgb)
+    value_hex = str(chart.value_axis.tick_labels.font.color.rgb)
+    assert palette.contrast_ratio(category_hex, "0B1220") >= 4.5
+    assert palette.contrast_ratio(value_hex, "0B1220") >= 4.5
+
+
+def test_add_chart_dark_theme_colors_the_legend(tmp_path):
+    tokens = _dark_tokens()
+    prs, slide = _blank_slide()
+    spec = _spec("column", series_count=2)
+
+    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.4), SLIDE_SIZE, tokens, theme="dark")
+
+    reopened = _roundtrip(prs, tmp_path)
+    chart = reopened.slides[0].shapes[0].chart
+    legend_hex = str(chart.legend.font.color.rgb)
+    assert palette.contrast_ratio(legend_hex, "0B1220") >= 4.5
+
+
+def test_add_chart_light_theme_leaves_font_color_unset(tmp_path):
+    tokens = _dark_tokens()
+    prs, slide = _blank_slide()
+    spec = _spec("column", series_count=1)
+
+    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.4), SLIDE_SIZE, tokens)
+
+    reopened = _roundtrip(prs, tmp_path)
+    chart = reopened.slides[0].shapes[0].chart
+    assert chart.font.color.type is None
+
+
+# ---------- кегль подписей по высоте рамки: T-20 ----------
+
+def _tokens_with_body_step() -> Tokens:
+    tokens = _tokens()
+    tokens.type_scale.append(TypeStep(size_pt=18, role="body", share=0.3))
+    return tokens
+
+
+def test_add_chart_label_size_uses_body_step_above_half_slide(tmp_path):
+    tokens = _tokens_with_body_step()
+    prs, slide = _blank_slide()
+    spec = _spec("column", series_count=1)
+
+    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.6), SLIDE_SIZE, tokens)
+
+    reopened = _roundtrip(prs, tmp_path)
+    assert reopened.slides[0].shapes[0].chart.font.size == Pt(18)
+
+
+def test_add_chart_label_size_uses_caption_step_at_or_below_half_slide(tmp_path):
+    tokens = _tokens_with_body_step()
+    prs, slide = _blank_slide()
+    spec = _spec("column", series_count=1)
+
+    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.3), SLIDE_SIZE, tokens)
+
+    reopened = _roundtrip(prs, tmp_path)
+    assert reopened.slides[0].shapes[0].chart.font.size == Pt(10)

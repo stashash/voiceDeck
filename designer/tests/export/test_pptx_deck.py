@@ -1,4 +1,4 @@
-"""Тесты сборки pptx: клон образца, блоки, диаграмма, чистый файл. Задача T-08."""
+"""Тесты сборки pptx: клон образца, блоки, диаграмма, чистый файл. Задача T-08, решения вёрстки — T-20."""
 import time
 import zipfile
 from dataclasses import dataclass, field
@@ -6,9 +6,14 @@ from pathlib import Path
 
 import pytest
 from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE
 from pptx.oxml.ns import qn
+from pptx.util import Emu, Pt
 
-from designer.contracts import ChartSpec, DesignSystem, Pattern, RepeatGroup, Series, SlideSpec, TableSpec
+from designer.contracts import (
+    Area, ChartSpec, ColorToken, DesignSystem, FontToken, Margins, Pattern, RepeatGroup, RepeatUnit,
+    Series, SlideSpec, Slot, TableSpec, Tokens, TypeStep,
+)
 from designer.export.pptx_deck import export_pptx
 from designer.layout.units import place_units
 from designer.parse.package import build_package
@@ -406,6 +411,187 @@ def test_fifteen_slides_build_under_a_minute(packages, templates, tmp_path):
     started = time.monotonic()
     out_path = export_pptx(specs, ds, package_dir, tmp_path / "long.pptx")
     spent = time.monotonic() - started
-
     assert spent < 60
     assert len(Presentation(str(out_path)).slides) == 15
+
+
+# ---------- T-20: экспорт исполняет решения вёрстки буквально ----------
+# Синтетический слайд, а не выданный шаблон: linked_group_ids, remove_shape_ids,
+# fitted_size_pt и viz_box в парсер волны 1 ещё не попадают (T-18 в работе).
+
+SYN_SLIDE_SIZE = (9144000, 5143500)
+SYN_UNITS = 4
+SYN_UNIT_W = 0.18
+SYN_STEP_X = 0.20
+SYN_X0 = 0.05
+SYN_UNIT_H = 0.08
+SYN_NUMBERS_Y = 0.30
+SYN_CAPTIONS_Y = 0.42
+
+
+def _syn_emu(box) -> tuple[Emu, Emu, Emu, Emu]:
+    w, h = SYN_SLIDE_SIZE
+    return (Emu(round(box[0] * w)), Emu(round(box[1] * h)), Emu(round(box[2] * w)), Emu(round(box[3] * h)))
+
+
+def _syn_group(group_id: str, y: float, shape_ids: list[int], linked: tuple[str, ...] = ()) -> RepeatGroup:
+    units = [
+        RepeatUnit(index=i, box=(SYN_X0 + i * SYN_STEP_X, y, SYN_UNIT_W, SYN_UNIT_H), shape_ids=[shape_ids[i]])
+        for i in range(SYN_UNITS)
+    ]
+    slot = Slot(
+        id=f"{group_id}_slot", role="number" if group_id == "numbers" else "caption",
+        shape_id=shape_ids[0], box=(0.0, 0.0, SYN_UNIT_W, SYN_UNIT_H), max_chars=20, max_lines=1,
+    )
+    return RepeatGroup(
+        id=group_id, direction="row", cols=SYN_UNITS, rows=1,
+        step=(SYN_STEP_X, 0.0), unit_size=(SYN_UNIT_W, SYN_UNIT_H),
+        units=units, unit_slots=[slot], min_units=1, max_units=6, linked_group_ids=list(linked),
+    )
+
+
+@dataclass
+class _Synthetic:
+    package_dir: Path
+    ds: DesignSystem
+    pattern: Pattern
+    leftover_id: int
+
+
+def _synthetic_deck(tmp_path: Path) -> _Synthetic:
+    """Заголовок, два синхронных ряда (числа и подписи под ними) и лишняя фигура."""
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = SYN_SLIDE_SIZE
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    title = slide.shapes.add_textbox(*_syn_emu((0.05, 0.05, 0.9, 0.1)))
+    title.text_frame.text = "образец заголовка"
+
+    number_ids, caption_ids = [], []
+    for i in range(SYN_UNITS):
+        box = slide.shapes.add_textbox(*_syn_emu((SYN_X0 + i * SYN_STEP_X, SYN_NUMBERS_Y, SYN_UNIT_W, SYN_UNIT_H)))
+        box.text_frame.text = f"число {i}"
+        number_ids.append(box.shape_id)
+    for i in range(SYN_UNITS):
+        box = slide.shapes.add_textbox(*_syn_emu((SYN_X0 + i * SYN_STEP_X, SYN_CAPTIONS_Y, SYN_UNIT_W, SYN_UNIT_H)))
+        box.text_frame.text = f"подпись {i}"
+        caption_ids.append(box.shape_id)
+
+    leftover = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *_syn_emu((0.05, 0.85, 0.3, 0.1)))
+    leftover.text_frame.text = "лишняя фигура"
+
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+    prs.save(str(package_dir / "source.pptx"))
+
+    numbers = _syn_group("numbers", SYN_NUMBERS_Y, number_ids, linked=("captions",))
+    captions = _syn_group("captions", SYN_CAPTIONS_Y, caption_ids)
+
+    pattern = Pattern(
+        id="synthetic", source_slide=1, layout_name="blank", kind="cards", kind_confidence=1.0, theme="light",
+        slots=[Slot(
+            id="title", role="title", shape_id=title.shape_id,
+            box=(0.05, 0.05, 0.9, 0.1), max_chars=40, max_lines=1,
+        )],
+        areas=[Area(id="area1", kind="chart", box=(0.05, 0.55, 0.5, 0.25))],
+        groups=[numbers, captions],
+    )
+    tokens = Tokens(
+        colors=[ColorToken(hex="0077FF", role="accent", share=0.3, source="theme")],
+        fonts=[FontToken(family="PT Sans", role="body", share=0.8)],
+        type_scale=[TypeStep(size_pt=18, role="body", share=0.5)],
+        margins=Margins(left=0.05, top=0.05, right=0.05, bottom=0.05),
+    )
+    ds = DesignSystem(
+        id="synthetic", source_file="source.pptx", slide_size_emu=SYN_SLIDE_SIZE, tokens=tokens, patterns=[pattern],
+    )
+    return _Synthetic(package_dir=package_dir, ds=ds, pattern=pattern, leftover_id=leftover.shape_id)
+
+
+def test_remove_shape_ids_drops_the_shape(tmp_path):
+    syn = _synthetic_deck(tmp_path)
+    spec = SlideSpec(
+        slide_id="s", pattern_id=syn.pattern.id,
+        slot_text={"title": "заголовок"}, remove_shape_ids=[syn.leftover_id],
+    )
+
+    out_path = export_pptx([spec], syn.ds, syn.package_dir, tmp_path / "out.pptx")
+
+    infos = _infos(Presentation(str(out_path)).slides[0], syn.ds.slide_size_emu)
+    assert not [info for info in infos if info.text == "лишняя фигура"]
+
+
+def test_linked_group_follows_the_main_group_layout(tmp_path):
+    syn = _synthetic_deck(tmp_path)
+    count = 3
+    spec = SlideSpec(
+        slide_id="s", pattern_id=syn.pattern.id, group_id="numbers",
+        unit_text=[{"numbers_slot": f"N{i}"} for i in range(count)],
+        linked_unit_text={"captions": [{"captions_slot": f"C{i}"} for i in range(count)]},
+    )
+
+    out_path = export_pptx([spec], syn.ds, syn.package_dir, tmp_path / "out.pptx")
+
+    infos = _infos(Presentation(str(out_path)).slides[0], syn.ds.slide_size_emu)
+    numbers = {info.text: info.box for info in infos if info.text.startswith("N")}
+    captions = {info.text: info.box for info in infos if info.text.startswith("C")}
+    assert len(numbers) == count
+    assert len(captions) == count
+    for i in range(count):
+        n_box, c_box = numbers[f"N{i}"], captions[f"C{i}"]
+        assert n_box[0] == pytest.approx(c_box[0], abs=BOX_TOLERANCE)
+        assert n_box[2] == pytest.approx(c_box[2], abs=BOX_TOLERANCE)
+
+
+def test_fitted_size_applies_to_every_fragment_of_the_slot(tmp_path):
+    syn = _synthetic_deck(tmp_path)
+    spec = SlideSpec(
+        slide_id="s", pattern_id=syn.pattern.id,
+        slot_text={"title": "Первая строка\nВторая строка"},
+        fitted_size_pt={"title": 14.0},
+    )
+
+    out_path = export_pptx([spec], syn.ds, syn.package_dir, tmp_path / "out.pptx")
+
+    slide = Presentation(str(out_path)).slides[0]
+    shape = next(s for s in slide.shapes if s.has_text_frame and s.text_frame.text.startswith("Первая"))
+    sizes = {run.font.size for para in shape.text_frame.paragraphs for run in para.runs}
+    assert sizes == {Pt(14.0)}
+
+
+def test_fitted_size_applies_inside_every_block(tmp_path):
+    syn = _synthetic_deck(tmp_path)
+    count = 3
+    spec = SlideSpec(
+        slide_id="s", pattern_id=syn.pattern.id, group_id="numbers",
+        unit_text=[{"numbers_slot": f"N{i}"} for i in range(count)],
+        fitted_size_pt={"numbers_slot": 20.0},
+    )
+
+    out_path = export_pptx([spec], syn.ds, syn.package_dir, tmp_path / "out.pptx")
+
+    slide = Presentation(str(out_path)).slides[0]
+    shapes = [s for s in slide.shapes if s.has_text_frame and s.text_frame.text.startswith("N")]
+    assert len(shapes) == count
+    for shape in shapes:
+        sizes = {run.font.size for para in shape.text_frame.paragraphs for run in para.runs}
+        assert sizes == {Pt(20.0)}
+
+
+def test_viz_box_overrides_the_area_fallback(tmp_path):
+    syn = _synthetic_deck(tmp_path)
+    box = (0.1, 0.6, 0.4, 0.3)
+    spec = SlideSpec(
+        slide_id="s", pattern_id=syn.pattern.id,
+        chart=ChartSpec(type="column", categories=["раз", "два"], series=[Series(name="ряд", values=[1.0, 2.0])]),
+        viz_area_id="area1", viz_box=box,
+    )
+
+    out_path = export_pptx([spec], syn.ds, syn.package_dir, tmp_path / "out.pptx")
+
+    shape = next(s for s in Presentation(str(out_path)).slides[0].shapes if s.has_chart)
+    slide_w, slide_h = syn.ds.slide_size_emu
+    assert shape.left == pytest.approx(box[0] * slide_w, rel=0.01)
+    assert shape.top == pytest.approx(box[1] * slide_h, rel=0.01)
+    assert shape.width == pytest.approx(box[2] * slide_w, rel=0.01)
+    assert shape.height == pytest.approx(box[3] * slide_h, rel=0.01)

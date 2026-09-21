@@ -1,5 +1,7 @@
-"""Родные диаграммы и таблицы PowerPoint в цветах шаблона. Владелец: задача T-05."""
+"""Родные диаграммы и таблицы PowerPoint в цветах шаблона. Владелец: задача T-05, тема — T-20."""
 from __future__ import annotations
+
+from typing import Literal
 
 from pptx.chart.data import CategoryChartData
 from pptx.dml.color import RGBColor
@@ -16,6 +18,13 @@ _CHART_TYPES = {
     "pie": XL_CHART_TYPE.PIE,
     "donut": XL_CHART_TYPE.DOUGHNUT,
 }
+
+_LARGE_FRAME_SHARE = 0.5
+"""Порог высоты рамки относительно слайда: выше него кегль берётся ступенью body, иначе caption."""
+
+
+def _label_role(box: Box) -> str:
+    return "body" if box[3] > _LARGE_FRAME_SHARE else "caption"
 
 
 def _box_to_emu(box: Box, slide_size_emu: tuple[int, int]) -> tuple[Emu, Emu, Emu, Emu]:
@@ -57,7 +66,14 @@ def _color_by_role(tokens: Tokens, role: str) -> str | None:
     return None
 
 
-def add_chart(slide, spec: ChartSpec, box: Box, slide_size_emu: tuple[int, int], tokens: Tokens):
+def add_chart(
+    slide,
+    spec: ChartSpec,
+    box: Box,
+    slide_size_emu: tuple[int, int],
+    tokens: Tokens,
+    theme: Literal["light", "dark"] = "light",
+):
     """Добавляет на слайд python-pptx редактируемую диаграмму и возвращает её фигуру."""
     if len(spec.series) > 5:
         raise ValueError("не больше пяти рядов")
@@ -74,9 +90,13 @@ def add_chart(slide, spec: ChartSpec, box: Box, slide_size_emu: tuple[int, int],
     family = _body_font_family(tokens)
     if family:
         chart.font.name = family
-    label_size = _type_size_pt(tokens, "caption")
+    label_size = _type_size_pt(tokens, _label_role(box))
     if label_size:
         chart.font.size = Pt(label_size)
+
+    text_hex = palette.theme_text_color(tokens, theme) if theme == "dark" else None
+    if text_hex:
+        chart.font.color.rgb = RGBColor.from_string(text_hex)
 
     colors = palette.series_colors(tokens)
     is_pie = spec.type in ("pie", "donut")
@@ -84,6 +104,8 @@ def add_chart(slide, spec: ChartSpec, box: Box, slide_size_emu: tuple[int, int],
     if is_pie:
         series_obj = chart.series[0]
         chart.plots[0].has_data_labels = True
+        if text_hex:
+            chart.plots[0].data_labels.font.color.rgb = RGBColor.from_string(text_hex)
         if colors:
             for idx, point in enumerate(series_obj.points):
                 point.format.fill.solid()
@@ -97,15 +119,23 @@ def add_chart(slide, spec: ChartSpec, box: Box, slide_size_emu: tuple[int, int],
             value_axis = chart.value_axis
             value_axis.has_title = True
             value_axis.axis_title.text_frame.text = spec.unit
-        gridline_color = _color_by_role(tokens, "text_muted")
+            if text_hex:
+                title_run = value_axis.axis_title.text_frame.paragraphs[0].runs[0]
+                title_run.font.color.rgb = RGBColor.from_string(text_hex)
+        gridline_color = palette.muted_gridline_color(tokens, theme) if theme == "dark" else _color_by_role(tokens, "text_muted")
         if gridline_color:
             chart.value_axis.has_major_gridlines = True
             chart.value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(gridline_color)
+        if text_hex:
+            chart.value_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
+            chart.category_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
 
     if len(spec.series) >= 2:
         chart.has_legend = True
         chart.legend.position = XL_LEGEND_POSITION.RIGHT
         chart.legend.include_in_layout = False
+        if text_hex:
+            chart.legend.font.color.rgb = RGBColor.from_string(text_hex)
 
     return graphic_frame
 
@@ -130,7 +160,14 @@ def _write_cell(cell, text: str, family: str | None, size_pt: float | None, colo
         run.font.color.rgb = RGBColor.from_string(color_hex)
 
 
-def add_table(slide, spec: TableSpec, box: Box, slide_size_emu: tuple[int, int], tokens: Tokens):
+def add_table(
+    slide,
+    spec: TableSpec,
+    box: Box,
+    slide_size_emu: tuple[int, int],
+    tokens: Tokens,
+    theme: Literal["light", "dark"] = "light",
+):
     """Добавляет на слайд родную таблицу python-pptx и возвращает её фигуру."""
     if len(spec.columns) > 5:
         raise ValueError("не больше пяти колонок")
@@ -146,7 +183,16 @@ def add_table(slide, spec: TableSpec, box: Box, slide_size_emu: tuple[int, int],
     header_text_color = palette.contrast_text_color(accent_hex) if accent_hex else None
     surface_hex = _color_by_role(tokens, "surface")
     family = _body_font_family(tokens)
-    size_pt = _type_size_pt(tokens, "body")
+    size_pt = _type_size_pt(tokens, _label_role(box))
+
+    body_text_color = None
+    shade_hex = surface_hex
+    if theme == "dark":
+        # на тёмном фоне светлый текст читается только на тёмной подложке surface,
+        # иначе строка остаётся без заливки, чтобы не перекрыть текст светлым пятном
+        body_text_color = palette.theme_text_color(tokens, theme)
+        if surface_hex is None or not palette.is_dark(surface_hex):
+            shade_hex = None
 
     for col_idx, heading in enumerate(spec.columns):
         cell = table.cell(0, col_idx)
@@ -157,7 +203,7 @@ def add_table(slide, spec: TableSpec, box: Box, slide_size_emu: tuple[int, int],
         shaded = row_idx % 2 == 0
         for col_idx, value in enumerate(row_values):
             cell = table.cell(row_idx + 1, col_idx)
-            _fill_cell(cell, surface_hex if shaded else None)
-            _write_cell(cell, value, family, size_pt, None)
+            _fill_cell(cell, shade_hex if shaded else None)
+            _write_cell(cell, value, family, size_pt, body_text_color)
 
     return graphic_frame
