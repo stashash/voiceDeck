@@ -252,7 +252,7 @@ try {
 def _run_powershell_script(script: str, args: list[str]) -> subprocess.CompletedProcess:
     if sys.platform != "win32":
         raise ConverterUnavailable("движок powerpoint доступен только на Windows")
-    with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8-sig") as f:
         f.write(script)
         script_path = f.name
     try:
@@ -294,6 +294,8 @@ def _powerpoint_to_png(pptx_path: Path, out_dir: Path, width_px: int) -> list[Pa
 
 # ---------- постоянная сессия движка (задача T-26) ----------
 
+# Скрипты пишутся на диск с BOM и без кириллицы в теле: Windows PowerShell 5.1 читает файл
+# без BOM в кодировке системы и на русской строке падает с ошибкой разбора, сессия молчит.
 _PS_SESSION = """
 $ErrorActionPreference = 'Stop'
 try {
@@ -303,6 +305,7 @@ try {
 $alreadyRunning = @(Get-Process -Name POWERPNT -ErrorAction SilentlyContinue).Count -gt 0
 $app = $null
 $pres = $null
+$ownPids = @()
 $openPath = ''
 $running = $true
 
@@ -319,7 +322,11 @@ while ($running) {
         $cmd = ConvertFrom-Json $line
         switch ($cmd.command) {
             'png' {
-                if ($null -eq $app) { $app = New-Object -ComObject PowerPoint.Application }
+                if ($null -eq $app) {
+                    $before = @(Get-Process -Name POWERPNT -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+                    $app = New-Object -ComObject PowerPoint.Application
+                    $ownPids = @(Get-Process -Name POWERPNT -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id } | ForEach-Object { $_.Id })
+                }
                 if ($openPath -ne $cmd.path) {
                     if ($null -ne $pres) { $pres.Close(); $pres = $null }
                     $pres = $app.Presentations.Open($cmd.path, $true, $false, $false)
@@ -334,7 +341,7 @@ while ($running) {
                 Send-Answer @{ ok = $true }
             }
             default {
-                Send-Answer @{ ok = $false; error = 'неизвестная команда' }
+                Send-Answer @{ ok = $false; error = 'unknown command' }
             }
         }
     } catch {
@@ -342,7 +349,16 @@ while ($running) {
     }
 }
 if ($null -ne $pres) { try { $pres.Close() } catch { } }
-if ($null -ne $app -and -not $alreadyRunning) { try { $app.Quit() } catch { } }
+if ($null -ne $app -and -not $alreadyRunning) {
+    try { $app.Quit() } catch { }
+    try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($app) } catch { }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Start-Sleep -Milliseconds 800
+    # Quit may leave the process alive while a COM reference exists: stop our own PowerPoint by pid.
+    foreach ($p in @(Get-Process -Name POWERPNT -ErrorAction SilentlyContinue)) {
+        if ($ownPids -contains $p.Id) { try { Stop-Process -Id $p.Id -Force } catch { } }
+    }
+}
 """
 
 
@@ -407,7 +423,7 @@ class _PowerPointSession(RenderSession):
         """Поднимает дочерний powershell. В тестах подменяется целиком."""
         if sys.platform != "win32":
             raise ConverterUnavailable("движок powerpoint доступен только на Windows")
-        with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8-sig") as f:
             f.write(_PS_SESSION)
             self._script_path = Path(f.name)
         cmd = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
