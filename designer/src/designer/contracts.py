@@ -117,6 +117,7 @@ class Area(BaseModel):
     kind: Literal["image", "icon", "chart", "table"]
     box: Box
     shape_id: int | None = None
+    placeholder: bool = Field(default=False, description="серая заглушка под фото или картинку: без своей картинки слайд выглядит недоделанным")
 
 
 class RepeatUnit(BaseModel):
@@ -142,6 +143,7 @@ class RepeatGroup(BaseModel):
     unit_areas: list[Area] = Field(default_factory=list)
     min_units: int = 1
     max_units: int = Field(description="сколько блоков помещается на сетке шаблона без выхода в поля")
+    linked_group_ids: list[str] = Field(default_factory=list, description="группы, которые повторяются синхронно с этой: ряд номеров и ряд подписей под ними это один смысловой блок")
 
 
 class Pattern(BaseModel):
@@ -154,6 +156,9 @@ class Pattern(BaseModel):
     theme: Literal["light", "dark"]
     background_asset: str | None = Field(default=None, description="Asset.id картинки фона: первые 12 знаков sha1 содержимого")
     background_color: str | None = None
+    purpose: str = Field(default="", description="для какого содержания слайд, одной фразой; пишет модель по картинке слайда")
+    needs_images: bool = Field(default=False, description="паттерн держится на фото или картинках, которых у нас может не быть")
+    primary_group_id: str | None = Field(default=None, description="главная группа блоков, в неё идут пункты слайда")
     slots: list[Slot] = Field(default_factory=list)
     areas: list[Area] = Field(default_factory=list)
     groups: list[RepeatGroup] = Field(default_factory=list)
@@ -236,6 +241,10 @@ class SlideSpec(BaseModel):
     slot_text: dict[str, str] = Field(default_factory=dict, description="id слота паттерна -> текст")
     group_id: str | None = None
     unit_text: list[dict[str, str]] = Field(default_factory=list, description="по блоку: id слота блока -> текст")
+    linked_unit_text: dict[str, list[dict[str, str]]] = Field(default_factory=dict, description="id связанной группы -> тексты её блоков; число блоков то же, что в unit_text")
+    fitted_size_pt: dict[str, float] = Field(default_factory=dict, description="id слота или слота блока -> кегль после подгонки; экспорт ставит его фигурам")
+    viz_box: Box | None = Field(default=None, description="рамка диаграммы или таблицы, её выбирает вёрстка")
+    remove_shape_ids: list[int] = Field(default_factory=list, description="фигуры образца, которые вёрстка решила убрать: незаполненные группы, образцы в рамке визуализации, заглушки под фото")
     chart: ChartSpec | None = None
     table: TableSpec | None = None
     viz_area_id: str | None = None
