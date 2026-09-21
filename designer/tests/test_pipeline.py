@@ -18,6 +18,7 @@ BRIEF = (
     "Сервис записи к врачу для клиники. За квартал конверсия записи выросла до 20 процентов. "
     "Аудитория — администраторы регистратуры, назначение — показать эффект пилота."
 )
+PNG = b"\x89PNG\r\n\x1a\nfake"
 
 
 @pytest.fixture(autouse=True)
@@ -169,9 +170,9 @@ def test_live_slide_returns_none_for_empty_title(templates):
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]})
 
     client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
-    scene = pipeline.live_slide(ds_id, "всем привет, начинаем", [], client=client)
+    result = pipeline.live_slide(ds_id, "всем привет, начинаем", [], client=client)
 
-    assert scene is None
+    assert result is None
 
 
 def test_deck_file_path_rejects_dotdot():
@@ -193,18 +194,12 @@ def _fake_convert(monkeypatch, png_count: int = 5) -> None:
         out_path.write_bytes(b"%PDF-1.4 fake")
         return out_path
 
-    def fake_to_png(pptx_path, out_dir, width_px=1280):
-        out_dir.mkdir(parents=True, exist_ok=True)
-        paths = []
-        for i in range(png_count):
-            p = out_dir / f"slide-{i + 1}.png"
-            p.write_bytes(b"\x89PNG\r\n\x1a\nfake")
-            paths.append(p)
-        return paths
+    def fake_render_slides(pptx_path, count, width_px=1600):
+        return [PNG + str(i).encode("ascii") for i in range(png_count)]
 
     monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
     monkeypatch.setattr("designer.pipeline.convert.to_pdf", fake_to_pdf)
-    monkeypatch.setattr("designer.pipeline.convert.to_png", fake_to_png)
+    monkeypatch.setattr("designer.pipeline.render.render_slides", fake_render_slides)
 
 
 def test_generate_deck_with_three_variants_produces_three_pptx(templates):
@@ -317,3 +312,111 @@ def test_apply_fixes_rebuilds_files_and_returns_report(templates, monkeypatch):
 def test_apply_fixes_unknown_deck_raises():
     with pytest.raises(ValueError):
         pipeline.apply_fixes("no-such-deck", "a", ["x"])
+
+
+# ---------- T-26: картинки слайдов и два вида HTML ----------
+
+def _live_client(payload: dict) -> LlmClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]})
+
+    return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+
+
+_LIVE_PAYLOAD = {
+    "kind": "bullets", "title": "Автоматизация экономит время",
+    "key_message": "Скрипты забирают рутину.",
+    "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+}
+
+
+def test_deck_puts_slide_images_and_both_kinds_of_html(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=5)
+
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client)
+
+    assert store.deck_variant_slide_numbers(deck.id, "a") == [1, 2, 3, 4, 5]
+
+    files_dir = store.deck_files_dir(deck.id)
+    picture_html = (files_dir / "deck.html").read_text(encoding="utf-8")
+    markup_html = (files_dir / "deck.markup.html").read_text(encoding="utf-8")
+    assert 'class="slide-image"' in picture_html
+    assert 'class="slide-image"' not in markup_html
+
+
+def test_deck_without_engine_keeps_markup_html(templates):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    events: list[pipeline.PipelineEvent] = []
+
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   events.append, client=client)
+
+    files_dir = store.deck_files_dir(deck.id)
+    assert (files_dir / "deck.html").read_text(encoding="utf-8") == \
+        (files_dir / "deck.markup.html").read_text(encoding="utf-8")
+    assert store.deck_variant_slide_numbers(deck.id, "a") == []
+    assert any(event.step == "slide-images-skipped" for event in events)
+
+
+def test_deck_keeps_markup_html_when_engine_fails_on_pictures(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=5)
+
+    def fail(pptx_path, count, width_px=1600):
+        raise pipeline.convert.ConverterUnavailable("движок отказал")
+
+    monkeypatch.setattr("designer.pipeline.render.render_slides", fail)
+    events: list[pipeline.PipelineEvent] = []
+
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   events.append, client=client)
+
+    files_dir = store.deck_files_dir(deck.id)
+    assert 'class="slide-image"' not in (files_dir / "deck.html").read_text(encoding="utf-8")
+    assert any(event.step == "slide-images-failed" for event in events)
+
+
+def test_new_slide_images_replace_the_old_ones(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=5)
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client)
+
+    monkeypatch.setattr("designer.pipeline.audit_fixes.apply_fixes",
+                         lambda specs, scenes, findings, finding_ids, ds: (specs, scenes, []))
+    _fake_convert(monkeypatch, png_count=2)
+
+    pipeline.apply_fixes(deck.id, "a", [])
+
+    assert store.deck_variant_slide_numbers(deck.id, "a") == [1, 2]
+
+
+def test_live_slide_returns_picture_and_html_with_it(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.render.render_spec",
+                         lambda spec, ds, package_dir: PNG)
+
+    result = pipeline.live_slide(ds_id, "мы внедрили автоматизацию", [],
+                                  client=_live_client(_LIVE_PAYLOAD))
+
+    assert result.png == PNG
+    assert 'class="slide-image"' in result.html
+    assert result.scene.elements
+
+
+def test_live_slide_without_engine_gives_markup_html(templates):
+    ds_id = _import_first_template(templates)
+
+    result = pipeline.live_slide(ds_id, "мы внедрили автоматизацию", [],
+                                  client=_live_client(_LIVE_PAYLOAD))
+
+    assert result.png is None
+    assert "<!DOCTYPE html>" in result.html
+    assert 'class="slide-image"' not in result.html

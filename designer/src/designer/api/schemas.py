@@ -30,6 +30,8 @@ class DeckVariantState(BaseModel):
     scenes: list[Scene] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     error: str | None = None
+    slide_images: list[str] = Field(default_factory=list,
+                                     description="адреса картинок слайдов по порядку; пусто, если движка нет")
 
 
 class DeckStateResponse(BaseModel):
@@ -41,6 +43,7 @@ class DeckStateResponse(BaseModel):
     scenes: list[Scene] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     error: str | None = None
+    slide_images: list[str] = Field(default_factory=list)
     variants: dict[str, DeckVariantState] = Field(default_factory=dict)
 
 
@@ -66,6 +69,8 @@ class LiveSlideRequest(BaseModel):
 class LiveSlideResponse(BaseModel):
     scene: Scene
     html: str
+    image_png_base64: str | None = Field(default=None,
+                                          description="картинка слайда; None, если движка конвертации нет")
 
 
 class HealthResponse(BaseModel):

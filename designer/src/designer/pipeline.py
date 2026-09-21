@@ -5,6 +5,11 @@ generate_deck ведёт слайд по цепочке уже слитых сл
 хранилище (designer.store). Сбой модели на одном слайде не останавливает колоду: слайд
 собирается из текста плана без переписывания под лимиты, событие сообщает об этом.
 
+Вид слайда в браузере (задача T-26): после экспорта pptx каждый слайд снимается картинкой
+через постоянную сессию движка и кладётся в хранилище; deck.html собирается из картинок
+с текстовым слоем, прежний вид чистой разметкой лежит рядом как deck.markup.html. Движка
+нет: остаётся вид разметкой, событие хода работы сообщает об этом.
+
 Варианты (задача T-12): план строится один раз, layout.variants.make_variants даёт три его
 преобразования, каждое собирается и экспортируется отдельно и лежит в своём подкаталоге
 хранилища. Контекстный (по картинке) аудит идёт на модели дорого, поэтому автоматически
@@ -25,8 +30,9 @@ from designer.audit import fixes as audit_fixes
 from designer.audit.contextual import audit_deck, audit_slide
 from designer.audit.deterministic import run_checks
 from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideSpec
-from designer.export import convert
+from designer.export import convert, render
 from designer.export.html import render_deck
+from designer.export.html_image import render_deck_images, slide_html
 from designer.export.pptx_deck import export_pptx
 from designer.layout import variants as variant_axes
 from designer.layout.capacity import main_group, slot_limits, unit_count
@@ -188,8 +194,10 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
 
     _emit(on_event, "export-html", None, variant_code)
     with recorder.stage(f"{variant_code}-export-html"):
-        html_text = render_deck(deck, ds, package_dir)
-    (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
+        markup_html = render_deck(deck, ds, package_dir)
+    # Вид чистой разметкой остаётся рядом: он не зависит от движка конвертации.
+    (files_dir / "deck.markup.html").write_text(markup_html, encoding="utf-8")
+    (files_dir / "deck.html").write_text(markup_html, encoding="utf-8")
 
     _emit(on_event, "convert", None, variant_code)
     png_paths: list[Path] = []
@@ -197,9 +205,17 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
         try:
             with recorder.stage(f"{variant_code}-convert"):
                 convert.to_pdf(pptx_path, files_dir / "deck.pdf")
-                png_paths = convert.to_png(pptx_path, files_dir / "png")
         except convert.ConverterUnavailable:
             _emit(on_event, "convert-failed", None, variant_code)
+
+        _emit(on_event, "render-slides", None, variant_code)
+        with recorder.stage(f"{variant_code}-render-slides"):
+            png_paths = _save_slide_images(deck_id, variant_code, pptx_path, len(specs), on_event)
+        if png_paths:
+            html_text = render_deck_images(deck, ds, [path.read_bytes() for path in png_paths])
+            (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
+    else:
+        _emit(on_event, "slide-images-skipped", None, variant_code)
 
     if png_paths and with_contextual_audit:
         _emit(on_event, "audit-contextual", None, variant_code)
@@ -208,6 +224,30 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
 
     store.save_deck_result(deck_id, deck, findings, variant=variant_code)
     return deck
+
+
+def _save_slide_images(deck_id: str, variant: str, pptx_path: Path, count: int,
+                        on_event: OnEvent) -> list[Path]:
+    """Картинки слайдов варианта в хранилище. Пусто, если движок не смог их снять."""
+    try:
+        pngs = render.render_slides(pptx_path, count)
+    except convert.ConverterUnavailable:
+        _emit(on_event, "slide-images-failed", None, variant)
+        return []
+
+    slides_dir = store.deck_variant_slides_dir(deck_id, variant)
+    for old in slides_dir.glob("slide-*.png"):
+        old.unlink()
+    paths: list[Path] = []
+    for index, png in enumerate(pngs, start=1):
+        path = slides_dir / f"slide-{index:03d}.png"
+        path.write_bytes(png)
+        paths.append(path)
+    return paths
+
+
+def _stored_slide_images(deck_id: str, variant: str) -> list[Path]:
+    return sorted(store.deck_variant_slides_dir(deck_id, variant).glob("slide-*.png"))
 
 
 def _role_limits(pattern: Pattern, intent: SlideIntent, n_units: int) -> tuple[dict[str, int], dict[str, int]]:
@@ -285,8 +325,7 @@ def run_contextual_audit(deck_id: str, variant: str, *, client: LlmClient | None
     if state is None:
         raise ValueError(f"колода не найдена: {deck_id}/{variant}")
 
-    png_dir = store.deck_variant_files_dir(deck_id, variant) / "png"
-    png_paths = sorted(png_dir.glob("*.png")) if png_dir.is_dir() else []
+    png_paths = _stored_slide_images(deck_id, variant)
     if not png_paths:
         raise RuntimeError("картинок слайдов нет: конвертер недоступен")
 
@@ -338,14 +377,18 @@ def apply_fixes(deck_id: str, variant: str, finding_ids: list[str]) -> tuple[lis
     files_dir = store.deck_variant_files_dir(deck_id, variant)
     pptx_path = files_dir / "deck.pptx"
     export_pptx(new_specs, ds, package_dir, pptx_path)
-    html_text = render_deck(deck, ds, package_dir)
-    (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
+    markup_html = render_deck(deck, ds, package_dir)
+    (files_dir / "deck.markup.html").write_text(markup_html, encoding="utf-8")
+    (files_dir / "deck.html").write_text(markup_html, encoding="utf-8")
     if convert.available():
         try:
             convert.to_pdf(pptx_path, files_dir / "deck.pdf")
-            convert.to_png(pptx_path, files_dir / "png")
         except convert.ConverterUnavailable:
             pass
+        png_paths = _save_slide_images(deck_id, variant, pptx_path, len(new_specs), lambda event: None)
+        if png_paths:
+            html_text = render_deck_images(deck, ds, [path.read_bytes() for path in png_paths])
+            (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
 
     store.save_deck_result(deck_id, deck, all_findings, variant=variant)
     return report, all_findings
@@ -353,9 +396,17 @@ def apply_fixes(deck_id: str, variant: str, finding_ids: list[str]) -> tuple[lis
 
 # ---------- живой режим ----------
 
+@dataclass(frozen=True)
+class LiveSlide:
+    """Слайд живого режима: сцена, её HTML и картинка слайда (None, если движка нет)."""
+    scene: Scene
+    html: str
+    png: bytes | None = None
+
+
 def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
-                client: LlmClient | None = None) -> Scene | None:
-    """Фрагмент устной речи -> сцена одного слайда в стиле дизайн-системы, либо None (слайд не нужен)."""
+                client: LlmClient | None = None) -> LiveSlide | None:
+    """Фрагмент устной речи -> слайд в стиле дизайн-системы, либо None (слайд не нужен)."""
     package_dir = store.design_system_dir(ds_id)
     ds = load_package(package_dir)
 
@@ -370,7 +421,24 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
             return None
         pattern = choose_pattern(intent, ds, used_pattern_ids)
         spec = compose(intent, pattern, ds)
-        return build_scene(spec, pattern, ds, package_dir)
+        scene = build_scene(spec, pattern, ds, package_dir)
     finally:
         if owns_client:
             client.close()
+
+    png = _live_png(spec, ds, package_dir)
+    if png is None:
+        # Движка нет: на сцену идёт прежний вид чистой разметкой.
+        solo = Deck(id="live", design_system_id=ds_id, variant="a",
+                    plan=DeckPlan(title="", purpose="", slides=[]), specs=[spec], scenes=[scene])
+        return LiveSlide(scene=scene, html=render_deck(solo, ds, package_dir))
+    return LiveSlide(scene=scene, html=slide_html(png, scene, ds), png=png)
+
+
+def _live_png(spec: SlideSpec, ds: DesignSystem, package_dir: Path) -> bytes | None:
+    if not convert.available():
+        return None
+    try:
+        return render.render_spec(spec, ds, package_dir)
+    except convert.ConverterUnavailable:
+        return None

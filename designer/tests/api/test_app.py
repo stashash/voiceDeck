@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import base64
 import json
 
 import httpx
@@ -14,6 +15,8 @@ from fastapi.testclient import TestClient
 from designer import store
 from designer.api.app import app, get_llm_client
 from designer.llm.client import LlmClient
+
+PNG = b"\x89PNG\r\n\x1a\nfake"
 
 
 @pytest.fixture
@@ -203,3 +206,85 @@ def test_deck_variant_fix_endpoint_rebuilds_and_returns_report(client, templates
     assert body["report"] == [{"finding_id": "fake.finding.0", "status": "skipped",
                                 "what": "не нашлось похожего исправления"}]
     assert isinstance(body["findings"], list)
+
+
+# ---------- T-26: картинки слайдов ----------
+
+def _fake_slide_images(monkeypatch) -> None:
+    """Движок подменён: картинки фейковые, окно PowerPoint/LibreOffice не открывается."""
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.convert.to_pdf",
+                         lambda pptx_path, out_path: out_path.write_bytes(b"%PDF-1.4 fake"))
+    monkeypatch.setattr("designer.pipeline.render.render_slides",
+                         lambda pptx_path, count, width_px=1600: [PNG] * count)
+    monkeypatch.setattr("designer.pipeline.render.render_spec",
+                         lambda spec, ds, package_dir: PNG)
+
+
+def test_deck_state_lists_slide_images_and_serves_them(client, templates, monkeypatch):
+    _fake_slide_images(monkeypatch)
+    deck_id = _create_deck_with_variants(client, templates, ["a"])
+
+    state = client.get(f"/decks/{deck_id}")
+    assert state.status_code == 200
+    addresses = state.json()["slide_images"]
+    assert addresses == [f"/decks/{deck_id}/a/slides/{n}.png" for n in range(1, 6)]
+    assert state.json()["variants"]["a"]["slide_images"] == addresses
+
+    image = client.get(addresses[0])
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+    assert image.content == PNG
+
+
+def test_live_slide_returns_picture_of_the_slide(client, templates, monkeypatch):
+    _fake_slide_images(monkeypatch)
+    ds_id = _upload_first_template(client, templates)
+    payload = {
+        "kind": "bullets", "title": "Автоматизация экономит время",
+        "key_message": "Скрипты забирают рутину.",
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+    }
+    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+
+    response = client.post("/live/slide", json={
+        "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию", "used_pattern_ids": [],
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["image_png_base64"] == base64.b64encode(PNG).decode("ascii")
+    assert 'class="slide-image"' in body["html"]
+
+
+def test_live_slide_without_engine_has_no_picture(client, templates):
+    ds_id = _upload_first_template(client, templates)
+    payload = {
+        "kind": "bullets", "title": "Автоматизация экономит время",
+        "key_message": "Скрипты забирают рутину.",
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+    }
+    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+
+    response = client.post("/live/slide", json={
+        "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию", "used_pattern_ids": [],
+    })
+
+    assert response.status_code == 200
+    assert response.json()["image_png_base64"] is None
+
+
+def test_slide_image_dotdot_path_is_rejected(client):
+    deck_id = store.new_deck_id()
+    store.init_deck(deck_id, "any-ds")
+
+    # Точки закодированы (%2e%2e): иначе http-клиент схлопнет ".." ещё до отправки запроса.
+    assert client.get(f"/decks/{deck_id}/a/slides/%2e%2e.png").status_code == 400
+    assert client.get(f"/decks/{deck_id}/%2e%2e/slides/1.png").status_code == 400
+
+
+def test_slide_image_that_was_not_rendered_is_404(client):
+    deck_id = store.new_deck_id()
+    store.init_deck(deck_id, "any-ds")
+
+    assert client.get(f"/decks/{deck_id}/a/slides/7.png").status_code == 404

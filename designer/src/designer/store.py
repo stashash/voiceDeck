@@ -3,8 +3,9 @@
 Каталог берётся из переменной DESIGNER_DATA_DIR (по умолчанию ./data):
 design-systems/<id>/ — пакет дизайн-системы (пишет parse.package.build_package);
 decks/<id>/<вариант>/ — deck.json (статус, бриф, план, сцены, находки), run.json (карточка
-прогона) и files/ (deck.pptx, deck.html, deck.pdf, png/). events.jsonl лежит на уровне
-колоды: шаги генерации всех вариантов идут в один журнал по времени.
+прогона), files/ (deck.pptx, deck.html, deck.markup.html, deck.pdf) и slides/ (картинки
+слайдов). events.jsonl лежит на уровне колоды: шаги генерации всех вариантов идут в один
+журнал по времени.
 Пути без варианта (deck_files_dir, deck_state_path, ...) — это всегда вариант "a": так
 старые вызовы и старые пути API продолжают работать после появления вариантов.
 
@@ -23,6 +24,7 @@ from designer.contracts import Deck, Finding, RunManifest
 DATA_DIR_ENV = "DESIGNER_DATA_DIR"
 _DEFAULT_DATA_DIR = "./data"
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+_SLIDE_NO_RE = re.compile(r"^[0-9]{1,4}$")
 
 
 class InvalidId(ValueError):
@@ -111,6 +113,34 @@ def deck_variant_run_path(deck_id: str, variant: str) -> Path:
 def deck_variant_file_path(deck_id: str, variant: str, name: str) -> Path | None:
     """Путь к готовому файлу варианта колоды; None — путь выходит за пределы каталога."""
     return safe_join(deck_variant_files_dir(deck_id, variant), name)
+
+
+def deck_variant_slides_dir(deck_id: str, variant: str) -> Path:
+    """Картинки слайдов варианта: slide-001.png и далее по порядку (задача T-26)."""
+    d = deck_variant_dir(deck_id, variant) / "slides"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def deck_variant_slide_path(deck_id: str, variant: str, number: int | str) -> Path | None:
+    """Путь к картинке слайда с этим номером; None — номер не число."""
+    raw = str(number)
+    if not _SLIDE_NO_RE.match(raw):
+        return None
+    return safe_join(deck_variant_slides_dir(deck_id, variant), f"slide-{int(raw):03d}.png")
+
+
+def deck_variant_slide_numbers(deck_id: str, variant: str) -> list[int]:
+    """Номера слайдов, картинки которых уже лежат в хранилище."""
+    d = deck_variant_dir(deck_id, variant) / "slides"
+    if not d.is_dir():
+        return []
+    numbers = []
+    for path in d.glob("slide-*.png"):
+        raw = path.stem.split("-")[-1]
+        if raw.isdigit():
+            numbers.append(int(raw))
+    return sorted(numbers)
 
 
 def deck_files_dir(deck_id: str) -> Path:
