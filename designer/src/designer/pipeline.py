@@ -184,7 +184,7 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     def _fill(job: tuple[int, SlideIntent, Pattern]) -> SlideIntent:
         index, intent, pattern = job
         _emit(on_event, "slide", index, variant_code)
-        return _fill_intent(intent, pattern, client, on_event, index, variant_code)
+        return _fill_intent(intent, pattern, client, on_event, index, variant_code, ds.tokens.type_scale)
 
     with recorder.stage(f"{variant_code}-fill-slots"):
         with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
@@ -269,22 +269,25 @@ def _stored_slide_images(deck_id: str, variant: str) -> list[Path]:
     return sorted(store.deck_variant_slides_dir(deck_id, variant).glob("slide-*.png"))
 
 
-def _role_limits(pattern: Pattern, intent: SlideIntent, n_units: int) -> tuple[dict[str, int], dict[str, int]]:
+def _role_limits(pattern: Pattern, intent: SlideIntent, n_units: int,
+                 scale: list | None = None) -> tuple[dict[str, int], dict[str, int]]:
     """Лимиты знаков по ролям для fill_slots: заголовок и ключевое сообщение слайда, роли блока."""
+    # Предел считается по рамке и нижнему кеглю роли, а не по кеглю образца: иначе заголовку достаётся одно слово.
+    room = slot_limits(pattern, max(n_units, 0), scale)
     limits: dict[str, int] = {}
     title_slot = next((slot for slot in pattern.slots if slot.role in _TOP_TITLE_ROLES), None)
     if title_slot is not None:
-        limits["title"] = title_slot.max_chars
+        limits["title"] = room.get(title_slot.id, title_slot.max_chars)
     if intent.key_message:
         body_slot = next((slot for slot in pattern.slots if slot.role in _TOP_BODY_ROLES), None)
         if body_slot is not None:
             key = "subtitle" if body_slot.role == "subtitle" else "body"
-            limits[key] = body_slot.max_chars
+            limits[key] = room.get(body_slot.id, body_slot.max_chars)
 
     unit_limits: dict[str, int] = {}
     group = main_group(pattern)
     if group is not None and n_units > 0:
-        scaled = slot_limits(pattern, n_units)
+        scaled = room
         for slot in group.unit_slots:
             if slot.role in _UNIT_LIMIT_ROLES and slot.role not in unit_limits:
                 unit_limits[slot.role] = scaled.get(slot.id, slot.max_chars)
@@ -300,7 +303,7 @@ def _llm_parallel() -> int:
 
 
 def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_event: OnEvent,
-                  index: int, variant: str = "a") -> SlideIntent:
+                  index: int, variant: str = "a", scale: list | None = None) -> SlideIntent:
     """Текст слайда под лимиты выбранного паттерна.
 
     Сбой модели на этом слайде не пробрасывается дальше: слайд собирается из текста
@@ -309,7 +312,7 @@ def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_ev
     group = main_group(pattern)
     n_units = unit_count(group, len(intent.items)) if group is not None else 0
     try:
-        limits, unit_limits = _role_limits(pattern, intent, n_units)
+        limits, unit_limits = _role_limits(pattern, intent, n_units, scale)
         filled = fill_slots(intent, limits, unit_limits, n_units, client)
         if n_units == 0 and intent.items:
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
