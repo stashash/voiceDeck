@@ -30,6 +30,9 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     # Числа, которых нет в брифе, убираются кодом безусловно: повтор не гарантирует,
     # что модель сама этого не нарушит второй раз.
     _drop_numbers_missing_from_brief(plan, brief)
+    # Идентификаторы ставит код: модель возвращает их пустыми или повторяет, а по ним находки аудита привязаны к слайдам.
+    for index, slide in enumerate(plan.slides, start=1):
+        slide.id = f"s{index}"
     return plan
 
 

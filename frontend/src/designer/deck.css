@@ -35,7 +35,9 @@
 .run-panel h3{font-size:10px;letter-spacing:.4px;text-transform:uppercase;margin:12px 0 6px;color:#8a977c}
 .run-panel .run-rows div{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
 
-.deck-page{flex:1;display:grid;grid-template-columns:270px 1fr 300px;min-height:0}
+.page:has(>.deck-shell){height:100vh}
+.deck-page{flex:1;display:grid;grid-template-columns:270px minmax(0,1fr) 300px;min-height:0}
+.deck-page>*{min-width:0;min-height:0}
 .deck-rail{border-right:1px solid #e3e8e2;background:#fff;padding:22px 18px;display:flex;flex-direction:column;gap:16px;overflow:auto}
 .deck-rail label{font-size:9px;letter-spacing:.8px;color:#8a977c;text-transform:uppercase;display:block;margin-bottom:6px}
 .deck-rail input,.deck-rail textarea{width:100%;border:1px solid #dce2d8;border-radius:6px;padding:9px 10px;font:12px/1.5 inherit;color:#3d5646;background:#fcfdf9}

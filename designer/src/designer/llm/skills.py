@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from pathlib import Path
 
@@ -10,7 +11,8 @@ import yaml
 from designer.contracts import SkillRef
 
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
-_SKILLS_ROOT = Path(__file__).resolve().parents[3] / "skills"
+# В установленном пакете рядом с кодом каталога skills нет: образ кладёт его отдельно и называет путь переменной.
+_SKILLS_ROOT = Path(os.environ.get("DESIGNER_SKILLS_DIR") or Path(__file__).resolve().parents[3] / "skills")
 
 
 class SkillError(Exception):
