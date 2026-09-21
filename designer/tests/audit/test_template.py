@@ -7,6 +7,7 @@ from designer.contracts import (
     ColorToken, DesignSystem, Element, FontToken, Margins, Pattern, Scene, SlideKind,
     TextStyle, Tokens, TypeStep,
 )
+from designer.parse.package import build_package
 
 _SLIDE_EMU = (1270000, 1270000)
 
@@ -104,3 +105,46 @@ def test_contrast_clean():
     el = Element(id="e1", type="text", box=(0, 0, 0.3, 0.1), text="a", style=TextStyle(color="000000"))
     findings = checks_template.check_contrast([_scene("s1", [el], background_color="FFFFFF")], ds)
     assert findings == []
+
+
+# ---------- T-29: шаблон как источник правды для кегля и контраста ----------
+
+def _slot_elements(pattern: Pattern) -> list[Element]:
+    return [
+        Element(
+            id=slot.id, type="text", role=slot.role, box=slot.box,
+            text=slot.sample_text or "Пример", style=slot.style, source_shape_id=slot.shape_id,
+        )
+        for slot in pattern.slots
+        if slot.style.size_pt
+    ]
+
+
+def test_unmoved_template_slots_have_no_type_scale_or_contrast_findings(templates, tmp_path):
+    """Сцена без сдвигов, с текстом кеглем образца, чиста от template.type_scale и
+    template.contrast на всех выданных шаблонах."""
+    for path in templates:
+        ds = build_package(path, tmp_path / path.stem)
+        for pattern in ds.patterns:
+            elements = _slot_elements(pattern)
+            if not elements:
+                continue
+            scene = Scene(slide_id="s1", pattern_id=pattern.id, elements=elements,
+                          background_color=pattern.background_color)
+            findings = checks_template.check_type_scale([scene], ds) + checks_template.check_contrast([scene], ds)
+            assert findings == [], f"{path.name} {pattern.id}: {[f.message for f in findings]}"
+
+
+def test_size_outside_scale_and_sample_gets_finding(templates, tmp_path):
+    """Кегль, которого нет ни в шкале, ни в образце, находку template.type_scale получает."""
+    path = templates[0]
+    ds = build_package(path, tmp_path / path.stem)
+    pattern = next(p for p in ds.patterns if any(s.style.size_pt for s in p.slots))
+    slot = next(s for s in pattern.slots if s.style.size_pt)
+    off_scale = max(s.size_pt for s in ds.tokens.type_scale) + slot.style.size_pt + 40
+    el = Element(id=slot.id, type="text", box=slot.box, role=slot.role, text=slot.sample_text or "Пример",
+                 style=slot.style.model_copy(update={"size_pt": off_scale}), source_shape_id=slot.shape_id)
+    scene = Scene(slide_id="s1", pattern_id=pattern.id, elements=[el], background_color=pattern.background_color)
+    findings = checks_template.check_type_scale([scene], ds)
+    assert len(findings) == 1
+    assert findings[0].check_id == "template.type_scale"

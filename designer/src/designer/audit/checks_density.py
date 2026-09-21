@@ -2,7 +2,10 @@
 
 Владелец: задача T-03.
 """
-from designer.contracts import DesignSystem, Finding, Scene
+from designer.contracts import DesignSystem, Finding, Scene, SlideKind
+
+# Помощники deterministic.py импортируются внутри функций (см. checks_layout.py):
+# на уровне модуля это закольцовывает загрузку реестра проверок.
 
 _MAX_BULLETS = 6
 _MAX_BULLET_WORDS = 15
@@ -11,6 +14,8 @@ _MAX_TABLE_COLS = 5
 _MAX_SERIES = 5
 _MIN_FILL = 0.25
 _MAX_FILL = 0.75
+# Слайды, где мало текста по жанру: заполнение с ними не сверяется (T-29).
+_FILL_EXCLUDED_KINDS = frozenset({SlideKind.title, SlideKind.section, SlideKind.quote, SlideKind.thanks})
 
 
 def _bullet_lines(text: str) -> list[str]:
@@ -18,6 +23,7 @@ def _bullet_lines(text: str) -> list[str]:
 
 
 def check_bullets(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -28,13 +34,14 @@ def check_bullets(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.bullets", kind="deterministic",
                     severity="warning",
-                    message=f"В «{el.id}» {len(lines)} пунктов вместо не более {_MAX_BULLETS}",
+                    message=f"В {describe_element(el)} {len(lines)} пунктов вместо не более {_MAX_BULLETS}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
 
 
 def check_bullet_words(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -46,13 +53,14 @@ def check_bullet_words(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="density.bullet_words", kind="deterministic",
                         severity="warning",
-                        message=f"Пункт «{line[:30]}…» в «{el.id}» длиннее {_MAX_BULLET_WORDS} слов",
+                        message=f"Пункт «{line[:30]}…» в {describe_element(el)} длиннее {_MAX_BULLET_WORDS} слов",
                         element_ids=[el.id], box=el.box, fixable=False,
                     ))
     return findings
 
 
 def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -62,7 +70,7 @@ def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.table", kind="deterministic",
                     severity="warning",
-                    message=(f"Таблица «{el.id}»: {len(el.table.rows)} строк, "
+                    message=(f"{describe_element(el).capitalize()}: {len(el.table.rows)} строк, "
                              f"{len(el.table.columns)} колонок — больше нормы"),
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
@@ -70,6 +78,7 @@ def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 
 
 def check_series(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -79,16 +88,24 @@ def check_series(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.series", kind="deterministic",
                     severity="warning",
-                    message=f"На диаграмме «{el.id}» {len(el.chart.series)} рядов вместо не более {_MAX_SERIES}",
+                    message=f"На {describe_element(el)} {len(el.chart.series)} рядов вместо не более {_MAX_SERIES}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
 
 
 def check_fill(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    """Заполнение считается по содержимому без оформления (T-29): фон, декор и
+    колонтитул из расчёта исключены. Титул, раздел, цитата и финальный слайд
+    по жанру держатся на малом тексте — проверка их пропускает."""
+    from designer.audit.deterministic import DECOR_ROLES, pattern_by_id
+    patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
-        els = scene.elements
+        pattern = patterns.get(scene.pattern_id)
+        if pattern is not None and pattern.kind in _FILL_EXCLUDED_KINDS:
+            continue
+        els = [el for el in scene.elements if el.role not in DECOR_ROLES]
         if not els:
             area = 0.0
         else:
