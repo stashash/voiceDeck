@@ -1,4 +1,4 @@
-"""FastAPI-сервис: пакеты дизайн-систем, генерация колоды, живой режим. Владелец: задача T-13."""
+"""FastAPI-сервис: пакеты дизайн-систем, генерация колоды, живой режим. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
 import json
@@ -12,9 +12,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from designer import pipeline, store
 from designer.api.schemas import (
+    AuditContextualResponse,
     DeckCreateRequest,
     DeckCreateResponse,
+    DeckFixRequest,
+    DeckFixResponse,
     DeckStateResponse,
+    DeckVariantState,
     DesignSystemListResponse,
     HealthResponse,
     LiveSlideRequest,
@@ -99,15 +103,18 @@ def get_design_system_asset(ds_id: str, name: str) -> FileResponse:
 def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
                  client: LlmClient = Depends(get_llm_client)) -> DeckCreateResponse:
     deck_id = store.new_deck_id()
+    variant_codes = payload.variants or ["a"]
 
     def _on_event(event: pipeline.PipelineEvent) -> None:
-        store.append_event(deck_id, {"step": event.step, "slide_index": event.slide_index, "at": event.at})
+        store.append_event(deck_id, {"step": event.step, "slide_index": event.slide_index,
+                                      "variant": event.variant, "at": event.at})
 
     def _run() -> None:
         try:
             pipeline.generate_deck(
                 payload.design_system_id, payload.brief, payload.purpose, payload.audience,
                 payload.slide_count, _on_event, deck_id=deck_id, client=client,
+                variants=variant_codes,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed
@@ -129,10 +136,20 @@ def deck_events(deck_id: str) -> StreamingResponse:
 
 @app.get("/decks/{deck_id}", response_model=DeckStateResponse)
 def get_deck(deck_id: str) -> DeckStateResponse:
-    state = store.load_deck_state(deck_id)
-    if state is None:
-        raise HTTPException(404, "колода не найдена")
-    return DeckStateResponse(**state)
+    try:
+        variant_codes = store.deck_variants(deck_id)
+    except store.InvalidId:
+        raise _not_found()
+    if not variant_codes:
+        raise _not_found()
+
+    variant_states = {code: DeckVariantState(**store.load_deck_state(deck_id, code)) for code in variant_codes}
+    primary = variant_states.get("a") or next(iter(variant_states.values()))
+    return DeckStateResponse(
+        status=primary.status, design_system_id=primary.design_system_id, plan=primary.plan,
+        specs=primary.specs, scenes=primary.scenes, findings=primary.findings, error=primary.error,
+        variants=variant_states,
+    )
 
 
 @app.get("/decks/{deck_id}/run", response_model=RunManifest)
@@ -151,6 +168,40 @@ def get_deck_file(deck_id: str, name: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
     return FileResponse(str(path))
+
+
+@app.get("/decks/{deck_id}/{variant}/files/{name}")
+def get_deck_variant_file(deck_id: str, variant: str, name: str) -> FileResponse:
+    try:
+        path = store.deck_variant_file_path(deck_id, variant, name)
+    except store.InvalidId:
+        raise HTTPException(400, "недопустимое имя файла")
+    if path is None:
+        raise HTTPException(400, "недопустимое имя файла")
+    if not path.is_file():
+        raise HTTPException(404, "файл не найден")
+    return FileResponse(str(path))
+
+
+@app.post("/decks/{deck_id}/{variant}/audit-contextual", response_model=AuditContextualResponse)
+def audit_deck_variant(deck_id: str, variant: str,
+                        client: LlmClient = Depends(get_llm_client)) -> AuditContextualResponse:
+    try:
+        new_findings = pipeline.run_contextual_audit(deck_id, variant, client=client)
+    except ValueError:
+        raise HTTPException(404, "колода не найдена")
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc))
+    return AuditContextualResponse(findings=new_findings)
+
+
+@app.post("/decks/{deck_id}/{variant}/fix", response_model=DeckFixResponse)
+def fix_deck_variant(deck_id: str, variant: str, payload: DeckFixRequest) -> DeckFixResponse:
+    try:
+        report, findings = pipeline.apply_fixes(deck_id, variant, payload.finding_ids)
+    except ValueError:
+        raise HTTPException(404, "колода не найдена")
+    return DeckFixResponse(report=report, findings=findings)
 
 
 # ---------- живой режим ----------

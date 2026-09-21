@@ -1,9 +1,12 @@
-"""Хранилище на диске: пакеты дизайн-систем и колоды. Владелец: задача T-13.
+"""Хранилище на диске: пакеты дизайн-систем и колоды. Владелец: задача T-13, варианты — T-12.
 
 Каталог берётся из переменной DESIGNER_DATA_DIR (по умолчанию ./data):
 design-systems/<id>/ — пакет дизайн-системы (пишет parse.package.build_package);
-decks/<id>/ — deck.json (статус, план, сцены, находки), run.json (карточка прогона),
-events.jsonl (ход генерации по шагам) и files/ (deck.pptx, deck.html, deck.pdf, png/).
+decks/<id>/<вариант>/ — deck.json (статус, бриф, план, сцены, находки), run.json (карточка
+прогона) и files/ (deck.pptx, deck.html, deck.pdf, png/). events.jsonl лежит на уровне
+колоды: шаги генерации всех вариантов идут в один журнал по времени.
+Пути без варианта (deck_files_dir, deck_state_path, ...) — это всегда вариант "a": так
+старые вызовы и старые пути API продолжают работать после появления вариантов.
 
 Идентификаторы проверяются шаблоном: пользовательский ввод не может стать частью пути.
 """
@@ -76,18 +79,50 @@ def deck_dir(deck_id: str) -> Path:
     return d
 
 
-def deck_files_dir(deck_id: str) -> Path:
-    d = deck_dir(deck_id) / "files"
+_DEFAULT_VARIANT = "a"
+
+
+def deck_variants(deck_id: str) -> list[str]:
+    """Варианты, для которых уже есть каталог с deck.json; пусто, если колода ещё не начала строиться."""
+    root = deck_dir(deck_id)
+    return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "deck.json").is_file())
+
+
+def deck_variant_dir(deck_id: str, variant: str) -> Path:
+    d = deck_dir(deck_id) / _check_id(variant)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
+def deck_variant_files_dir(deck_id: str, variant: str) -> Path:
+    d = deck_variant_dir(deck_id, variant) / "files"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def deck_variant_state_path(deck_id: str, variant: str) -> Path:
+    return deck_variant_dir(deck_id, variant) / "deck.json"
+
+
+def deck_variant_run_path(deck_id: str, variant: str) -> Path:
+    return deck_variant_dir(deck_id, variant) / "run.json"
+
+
+def deck_variant_file_path(deck_id: str, variant: str, name: str) -> Path | None:
+    """Путь к готовому файлу варианта колоды; None — путь выходит за пределы каталога."""
+    return safe_join(deck_variant_files_dir(deck_id, variant), name)
+
+
+def deck_files_dir(deck_id: str) -> Path:
+    return deck_variant_files_dir(deck_id, _DEFAULT_VARIANT)
+
+
 def deck_state_path(deck_id: str) -> Path:
-    return deck_dir(deck_id) / "deck.json"
+    return deck_variant_state_path(deck_id, _DEFAULT_VARIANT)
 
 
 def deck_run_path(deck_id: str) -> Path:
-    return deck_dir(deck_id) / "run.json"
+    return deck_variant_run_path(deck_id, _DEFAULT_VARIANT)
 
 
 def deck_events_path(deck_id: str) -> Path:
@@ -96,20 +131,23 @@ def deck_events_path(deck_id: str) -> Path:
 
 def deck_file_path(deck_id: str, name: str) -> Path | None:
     """Путь к готовому файлу колоды (deck.pptx, deck.html, deck.pdf); None — путь выходит за пределы каталога."""
-    return safe_join(deck_files_dir(deck_id), name)
+    return deck_variant_file_path(deck_id, _DEFAULT_VARIANT, name)
 
 
-def init_deck(deck_id: str, design_system_id: str) -> None:
-    _write_json(deck_state_path(deck_id), {
-        "status": "running", "design_system_id": design_system_id,
-        "plan": None, "specs": [], "scenes": [], "findings": [], "error": None,
-    })
+def init_deck(deck_id: str, design_system_id: str, variants: list[str] | None = None, brief: str = "") -> None:
+    for variant in (variants or [_DEFAULT_VARIANT]):
+        _write_json(deck_variant_state_path(deck_id, variant), {
+            "status": "running", "design_system_id": design_system_id, "brief": brief,
+            "plan": None, "specs": [], "scenes": [], "findings": [], "error": None,
+        })
 
 
-def save_deck_result(deck_id: str, deck: Deck, findings: list[Finding]) -> None:
-    _write_json(deck_state_path(deck_id), {
+def save_deck_result(deck_id: str, deck: Deck, findings: list[Finding], variant: str = _DEFAULT_VARIANT) -> None:
+    previous = load_deck_state(deck_id, variant) or {}
+    _write_json(deck_variant_state_path(deck_id, variant), {
         "status": "done",
         "design_system_id": deck.design_system_id,
+        "brief": previous.get("brief", ""),
         "plan": deck.plan.model_dump(mode="json"),
         "specs": [spec.model_dump(mode="json") for spec in deck.specs],
         "scenes": [scene.model_dump(mode="json") for scene in deck.scenes],
@@ -118,29 +156,31 @@ def save_deck_result(deck_id: str, deck: Deck, findings: list[Finding]) -> None:
     })
 
 
-def mark_deck_failed(deck_id: str, message: str) -> None:
-    state = load_deck_state(deck_id) or {
-        "status": "running", "design_system_id": "", "plan": None,
+def mark_deck_failed(deck_id: str, message: str, variant: str = _DEFAULT_VARIANT) -> None:
+    state = load_deck_state(deck_id, variant) or {
+        "status": "running", "design_system_id": "", "brief": "", "plan": None,
         "specs": [], "scenes": [], "findings": [], "error": None,
     }
     state["status"] = "error"
     state["error"] = message
-    _write_json(deck_state_path(deck_id), state)
+    _write_json(deck_variant_state_path(deck_id, variant), state)
 
 
-def load_deck_state(deck_id: str) -> dict | None:
-    path = deck_state_path(deck_id)
+def load_deck_state(deck_id: str, variant: str = _DEFAULT_VARIANT) -> dict | None:
+    path = deck_variant_state_path(deck_id, variant)
     if not path.is_file():
         return None
     return _read_json(path)
 
 
-def save_run(deck_id: str, manifest: RunManifest) -> None:
-    _write_json(deck_run_path(deck_id), manifest.model_dump(mode="json"))
+def save_run(deck_id: str, manifest: RunManifest, variant: str = _DEFAULT_VARIANT, axis: str = "") -> None:
+    data = manifest.model_dump(mode="json")
+    data["axis"] = axis
+    _write_json(deck_variant_run_path(deck_id, variant), data)
 
 
-def load_run(deck_id: str) -> RunManifest | None:
-    path = deck_run_path(deck_id)
+def load_run(deck_id: str, variant: str = _DEFAULT_VARIANT) -> RunManifest | None:
+    path = deck_variant_run_path(deck_id, variant)
     if not path.is_file():
         return None
     return RunManifest.model_validate_json(path.read_text(encoding="utf-8"))
