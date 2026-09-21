@@ -41,14 +41,36 @@ def check_out_of_bounds(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     return findings
 
 
+def _ink_box(el, slide_w_pt: float, slide_h_pt: float) -> Box | None:
+    """Место, которое элемент занимает на деле. У текста это набранные строки, а не вся рамка:
+    в шаблонах рамки текста часто с запасом и пересекаются, хотя строки друг друга не касаются."""
+    if el.type != "text":
+        return el.box
+    if not el.text.strip():
+        return None
+    size_pt = el.style.size_pt if el.style and el.style.size_pt else None
+    if not size_pt:
+        return el.box
+    x, y, w, h = el.box
+    text_w = len(el.text) * _CHAR_WIDTH_RATIO * size_pt / slide_w_pt
+    lines = max(1, -(-text_w // w)) if w > 0 else 1
+    ink_w = min(w, text_w)
+    ink_h = lines * size_pt * _LINE_HEIGHT_RATIO / slide_h_pt
+    return (x, y, ink_w, ink_h)
+
+
 def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    slide_w_pt, slide_h_pt = _slide_size_pt(ds)
     findings: list[Finding] = []
     for scene in scenes:
-        els = [el for el in scene.elements if el.type in _OVERLAP_TYPES]
+        inked = [(el, _ink_box(el, slide_w_pt, slide_h_pt)) for el in scene.elements if el.type in _OVERLAP_TYPES]
+        els = [(el, box) for el, box in inked if box is not None]
         for i in range(len(els)):
             for j in range(i + 1, len(els)):
-                a, b = els[i], els[j]
-                if _intersect_area(a.box, b.box) > _EPS:
+                (a, box_a), (b, box_b) = els[i], els[j]
+                smaller = min(box_a[2] * box_a[3], box_b[2] * box_b[3])
+                # Касание краями и перехлёст меньше двадцатой части меньшего блока огрехом не считаем.
+                if smaller > 0 and _intersect_area(box_a, box_b) > 0.05 * smaller:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="layout.overlap", kind="deterministic",
                         severity="error", message=f"Блоки «{a.id}» и «{b.id}» накладываются друг на друга",
