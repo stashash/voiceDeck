@@ -16,11 +16,14 @@ POS_TOL = 0.012
 STEP_TOL = 0.02
 """Допуск на постоянство шага."""
 
-GAP_TOL = 0.06
-"""Зазор, при котором соседняя фигура ещё считается частью того же блока."""
-
 SIZE_ROUND = 2
 """Округление ширины и высоты в сигнатуре."""
+
+SIZE_TOL = 0.12
+"""Разница размеров в долях большей стороны, при которой фигуры ещё считаются одинаковыми в ряду."""
+
+LINK_TOL = 0.02
+"""Допуск на постоянство сдвига между блоками связанных групп."""
 
 FULL_BLEED = 0.92
 """Доля слайда, с которой фигура считается подложкой на весь кадр."""
@@ -176,10 +179,15 @@ def _try_merge(cand: RepeatCandidate, run: Run) -> bool:
         return False
     if abs(cand.step[0] - run.step[0]) > STEP_TOL or abs(cand.step[1] - run.step[1]) > STEP_TOL:
         return False
+    taken = set(cand.keys)
+    if any(f.key in taken for f in run.frames):
+        return False
     boxes = cand.unit_boxes
     merged = []
     for i, f in enumerate(run.frames):
-        if gap(boxes[i], f.box) > GAP_TOL:
+        # Фигура входит в блок, только если попадает в его рамку. Ряд, стоящий
+        # отдельной полосой (номера над подписями), остаётся своей группой.
+        if overlap(boxes[i], f.box) <= 0:
             return False
         merged.append(union([boxes[i], f.box]))
     width = max(b[2] for b in merged)
@@ -193,16 +201,58 @@ def _try_merge(cand: RepeatCandidate, run: Run) -> bool:
     return True
 
 
+def _same_size(first: Box, second: Box) -> bool:
+    """Размеры совпадают с допуском: сотые доли слайда на глаз неразличимы."""
+    for axis in (2, 3):
+        larger = max(first[axis], second[axis])
+        if larger > 0 and abs(first[axis] - second[axis]) > SIZE_TOL * larger:
+            return False
+    return True
+
+
+def _size_clusters(frames: list[Frame]) -> list[list[Frame]]:
+    """Свести фигуры одного вида в группы близких размеров: ряд не рвётся из-за пары сотых."""
+    clusters: list[list[Frame]] = []
+    for f in sorted(frames, key=lambda f: -area(f.box)):
+        for cluster in clusters:
+            if _same_size(cluster[0].box, f.box):
+                cluster.append(f)
+                break
+        else:
+            clusters.append([f])
+    return clusters
+
+
+def _candidate_sets(frames: list[Frame], min_units: int) -> list[list[Frame]]:
+    """Наборы фигур, из которых пробуем сложить ряд: точно по сигнатуре и с допуском на размер."""
+    by_sig: dict[tuple, list[Frame]] = defaultdict(list)
+    by_kind: dict[tuple, list[Frame]] = defaultdict(list)
+    for f in frames:
+        by_sig[f.sig].append(f)
+        by_kind[(f.sig[0], f.sig[3])].append(f)
+
+    # Пара фигур с разными размерами это ещё не повтор, поэтому с допуском берём от трёх.
+    sets = [(group, min_units) for group in by_sig.values()]
+    for group in by_kind.values():
+        sets.extend((cluster, max(min_units, 3)) for cluster in _size_clusters(group))
+
+    out: list[list[Frame]] = []
+    seen: set[tuple[int, ...]] = set()
+    for group, least in sets:
+        if len(group) < least:
+            continue
+        key = tuple(sorted(f.key for f in group))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(group)
+    return out
+
+
 def find_repeats(frames: list[Frame], min_units: int = 2) -> list[RepeatCandidate]:
     """Найти повторяющиеся блоки: собрать ряды по сигнатуре и сложить ряды одной длины и шага."""
-    buckets: dict[tuple, list[Frame]] = defaultdict(list)
-    for f in frames:
-        buckets[f.sig].append(f)
-
     runs: list[Run] = []
-    for group in buckets.values():
-        if len(group) < min_units:
-            continue
+    for group in _candidate_sets(frames, min_units):
         run = arrange(group)
         if run is not None:
             runs.append(run)
@@ -229,6 +279,29 @@ def find_repeats(frames: list[Frame], min_units: int = 2) -> list[RepeatCandidat
             continue
         picked.append(cand)
     return picked
+
+
+def _center(box: Box) -> tuple[float, float]:
+    return (box[0] + box[2] / 2, box[1] + box[3] / 2)
+
+
+def in_lockstep(first: list[Box], second: list[Box]) -> bool:
+    """Два ряда блоков идут вместе: сдвиг между парами блоков один и тот же.
+
+    Так ряд номеров и ряд подписей под ними опознаются как один смысловой блок.
+    """
+    if len(first) != len(second) or len(first) < 2:
+        return False
+    shifts = [
+        (_center(b)[0] - _center(a)[0], _center(b)[1] - _center(a)[1])
+        for a, b in zip(first, second)
+    ]
+    for axis in (0, 1):
+        values = [s[axis] for s in shifts]
+        mean = sum(values) / len(values)
+        if any(abs(v - mean) > LINK_TOL for v in values):
+            return False
+    return True
 
 
 def fit_units(

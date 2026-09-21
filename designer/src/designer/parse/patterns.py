@@ -45,6 +45,42 @@ IDENTITY = (1.0, 1.0, 0.0, 0.0)
 
 NUMBER_RE = re.compile(r"^\d[\d\s.,:+\-/×xX]*\s*(%|[^\W\d_]{1,3})?$")
 
+NUMBER_MAX_CHARS = 6
+"""Длина числового образца: «43 %», «1 200», «5 лет»."""
+
+NUMBER_RATIO = 2.0
+"""Во сколько раз кегль крупного числа больше кегля основного текста слайда."""
+
+BIG_NUMBER_AREA = 0.05
+"""Доля слайда под числом, с которой слайд держится на этом числе."""
+
+BIG_NUMBER_MAX = 3
+"""Сколько крупных чисел ещё читается как слайд с числом."""
+
+GRAY_SAT = 0.1
+"""Насыщенность, ниже которой заливка считается серой."""
+
+GRAY_LUMA = (0.5, 0.9)
+"""Яркость серой заглушки: светлее фона, темнее белого."""
+
+PLACEHOLDER_GEOMS = {"ellipse", "roundRect", "round1Rect", "round2SameRect", "round2DiagRect"}
+"""Круг, овал и скруглённый прямоугольник: в них ставят фото."""
+
+HINT_CHARS = 30
+"""Длина текста-подсказки внутри заглушки."""
+
+PLACEHOLDER_MIN_AREA = 0.001
+"""Доля слайда, меньше которой фигура это значок оформления, а не место под фото."""
+
+FLAT_VARIANCE = 600
+"""Разброс цвета картинки, ниже которого на ней нет деталей."""
+
+PLACEHOLDER_SHARE = 0.15
+"""Доля слайда под заглушкой, с которой слайд без своей картинки выглядит недоделанным."""
+
+TEAM_CAPTION_CHARS = 40
+"""Длина подписи блока, которая читается как имя и должность, а не как абзац."""
+
 QUOTE_MARKS = "«“„\"'"
 
 TITLE_PH = (PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE)
@@ -77,6 +113,9 @@ class ShapeInfo:
     style: TextStyle = field(default_factory=TextStyle)
     placeholder: str | None = None
     image_part: str | None = None
+    fill_color: str | None = None
+    geom: str | None = None
+    flat_image: bool = False
 
     @property
     def has_text(self) -> bool:
@@ -161,9 +200,30 @@ def flatten_shapes(container, slide_size, theme, transform=IDENTITY, out=None) -
             style=_text_style(shape, size, theme),
             placeholder=_placeholder_role(shape),
             image_part=_blip_part_name(shape),
+            fill_color=_shape_fill(shape, theme),
+            geom=_shape_geom(shape),
+            flat_image=_flat_gray_image(shape) if kind == "image" else False,
         )
         out.append(info)
     return out
+
+
+def _shape_geom(shape) -> str | None:
+    """Имя готовой формы фигуры: rect, ellipse, roundRect."""
+    props = shape._element.find(qn("p:spPr"))
+    if props is None:
+        return None
+    node = props.find(qn("a:prstGeom"))
+    return node.get("prst") if node is not None else None
+
+
+def _shape_fill(shape, theme: ThemeInfo) -> str | None:
+    """Цвет собственной заливки фигуры; картинка в заливке здесь не разбирается."""
+    props = shape._element.find(qn("p:spPr"))
+    if props is None or props.find(qn("a:noFill")) is not None:
+        return None
+    color, _ = _fill_to_color(props, None, theme)
+    return color
 
 
 def _placeholder_role(shape) -> str | None:
@@ -446,6 +506,64 @@ def _image_average(part) -> str | None:
         return None
 
 
+def _saturation(color: str) -> float:
+    r, g, b = _rgb(color)
+    top = max(r, g, b)
+    return 0.0 if top == 0 else (top - min(r, g, b)) / top
+
+
+def _is_gray(color: str | None) -> bool:
+    """Серая заливка заглушки: цвета нет, яркость между фоном и белым."""
+    if not color:
+        return False
+    return _saturation(color) < GRAY_SAT and GRAY_LUMA[0] <= _luma(color) <= GRAY_LUMA[1]
+
+
+_FLAT_IMAGES: dict[str, bool] = {}
+
+
+def _flat_gray_image(shape) -> bool:
+    """Картинка одного серого тона без деталей: её ставят вместо будущего фото."""
+    try:
+        image = shape.image
+        key = image.sha1
+    except Exception:
+        return False
+    if key in _FLAT_IMAGES:
+        return _FLAT_IMAGES[key]
+    value = False
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(image.blob)) as img:
+            data = img.convert("RGB").resize((16, 16)).tobytes()
+        pixels = [tuple(data[i:i + 3]) for i in range(0, len(data), 3)]
+        avg = tuple(sum(p[i] for p in pixels) // len(pixels) for i in range(3))
+        spread = sum(
+            sum((p[i] - avg[i]) ** 2 for i in range(3)) for p in pixels
+        ) / len(pixels)
+        value = spread <= FLAT_VARIANCE and _is_gray(_hex(avg))
+    except Exception:
+        value = False
+    if len(_FLAT_IMAGES) > 512:
+        _FLAT_IMAGES.clear()
+    _FLAT_IMAGES[key] = value
+    return value
+
+
+def _is_photo_placeholder(info: ShapeInfo) -> bool:
+    """Серая заглушка под фото: круг, овал или скруглённый прямоугольник без своего содержания."""
+    if geo.area(info.box) < PLACEHOLDER_MIN_AREA:
+        return False  # точка списка и тонкая линия под заглушку не годятся
+    if info.kind == "image":
+        return info.flat_image
+    if info.geom not in PLACEHOLDER_GEOMS:
+        return False
+    if len(info.text.strip()) > HINT_CHARS or _is_number(info.text):
+        return False  # число внутри фигуры это содержание слайда, а не подсказка
+    return _is_gray(info.fill_color)
+
+
 def _fill_to_color(node, part, theme: ThemeInfo) -> tuple[str | None, str | None]:
     """Из узла заливки вернуть (цвет, имя картинки)."""
     if node is None:
@@ -537,12 +655,27 @@ def _capacity(box: geo.Box, size_pt: float, slide_pt: tuple[float, float]) -> tu
 
 def _is_number(text: str) -> bool:
     value = text.strip()
-    return bool(value) and len(value) <= 10 and bool(NUMBER_RE.match(value))
+    return bool(value) and len(value) <= NUMBER_MAX_CHARS and bool(NUMBER_RE.match(value))
+
+
+def _body_size(items: list[ShapeInfo]) -> float:
+    """Кегль основного текста слайда: середина кеглей нечисловых подписей."""
+    sizes = sorted(i.size_pt for i in items if i.has_text and not _is_number(i.text))
+    if not sizes:
+        return DEFAULT_SIZE_PT
+    return sizes[len(sizes) // 2]
+
+
+def _is_big_number(slot: Slot, body_pt: float) -> bool:
+    """Крупное число: слот с числом и кеглем не меньше двух кеглей основного текста слайда."""
+    return slot.role == "number" and (slot.style.size_pt or 0) >= body_pt * NUMBER_RATIO
 
 
 def _is_text_slot(info: ShapeInfo) -> bool:
     if info.kind != "text":
         return False
+    if _is_photo_placeholder(info):
+        return False  # короткий текст внутри серой фигуры это подсказка, а не место под текст
     return info.has_text or info.placeholder in ("title", "subtitle", "body")
 
 
@@ -624,16 +757,28 @@ def _reading_order(info: ShapeInfo) -> tuple[float, float]:
 def _area_kind(info: ShapeInfo) -> str:
     if info.kind in ("chart", "table"):
         return info.kind
+    if _is_photo_placeholder(info):
+        return "image"
     if info.box[2] <= ICON_MAX[0] and info.box[3] <= ICON_MAX[1]:
         return "icon"
     return "image"
+
+
+def _is_area(info: ShapeInfo) -> bool:
+    return info.kind in ("image", "chart", "table") or _is_photo_placeholder(info)
 
 
 def _make_area(info: ShapeInfo, origin: geo.Box | None = None) -> Area:
     box = info.box
     if origin is not None:
         box = (box[0] - origin[0], box[1] - origin[1], box[2], box[3])
-    return Area(id=f"a{info.shape_id}", kind=_area_kind(info), box=box, shape_id=info.shape_id)
+    return Area(
+        id=f"a{info.shape_id}",
+        kind=_area_kind(info),
+        box=box,
+        shape_id=info.shape_id,
+        placeholder=_is_photo_placeholder(info),
+    )
 
 
 # ---------- тип слайда ----------
@@ -645,11 +790,39 @@ class SlideFacts:
     groups: list[RepeatGroup]
     texts: list[ShapeInfo]
     decor: list[geo.Box] = field(default_factory=list)
+    body_pt: float = DEFAULT_SIZE_PT
 
     @property
     def has_axis(self) -> bool:
         """Длинная тонкая фигура оформления: ось таймлайна."""
         return any(b[2] >= 0.5 and b[3] <= 0.03 for b in self.decor)
+
+    @property
+    def big_numbers(self) -> int:
+        """Сколько на слайде крупных чисел вместе с числами внутри блоков."""
+        free = sum(1 for s in self.slots if _is_big_number(s, self.body_pt))
+        in_units = sum(
+            len([s for s in g.unit_slots if _is_big_number(s, self.body_pt)]) * len(g.units)
+            for g in self.groups
+        )
+        return free + in_units
+
+
+def _holds_a_number(facts: SlideFacts) -> bool:
+    """Слайд держится на числе: крупное число занимает заметное место и их не больше трёх."""
+    if not 1 <= facts.big_numbers <= BIG_NUMBER_MAX:
+        return False
+    top_pt = max((s.style.size_pt or 0 for s in facts.slots), default=0)
+    return any(
+        _is_big_number(s, facts.body_pt) and geo.area(s.box) >= BIG_NUMBER_AREA
+        and (s.style.size_pt or 0) >= top_pt
+        for s in facts.slots
+    )
+
+
+def _short_captions(slots: list[Slot]) -> bool:
+    """Подписи блока короткие: имя и должность, а не абзац текста."""
+    return all(len(s.sample_text) <= TEAM_CAPTION_CHARS for s in slots)
 
 
 def _classify(facts: SlideFacts) -> tuple[SlideKind, float]:
@@ -659,17 +832,25 @@ def _classify(facts: SlideFacts) -> tuple[SlideKind, float]:
         return SlideKind.table, 0.95
     if any(a.kind == "chart" for a in areas):
         return SlideKind.chart, 0.9
+    if _holds_a_number(facts):
+        return SlideKind.big_number, 0.8
 
     sizes = [t.size_pt for t in facts.texts] or [DEFAULT_SIZE_PT]
     top_size = max(sizes)
-    typical = sorted(sizes)[len(sizes) // 2]
 
     if groups:
         group = max(groups, key=lambda g: len(g.units))
+        # Номера и фото связанной группы принадлежат тому же смысловому блоку:
+        # ряд кружков с цифрами и ряд подписей под ними это одни и те же шаги.
+        linked = [g for g in groups if g.id in group.linked_group_ids]
         count = len(group.units)
         heads = [s for s in group.unit_slots if s.role in ("heading", "title")]
-        numbers = [s for s in group.unit_slots if s.role == "number"]
-        photos = [a for a in group.unit_areas if a.kind == "image"]
+        captions = group.unit_slots + [s for g in linked for s in g.unit_slots]
+        numbers = [s for g in [group, *linked] for s in g.unit_slots if s.role == "number"]
+        photos = [a for g in [group, *linked] for a in g.unit_areas if a.kind == "image"]
+        holders = [a for a in photos if a.placeholder]
+        if count >= 3 and holders and _short_captions(captions):
+            return SlideKind.team, 0.8
         if count >= 3 and numbers:
             return SlideKind.steps, 0.8
         if count >= 3 and photos and all(abs(a.box[2] - a.box[3]) < 0.08 for a in photos):
@@ -686,9 +867,6 @@ def _classify(facts: SlideFacts) -> tuple[SlideKind, float]:
             return SlideKind.cards, 0.5
         return SlideKind.cards, 0.4
 
-    numbers = [t for t in facts.texts if _is_number(t.text)]
-    if numbers and max(t.size_pt for t in numbers) >= max(typical * 2.0, 40.0):
-        return SlideKind.big_number, 0.8
     quotes = [t for t in facts.texts if t.text[:1] in QUOTE_MARKS and len(t.text) > 30]
     if quotes:
         return SlideKind.quote, 0.75
@@ -725,9 +903,7 @@ def _build_group(cand: geo.RepeatCandidate, by_id: dict[int, ShapeInfo], slide_p
     texts = [i for i in first if _is_text_slot(i)]
     roles = _unit_roles(texts)
     unit_slots = [_make_slot(i, roles[i.shape_id], slide_pt, origin) for i in texts]
-    unit_areas = [
-        _make_area(i, origin) for i in first if i.kind in ("image", "chart", "table")
-    ]
+    unit_areas = [_make_area(i, origin) for i in first if _is_area(i)]
     return RepeatGroup(
         id=f"g{index}",
         direction=cand.direction,
@@ -742,6 +918,34 @@ def _build_group(cand: geo.RepeatCandidate, by_id: dict[int, ShapeInfo], slide_p
     )
 
 
+def _link_groups(groups: list[RepeatGroup]) -> None:
+    """Связать группы, которые повторяются синхронно: ряд номеров и ряд подписей под ними."""
+    for i, first in enumerate(groups):
+        for second in groups[i + 1:]:
+            if (first.direction, first.cols, first.rows) != (second.direction, second.cols, second.rows):
+                continue
+            if not geo.in_lockstep([u.box for u in first.units], [u.box for u in second.units]):
+                continue
+            first.linked_group_ids.append(second.id)
+            second.linked_group_ids.append(first.id)
+
+
+def _primary_group_id(groups: list[RepeatGroup]) -> str | None:
+    """Главная группа: больше текстовых слотов в блоке, при равенстве больше площадь блока."""
+    if not groups:
+        return None
+    best = max(groups, key=lambda g: (len(g.unit_slots), g.unit_size[0] * g.unit_size[1]))
+    return best.id
+
+
+def _needs_images(groups: list[RepeatGroup], areas: list[Area], primary_id: str | None) -> bool:
+    """Паттерн держится на фото: заглушка в каждом блоке главной группы или крупная заглушка."""
+    primary = next((g for g in groups if g.id == primary_id), None)
+    if primary is not None and any(a.placeholder for a in primary.unit_areas):
+        return True
+    return any(a.placeholder and geo.area(a.box) > PLACEHOLDER_SHARE for a in areas)
+
+
 def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt) -> Pattern:
     shapes = flatten_shapes(slide.shapes, slide_size, theme)
     by_id = {s.shape_id: s for s in shapes}
@@ -751,6 +955,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
     ]
     field_box = geo.content_box([s.box for s in shapes])
     cands = geo.find_repeats(frames)
+    body_pt = _body_size(shapes)
 
     groups: list[RepeatGroup] = []
     taken: set[int] = set()
@@ -763,12 +968,14 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         )
         groups.append(group)
         taken.update(cand.keys)
+    _link_groups(groups)
+    primary_id = _primary_group_id(groups)
 
     free = sorted((s for s in shapes if s.shape_id not in taken), key=_reading_order)
     texts = [s for s in free if _is_text_slot(s)]
     roles = _slide_roles(texts)
     slots = [_make_slot(s, roles[s.shape_id], slide_pt) for s in texts]
-    areas = [_make_area(s) for s in free if s.kind in ("image", "chart", "table")]
+    areas = [_make_area(s) for s in free if _is_area(s)]
 
     used = taken | {s.shape_id for s in texts} | {a.shape_id for a in areas if a.shape_id}
     decor = [s for s in shapes if s.shape_id not in used]
@@ -779,7 +986,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         color, asset = bleed_color, bleed_asset or asset
     dark = color is not None and _luma(color) < DARK_LUMA
 
-    facts = SlideFacts(slots, areas, groups, texts, [s.box for s in decor])
+    facts = SlideFacts(slots, areas, groups, texts, [s.box for s in decor], body_pt)
     kind, confidence = _classify(facts)
     return Pattern(
         id=f"p{number:03d}",
@@ -790,6 +997,8 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         theme="dark" if dark else "light",
         background_asset=asset,
         background_color=color,
+        needs_images=_needs_images(groups, areas, primary_id),
+        primary_group_id=primary_id,
         slots=slots,
         areas=areas,
         groups=groups,
