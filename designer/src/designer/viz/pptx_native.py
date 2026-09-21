@@ -19,12 +19,45 @@ _CHART_TYPES = {
     "donut": XL_CHART_TYPE.DOUGHNUT,
 }
 
-_LARGE_FRAME_SHARE = 0.5
-"""Порог высоты рамки относительно слайда: выше него кегль берётся ступенью body, иначе caption."""
+EMU_PER_PT = 12700
+
+LINE_HEIGHT = 1.2
+"""Интерлиньяж в долях кегля, тот же, что у вёрстки."""
+
+ROW_AIR = 1.8
+"""Во сколько кеглей обходится строка таблицы вместе с воздухом сверху и снизу."""
+
+CHART_LABEL_ROWS = 12
+"""На сколько строк подписей рассчитана рамка диаграммы: шкала, деления и названия рядов."""
 
 
-def _label_role(box: Box) -> str:
-    return "body" if box[3] > _LARGE_FRAME_SHARE else "caption"
+def _steps(tokens: Tokens) -> list[float]:
+    return sorted({step.size_pt for step in tokens.type_scale if step.size_pt > 0})
+
+
+def _cap_size_pt(tokens: Tokens) -> float | None:
+    """Потолок подписей: ступень title. Крупнее них подписи диаграммы уже спорят с заголовком."""
+    title = [step.size_pt for step in tokens.type_scale if step.role == "title" and step.size_pt > 0]
+    if title:
+        return max(title)
+    steps = _steps(tokens)
+    return steps[len(steps) // 2] if steps else None
+
+
+def _label_size_pt(tokens: Tokens, box: Box, slide_size_emu: tuple[int, int], rows: int) -> float | None:
+    """Кегль подписей по высоте, которая достаётся одной строке, но не ниже мелкой ступени шкалы.
+
+    Ступень образца рассчитана на мелкую подпись; в просторной рамке такой кегль читается
+    как брак вёрстки. Поэтому берём самую крупную ступень, которая в строку ещё встаёт.
+    """
+    steps = _steps(tokens)
+    if not steps:
+        return None
+    small, cap = steps[0], _cap_size_pt(tokens) or steps[-1]
+    height_pt = box[3] * slide_size_emu[1] / EMU_PER_PT
+    room = height_pt / max(rows, 1) / ROW_AIR
+    fitting = [step for step in steps if step <= room + 0.01 and step <= cap + 0.01]
+    return max(fitting) if fitting else small
 
 
 def _box_to_emu(box: Box, slide_size_emu: tuple[int, int]) -> tuple[Emu, Emu, Emu, Emu]:
@@ -46,16 +79,6 @@ def _body_font_family(tokens: Tokens) -> str | None:
         return max(body, key=lambda f: f.share).family
     if tokens.fonts:
         return tokens.fonts[0].family
-    return None
-
-
-def _type_size_pt(tokens: Tokens, role: str) -> float | None:
-    """Кегль ступени role из токенов, иначе самая мелкая ступень."""
-    matched = [s for s in tokens.type_scale if s.role == role]
-    if matched:
-        return matched[0].size_pt
-    if tokens.type_scale:
-        return min(s.size_pt for s in tokens.type_scale)
     return None
 
 
@@ -90,7 +113,7 @@ def add_chart(
     family = _body_font_family(tokens)
     if family:
         chart.font.name = family
-    label_size = _type_size_pt(tokens, _label_role(box))
+    label_size = _label_size_pt(tokens, box, slide_size_emu, CHART_LABEL_ROWS)
     if label_size:
         chart.font.size = Pt(label_size)
 
@@ -126,6 +149,10 @@ def add_chart(
         if gridline_color:
             chart.value_axis.has_major_gridlines = True
             chart.value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(gridline_color)
+        if label_size:
+            # Подписи делений наследуют кегль не всегда: у них свой, и без этого они мельчают.
+            chart.value_axis.tick_labels.font.size = Pt(label_size)
+            chart.category_axis.tick_labels.font.size = Pt(label_size)
         if text_hex:
             chart.value_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
             chart.category_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
@@ -160,6 +187,22 @@ def _write_cell(cell, text: str, family: str | None, size_pt: float | None, colo
         run.font.color.rgb = RGBColor.from_string(color_hex)
 
 
+def _set_row_heights(table, size_pt: float | None, height_emu: int) -> None:
+    """Высоты строк по содержимому: шапка той же высоты, что строка текста.
+
+    Без этого python-pptx делит рамку поровну, и шапка выходит вдвое выше своей строки.
+    Пустое место рамки при этом остаётся под таблицей, а не внутри строк.
+    """
+    if not size_pt:
+        return
+    row_emu = max(int(size_pt * LINE_HEIGHT * ROW_AIR * EMU_PER_PT), 1)
+    rows = len(table.rows)
+    if row_emu * rows > height_emu:
+        row_emu = max(int(height_emu / rows), 1)
+    for row in table.rows:
+        row.height = Emu(row_emu)
+
+
 def add_table(
     slide,
     spec: TableSpec,
@@ -183,7 +226,7 @@ def add_table(
     header_text_color = palette.contrast_text_color(accent_hex) if accent_hex else None
     surface_hex = _color_by_role(tokens, "surface")
     family = _body_font_family(tokens)
-    size_pt = _type_size_pt(tokens, _label_role(box))
+    size_pt = _label_size_pt(tokens, box, slide_size_emu, len(spec.rows) + 1)
 
     body_text_color = None
     shade_hex = surface_hex
@@ -206,4 +249,5 @@ def add_table(
             _fill_cell(cell, shade_hex if shaded else None)
             _write_cell(cell, value, family, size_pt, body_text_color)
 
+    _set_row_heights(table, size_pt, height)
     return graphic_frame

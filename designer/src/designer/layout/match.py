@@ -69,6 +69,7 @@ P_REPEAT_LAST = 2.5
 P_UNIT_SLOTS = 1.0
 P_NUMBER_FIT = 1.2
 P_EMPTY_UNITS = 2.0
+P_LOST_ITEMS = 2.0
 
 VIZ_ROOM = 0.4
 """Доля слайда, с которой свободной рамки хватает под диаграмму или таблицу."""
@@ -217,6 +218,22 @@ def _empty_units_penalty(pattern: Pattern, intent: SlideIntent) -> float:
     return 0.0 if unit_text_slots(group, linked_groups(pattern, group)) else P_EMPTY_UNITS
 
 
+def _holds_items(pattern: Pattern, intent: SlideIntent) -> bool:
+    """Есть ли куда положить пункты намерения: блок с текстовым слотом или свободные слоты.
+
+    Слот под заголовок слайда и слот под ключевую мысль пункты не принимают, они заняты.
+    Паттерн раздела с одной строкой съедает список молча, поэтому годным он не считается.
+    """
+    if not intent.items:
+        return True
+    group = primary_group(pattern)
+    if group is not None and unit_text_slots(group, linked_groups(pattern, group)):
+        return True
+    taken = 1 if intent.key_message else 0
+    places = _item_slots(pattern) + (1 if _number_slot(pattern) else 0)
+    return places > taken
+
+
 def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
     """Годится ли паттерн под намерение. Негодный берут, только когда годных нет совсем."""
     if pattern.needs_images:
@@ -230,6 +247,8 @@ def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
         if _samples(pattern):
             return False  # чужой образец останется на слайде
     elif _samples(pattern) - {want} or not _viz_room(pattern, ds):
+        return False
+    if not _holds_items(pattern, intent):
         return False
     group = primary_group(pattern)
     if group is None or not intent.items:
@@ -264,6 +283,7 @@ def score_pattern(
         - _fit_penalty(pattern, intent.items)
         - _number_penalty(pattern, intent, ds)
         - _empty_units_penalty(pattern, intent)
+        - (0.0 if _holds_items(pattern, intent) else P_LOST_ITEMS)
         - _penalty(pattern, used)
     )
     return round(total, 6)

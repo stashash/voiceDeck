@@ -8,8 +8,15 @@ from pptx.util import Emu, Pt
 
 from designer.audit.deterministic import run_checks
 from designer.contracts import ChartSpec, Item, Series, SlideIntent, SlideKind, TableSpec
-from designer.layout.capacity import title_step
-from designer.layout.compose import EDGE_AREA, VIZ_INSIDE, compose
+from designer.layout.capacity import (
+    NUMBER_MARGIN,
+    OVERLAP_MIN,
+    ink_box,
+    slide_pt,
+    text_lines,
+    title_step,
+)
+from designer.layout.compose import EDGE_AREA, VIZ_INSIDE, _hint_slots, compose
 from designer.layout.match import SAMPLE_MIN, choose_pattern
 from designer.layout.scene import build_scene
 from designer.parse import geometry as geo
@@ -432,3 +439,124 @@ def test_removed_shapes_do_not_reach_the_scene(decks):
                 continue
             left = {el.source_shape_id for el in scene.elements} & removed
             assert not left, f"{name}, слайд {intent.id}: {sorted(left)[:3]}"
+
+
+# ---------- дефекты листа 2026-09-21: фраза целиком, число одной строкой, пустые плашки ----------
+
+LONG_TITLE = "Перевод ночных отчётов на потоковую загрузку"
+"""Заголовок в 44 знака: на кегле образца он не влезал и приходил обрезанным до слова."""
+
+VALUES = ("11:00", "12 %", "6 недель")
+"""Числа с единицей: время, процент и срок. Каждое стоит в слоте целиком и одной строкой."""
+
+LIST_HEADS = ("Потоки", "Витрины", "Контроль")
+
+
+@pytest.fixture(scope="session")
+def given(templates, tmp_path_factory):
+    """Три выданных шаблона, разобранных в пакеты дизайн-системы."""
+    root = tmp_path_factory.mktemp("vydannye")
+    out = []
+    for index, path in enumerate(templates):
+        package_dir = root / f"ds{index}"
+        out.append((path.stem, build_package(path, package_dir), package_dir))
+    return out
+
+
+def _scene_of(intent, ds, package_dir):
+    pattern = choose_pattern(intent, ds, [])
+    spec = compose(intent, pattern, ds)
+    return pattern, spec, build_scene(spec, pattern, ds, package_dir)
+
+
+def _texts(scene, role=None):
+    return [el for el in scene.elements
+            if el.type == "text" and el.text.strip() and (role is None or el.role == role)]
+
+
+def test_a_long_title_reaches_the_scene_whole(given):
+    """Фраза заголовка встаёт целиком: кегль ниже образца или лишняя строка, но не обрезка."""
+    intent = SlideIntent(id="s1", kind=SlideKind.title, title=LONG_TITLE,
+                         key_message="Предложение о переходе на потоковую загрузку")
+    for name, ds, package_dir in given:
+        _, _, scene = _scene_of(intent, ds, package_dir)
+        heads = [el for el in _texts(scene) if el.text.strip() == LONG_TITLE]
+        assert heads, f"{name}: {[el.text for el in _texts(scene)]}"
+        head = heads[0]
+        size = head.style.size_pt or 0.0
+        ink = ink_box(head.box, head.text, size, slide_pt(ds.slide_size_emu))
+        assert ink[3] <= head.box[3] + 1e-6, f"{name}: строки вышли из рамки"
+
+
+def test_a_number_with_its_unit_stands_in_one_line(given):
+    """Число вместе с единицей стоит в слоте целиком: «11:00» это не «11», и без переноса."""
+    for name, ds, package_dir in given:
+        slide = slide_pt(ds.slide_size_emu)
+        for value in VALUES:
+            intent = SlideIntent(id="s1", kind=SlideKind.big_number,
+                                 title="Что показывает замер",
+                                 items=[Item(number=value, heading="замер пилота")])
+            _, _, scene = _scene_of(intent, ds, package_dir)
+            digits = _texts(scene, "number")
+            assert [el.text for el in digits] == [value], f"{name}, {value}"
+            size = (digits[0].style.size_pt or 0.0) * NUMBER_MARGIN
+            assert text_lines(value, digits[0].box, size, slide) == 1, f"{name}, {value}: перенос"
+
+
+def test_a_number_named_only_in_the_title_keeps_its_unit(given):
+    """Число берётся из заголовка целиком: у времени остаются минуты, у доли знак процента."""
+    for name, ds, package_dir in given:
+        for value, title in (("11:00", "Отчёты готовы только к 11:00 утра"),
+                             ("12 %", "Рост затрат на инфраструктуру на 12 %")):
+            intent = SlideIntent(id="s1", kind=SlideKind.big_number, title=title,
+                                 items=[Item(heading="замер пилота", body="строка пояснения")])
+            _, _, scene = _scene_of(intent, ds, package_dir)
+            assert [el.text for el in _texts(scene, "number")] == [value], f"{name}, {value}"
+
+
+def test_no_empty_photo_plate_and_no_empty_icon_in_the_scene(given):
+    """Подсказка шаблона «вставьте фото» и её плашка на слайд не попадают: картинок у нас нет."""
+    for name, ds, package_dir in given:
+        for intent in _plan():
+            pattern, spec, scene = _scene_of(intent, ds, package_dir)
+            hints = _hint_slots(pattern)
+            if hints:
+                plates = set(hints.values()) | {s.shape_id for s in pattern.slots if s.id in hints}
+                assert plates <= set(spec.remove_shape_ids), f"{name}, слайд {intent.id}"
+            left = {el.source_shape_id for el in scene.elements} & set(spec.remove_shape_ids)
+            assert not left, f"{name}, слайд {intent.id}: {sorted(left)[:3]}"
+            mute = [el.id for el in scene.elements
+                    if el.type in ("image", "icon") and el.asset is None]
+            assert not mute, f"{name}, слайд {intent.id}: {mute[:3]}"
+
+
+def test_a_list_of_three_items_shows_all_three_headings(given):
+    """Намерение со списком не уходит на паттерн раздела: видны заголовки всех трёх пунктов."""
+    intent = SlideIntent(
+        id="s2", kind=SlideKind.bullets, title="Что меняем в загрузке данных",
+        key_message="Три шага перехода",
+        items=[Item(heading=LIST_HEADS[0], body="Данные идут потоком"),
+               Item(heading=LIST_HEADS[1], body="Обновление без ночного окна"),
+               Item(heading=LIST_HEADS[2], body="Метрики задержки на виду")])
+    for name, ds, package_dir in given:
+        _, _, scene = _scene_of(intent, ds, package_dir)
+        said = " ".join(el.text for el in _texts(scene))
+        missing = [head for head in LIST_HEADS if head not in said]
+        assert not missing, f"{name}: пропали пункты {missing}"
+
+
+def test_no_text_leaves_the_frame_or_crosses_the_logo(given):
+    """Набранные строки стоят в кадре и не заходят на логотип шаблона."""
+    for name, ds, package_dir in given:
+        logos = {asset.id for asset in ds.assets if asset.kind == "logo"}
+        for intent in _plan():
+            _, _, scene = _scene_of(intent, ds, package_dir)
+            marks = [el.box for el in scene.elements
+                     if el.type in ("image", "icon") and el.asset in logos]
+            for el in _texts(scene):
+                ink = ink_box(el.box, el.text, el.style.size_pt or 0.0, slide_pt(ds.slide_size_emu))
+                assert ink[0] >= -1e-6 and ink[1] >= -1e-6, f"{name}, слайд {intent.id}: {el.id}"
+                assert geo.right(ink) <= 1 + 1e-6 and geo.bottom(ink) <= 1 + 1e-6, \
+                    f"{name}, слайд {intent.id}: {el.id}"
+                hits = [box for box in marks if geo.overlap(ink, box) > OVERLAP_MIN]
+                assert not hits, f"{name}, слайд {intent.id}: {el.id} на логотипе"

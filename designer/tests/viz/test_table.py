@@ -72,7 +72,8 @@ def test_add_table_box_matches_within_one_percent(tmp_path):
     assert shape.left == pytest.approx(box[0] * slide_w, rel=0.01)
     assert shape.top == pytest.approx(box[1] * slide_h, rel=0.01)
     assert shape.width == pytest.approx(box[2] * slide_w, rel=0.01)
-    assert shape.height == pytest.approx(box[3] * slide_h, rel=0.01)
+    # Высоты строк идут по содержимому, поэтому таблица не ниже своих строк и не выше рамки.
+    assert 0 < shape.height <= box[3] * slide_h * 1.01
 
 
 def test_add_table_more_than_seven_rows_raises():
@@ -186,7 +187,8 @@ def _tokens_with_caption_step() -> Tokens:
     return tokens
 
 
-def test_add_table_text_size_uses_caption_step_at_or_below_half_slide(tmp_path):
+def test_add_table_cells_are_not_smaller_than_the_smallest_step(tmp_path):
+    """Ячейки в просторной рамке идут крупнее мелкой ступени: 5 pt при пустом месте это брак."""
     tokens = _tokens_with_caption_step()
     prs, slide = _blank_slide()
     spec = _spec(rows=1, cols=2)
@@ -195,4 +197,18 @@ def test_add_table_text_size_uses_caption_step_at_or_below_half_slide(tmp_path):
 
     reopened = _roundtrip(prs, tmp_path)
     run = reopened.slides[0].shapes[0].table.cell(0, 0).text_frame.paragraphs[0].runs[0]
-    assert run.font.size == Pt(8)
+    small = min(step.size_pt for step in tokens.type_scale)
+    assert run.font.size >= Pt(small)
+    assert run.font.size == Pt(12)
+
+
+def test_add_table_header_row_is_as_high_as_a_text_row(tmp_path):
+    """Шапка не вдвое выше строки текста: высоты идут по содержимому, а не делением рамки."""
+    tokens = _tokens_with_caption_step()
+    prs, slide = _blank_slide()
+
+    add_table(slide, _spec(rows=3, cols=2), (0.1, 0.1, 0.5, 0.6), SLIDE_SIZE, tokens)
+
+    reopened = _roundtrip(prs, tmp_path)
+    heights = [row.height for row in reopened.slides[0].shapes[0].table.rows]
+    assert len(set(heights)) == 1

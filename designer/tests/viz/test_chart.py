@@ -180,23 +180,28 @@ def _tokens_with_body_step() -> Tokens:
     return tokens
 
 
-def test_add_chart_label_size_uses_body_step_above_half_slide(tmp_path):
-    tokens = _tokens_with_body_step()
+def _chart_label_size(tmp_path, tokens, box, name: str):
     prs, slide = _blank_slide()
-    spec = _spec("column", series_count=1)
-
-    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.6), SLIDE_SIZE, tokens)
-
-    reopened = _roundtrip(prs, tmp_path)
-    assert reopened.slides[0].shapes[0].chart.font.size == Pt(18)
+    add_chart(slide, _spec("column", series_count=1), box, SLIDE_SIZE, tokens)
+    path = tmp_path / name
+    prs.save(str(path))
+    return Presentation(str(path)).slides[0].shapes[0].chart
 
 
-def test_add_chart_label_size_uses_caption_step_at_or_below_half_slide(tmp_path):
+def test_add_chart_label_size_grows_with_the_frame(tmp_path):
+    """Просторной рамке достаётся ступень крупнее: мелкая подпись там читается как брак."""
     tokens = _tokens_with_body_step()
-    prs, slide = _blank_slide()
-    spec = _spec("column", series_count=1)
+    roomy = _chart_label_size(tmp_path, tokens, (0.1, 0.0, 0.5, 1.0), "roomy.pptx")
+    tight = _chart_label_size(tmp_path, tokens, (0.1, 0.1, 0.5, 0.3), "tight.pptx")
+    assert roomy.font.size > tight.font.size
+    assert roomy.font.size == Pt(18)
 
-    add_chart(slide, spec, (0.1, 0.1, 0.5, 0.3), SLIDE_SIZE, tokens)
 
-    reopened = _roundtrip(prs, tmp_path)
-    assert reopened.slides[0].shapes[0].chart.font.size == Pt(10)
+def test_add_chart_labels_never_go_below_the_smallest_step(tmp_path):
+    """Тесная рамка не опускает подписи ниже самой мелкой ступени шкалы."""
+    tokens = _tokens_with_body_step()
+    small = min(step.size_pt for step in tokens.type_scale)
+    chart = _chart_label_size(tmp_path, tokens, (0.1, 0.1, 0.5, 0.1), "small.pptx")
+    assert chart.font.size == Pt(small)
+    assert chart.value_axis.tick_labels.font.size == Pt(small)
+    assert chart.category_axis.tick_labels.font.size == Pt(small)
