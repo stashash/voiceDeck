@@ -72,7 +72,7 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     # Сверить цифры слайда с такими словами нечем: вычистка превращала «к 8:30» в «к :».
     # Поэтому сверяем только фрагменты без числительных: там любое число на слайде выдумано.
     if intent.title and not _NUMBER_WORDS.search(chunk_text):
-        _drop_unknown_numbers(intent, _numbers_in_text(chunk_text))
+        _drop_unknown_numbers(intent, _numbers_in_text(chunk_text), strip_text=True)
     return intent
 
 
@@ -89,11 +89,17 @@ def _check_roles(limits: dict[str, int], unit_limits: dict[str, int]) -> None:
         raise ValueError(f"fill_slots: неизвестные роли слотов {sorted(unknown)}")
 
 
+def _schema_limit(limit: int) -> int:
+    """Предел длины в схеме с запасом. Сервер модели исполняет maxLength буквально и обрывает
+    генерацию посреди слова («Готовы к диал»). Точный лимит держат промпт и сокращение по слову в коде."""
+    return int(limit * 1.6) + 12
+
+
 def _fill_schema(limits: dict[str, int], unit_limits: dict[str, int], n_units: int) -> dict:
-    properties = {role: {"type": "string", "maxLength": limit} for role, limit in limits.items()}
+    properties = {role: {"type": "string", "maxLength": _schema_limit(limit)} for role, limit in limits.items()}
     required = list(limits.keys())
     if n_units > 0:
-        item_properties = {role: {"type": "string", "maxLength": limit} for role, limit in unit_limits.items()}
+        item_properties = {role: {"type": "string", "maxLength": _schema_limit(limit)} for role, limit in unit_limits.items()}
         properties["items"] = {
             "type": "array",
             "minItems": n_units,
@@ -266,12 +272,18 @@ def _strip_unknown_numbers(text: str, allowed: set[str]) -> str:
     return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
-def _drop_unknown_numbers(draft: SlideIntent, allowed: set[str]) -> None:
-    draft.title = _strip_unknown_numbers(draft.title, allowed)
-    draft.key_message = _strip_unknown_numbers(draft.key_message, allowed)
+def _drop_unknown_numbers(draft: SlideIntent, allowed: set[str], strip_text: bool = False) -> None:
+    """Убирает числа, которых нет во входе. Из фраз цифры вырезаются только при strip_text:
+    так делает живой режим, когда во фрагменте речи чисел нет вовсе и любое число выдумано.
+    Для брифа фразы не трогаем: вырезание калечило текст («к 11:00» превращалось в «к 11:»),
+    незнакомое число в тексте находит аудит."""
+    if strip_text:
+        draft.title = _strip_unknown_numbers(draft.title, allowed)
+        draft.key_message = _strip_unknown_numbers(draft.key_message, allowed)
     for item in draft.items:
-        item.heading = _strip_unknown_numbers(item.heading, allowed)
-        item.body = _strip_unknown_numbers(item.body, allowed)
+        if strip_text:
+            item.heading = _strip_unknown_numbers(item.heading, allowed)
+            item.body = _strip_unknown_numbers(item.body, allowed)
         if item.number is not None and _numbers_in_text(item.number) - allowed:
             item.number = None
 

@@ -79,11 +79,10 @@ def _numbers_in(text: str) -> set[str]:
 
 
 def _strip_unknown(text: str, allowed: set[str]) -> str:
-    def _replace(match: re.Match[str]) -> str:
-        return match.group(0) if match.group(0).replace(",", ".") in allowed else ""
-
-    cleaned = _NUMBER.sub(_replace, text)
-    return re.sub(r"\s{2,}", " ", cleaned).strip()
+    """Текст не режем. Вырезание цифр из фразы калечило её: «к 11:00» превращалось в «к 11:».
+    Незнакомое число в тексте находит аудит (сверка чисел слайда с исходным текстом), а здесь
+    убирается только то, что можно убрать целиком: номер пункта, диаграмма."""
+    return text
 
 
 def _chart_numbers_known(chart: ChartSpec, allowed: set[str]) -> bool:

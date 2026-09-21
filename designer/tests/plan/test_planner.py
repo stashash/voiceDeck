@@ -54,12 +54,13 @@ def test_wrong_slide_count_triggers_one_retry():
     assert len(client.call_durations_ms) == 2
 
 
-def test_number_missing_from_brief_is_dropped():
+def test_number_missing_from_brief_stays_in_phrase():
     client = _client_returning(_plan_json(5, extra_number="42"))
     plan = make_plan(BRIEF, "показать эффект пилота", "регистратура", 5, client)
 
     full_text = " ".join(item.body for slide in plan.slides for item in slide.items)
-    assert "42" not in full_text
+    # Цифры из фразы не вырезаем: незнакомое число находит аудит, а не ножницы.
+    assert "42" in full_text
     assert "20" in full_text
 
 

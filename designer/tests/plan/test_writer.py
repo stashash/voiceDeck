@@ -41,7 +41,7 @@ def _client_capturing(payload: dict) -> tuple[LlmClient, dict]:
     return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler)), captured
 
 
-def test_schema_maxlength_matches_limits():
+def test_schema_maxlength_leaves_room_above_limits():
     client, captured = _client_capturing({
         "title": "Короче", "subtitle": "Тоже короче",
         "items": [{"heading": "a", "body": "b"}, {"heading": "c", "body": "d"}],
@@ -50,12 +50,13 @@ def test_schema_maxlength_matches_limits():
     fill_slots(BASE_INTENT, {"title": 40, "subtitle": 60}, {"heading": 20, "body": 50}, 2, client)
 
     schema = captured["body"]["response_format"]["json_schema"]["schema"]
-    assert schema["properties"]["title"]["maxLength"] == 40
-    assert schema["properties"]["subtitle"]["maxLength"] == 60
+    # Сервер исполняет maxLength буквально и обрывает слово: в схеме запас, точный лимит держит код.
+    assert schema["properties"]["title"]["maxLength"] > 40
+    assert schema["properties"]["subtitle"]["maxLength"] > 60
     assert schema["properties"]["items"]["minItems"] == 2
     assert schema["properties"]["items"]["maxItems"] == 2
-    assert schema["properties"]["items"]["items"]["properties"]["heading"]["maxLength"] == 20
-    assert schema["properties"]["items"]["items"]["properties"]["body"]["maxLength"] == 50
+    assert schema["properties"]["items"]["items"]["properties"]["heading"]["maxLength"] > 20
+    assert schema["properties"]["items"]["items"]["properties"]["body"]["maxLength"] > 50
 
 
 def test_fill_skill_params_are_sent_in_request_body():
@@ -127,13 +128,13 @@ def test_item_count_is_forced_to_n_units():
     assert len(client.call_durations_ms) == 2  # несовпадение числа пунктов — тоже нарушение
 
 
-def test_known_number_is_kept_unknown_number_is_dropped():
+def test_unknown_number_stays_in_phrase_and_is_left_to_audit():
     payload = {"title": "Рост 20 против 42 процента", "items": []}
     client = _client_returning(payload)
     result = fill_slots(BASE_INTENT, {"title": 60}, {}, 0, client)
 
-    assert "20" in result.title
-    assert "42" not in result.title
+    # Цифры из фразы не вырезаем: «против процента» хуже незнакомого числа, его найдёт аудит.
+    assert result.title == "Рост 20 против 42 процента"
 
 
 def test_speech_to_slide_returns_empty_title_for_greeting():
