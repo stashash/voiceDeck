@@ -18,10 +18,12 @@ run_contextual_audit по запросу человека, apply_fixes чини�
 """
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -170,14 +172,31 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
                                with_contextual_audit: bool) -> Deck:
     """Слайды, аудит, экспорт и файлы одного варианта. Пишет deck.json варианта в хранилище."""
     used_patterns = variant_axes.variant_used_seed(variant_code, chosen_by_a)
+    # Паттерны подбираются по порядку (каждый выбор учитывает предыдущие), а текст под слоты
+    # пишется одновременно для всех слайдов: сервер модели с несколькими слотами отдаёт
+    # почти втрое больше токенов в секунду, чем по одному запросу.
+    patterns: list[Pattern] = []
+    for intent in variant_plan.slides:
+        pattern = choose_pattern(intent, ds, used_patterns)
+        used_patterns.append(pattern.id)
+        patterns.append(pattern)
+
+    def _fill(job: tuple[int, SlideIntent, Pattern]) -> SlideIntent:
+        index, intent, pattern = job
+        _emit(on_event, "slide", index, variant_code)
+        return _fill_intent(intent, pattern, client, on_event, index, variant_code)
+
+    with recorder.stage(f"{variant_code}-fill-slots"):
+        with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
+            filled = list(pool.map(_fill, [(i, intent, patterns[i]) for i, intent in enumerate(variant_plan.slides)]))
+    recorder.use_skill(load_skill(_FILL_SKILL))
+
     specs: list[SlideSpec] = []
     scenes: list[Scene] = []
-    for index, intent in enumerate(variant_plan.slides):
-        _emit(on_event, "slide", index, variant_code)
-        spec, scene = _build_slide(intent, ds, package_dir, client, recorder, used_patterns, on_event,
-                                    index, variant_code)
+    for intent, pattern in zip(filled, patterns):
+        spec = compose(intent, pattern, ds)
         specs.append(spec)
-        scenes.append(scene)
+        scenes.append(build_scene(spec, pattern, ds, package_dir))
 
     _emit(on_event, "audit", None, variant_code)
     with recorder.stage(f"{variant_code}-audit"):
@@ -272,43 +291,46 @@ def _role_limits(pattern: Pattern, intent: SlideIntent, n_units: int) -> tuple[d
     return limits, unit_limits
 
 
-def _build_slide(intent: SlideIntent, ds: DesignSystem, package_dir: Path, client: LlmClient,
-                  recorder: RunRecorder, used_patterns: list[str], on_event: OnEvent,
-                  index: int, variant: str = "a") -> tuple[SlideSpec, Scene]:
-    """Паттерн, текст под лимиты, инструкция и сцена одного слайда.
+def _llm_parallel() -> int:
+    """Сколько запросов к модели идёт одновременно. Сервер должен быть поднят с тем же числом слотов."""
+    try:
+        return max(1, int(os.environ.get("DESIGNER_LLM_PARALLEL", "4")))
+    except ValueError:
+        return 4
+
+
+def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_event: OnEvent,
+                  index: int, variant: str = "a") -> SlideIntent:
+    """Текст слайда под лимиты выбранного паттерна.
 
     Сбой модели на этом слайде не пробрасывается дальше: слайд собирается из текста
     плана без переписывания, событие slide-fallback сообщает об этом.
     """
-    pattern = choose_pattern(intent, ds, used_patterns)
-    used_patterns.append(pattern.id)
     group = main_group(pattern)
     n_units = unit_count(group, len(intent.items)) if group is not None else 0
-
-    slide_intent = intent
     try:
         limits, unit_limits = _role_limits(pattern, intent, n_units)
-        with recorder.stage(f"{variant}-fill-slots"):
-            filled = fill_slots(intent, limits, unit_limits, n_units, client)
-        recorder.use_skill(load_skill(_FILL_SKILL))
+        filled = fill_slots(intent, limits, unit_limits, n_units, client)
         if n_units == 0 and intent.items:
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
-            # подгонка кегля на сцене, а не скилл заполнения, — исходный текст не теряем.
+            # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.
             filled.items = list(intent.items)
-        slide_intent = filled
+        return filled
     except Exception:
         _emit(on_event, "slide-fallback", index, variant)
-
-    spec = compose(slide_intent, pattern, ds)
-    scene = build_scene(spec, pattern, ds, package_dir)
-    return spec, scene
+        return intent
 
 
 def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text: str,
                           client: LlmClient) -> list[Finding]:
+    def _one(job: tuple[Scene, Path]) -> list[Finding]:
+        scene, png_path = job
+        return audit_slide(scene, png_path.read_bytes(), source_text, client)
+
     findings: list[Finding] = []
-    for scene, png_path in zip(scenes, png_paths):
-        findings.extend(audit_slide(scene, png_path.read_bytes(), source_text, client))
+    with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
+        for found in pool.map(_one, list(zip(scenes, png_paths))):
+            findings.extend(found)
     findings.extend(audit_deck(scenes, client))
     return findings
 

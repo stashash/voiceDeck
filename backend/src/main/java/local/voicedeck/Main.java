@@ -20,8 +20,10 @@ public final class Main {
         Map<String,Session> sessions=new ConcurrentHashMap<>();
         String allowedOrigin=env("ALLOWED_ORIGIN","http://localhost:8080");
         Set<String> origins=new HashSet<>(List.of(allowedOrigin,allowedOrigin.replace("localhost","127.0.0.1")));
+        // Страницы «Колода», «Шаблон» и «Сцена» ходят из браузера в сервис designer: его адрес разрешён для запросов и картинок слайдов.
+        String designerPublic=env("DESIGNER_PUBLIC_URL","http://localhost:8090");
         router.route().handler(ctx->{
-            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data:; frame-ancestors 'none'");
+            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerPublic+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: "+designerPublic+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
             String origin=ctx.request().getHeader("Origin");
             if(origin!=null&&!origins.contains(origin)){ctx.response().setStatusCode(403).end("Origin not allowed");return;}ctx.next();
         });
