@@ -1,4 +1,4 @@
-"""Схемы запросов и ответов HTTP API. Владелец: задача T-13."""
+"""Схемы запросов и ответов HTTP API. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
 from typing import Literal
@@ -14,13 +14,15 @@ class DeckCreateRequest(BaseModel):
     purpose: str = ""
     audience: str = ""
     slide_count: int | None = None
+    variants: list[str] = Field(default_factory=lambda: ["a"], description="a, b, c — любое подмножество")
 
 
 class DeckCreateResponse(BaseModel):
     deck_id: str
 
 
-class DeckStateResponse(BaseModel):
+class DeckVariantState(BaseModel):
+    """Состояние одного варианта колоды: своя инструкция, сцены, находки и обоснование оси."""
     status: Literal["running", "done", "error"]
     design_system_id: str
     plan: DeckPlan | None = None
@@ -28,6 +30,31 @@ class DeckStateResponse(BaseModel):
     scenes: list[Scene] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     error: str | None = None
+
+
+class DeckStateResponse(BaseModel):
+    """Состояние колоды. Верхний уровень — вариант `a` (старые клиенты); variants — все варианты."""
+    status: Literal["running", "done", "error"]
+    design_system_id: str
+    plan: DeckPlan | None = None
+    specs: list[SlideSpec] = Field(default_factory=list)
+    scenes: list[Scene] = Field(default_factory=list)
+    findings: list[Finding] = Field(default_factory=list)
+    error: str | None = None
+    variants: dict[str, DeckVariantState] = Field(default_factory=dict)
+
+
+class AuditContextualResponse(BaseModel):
+    findings: list[Finding]
+
+
+class DeckFixRequest(BaseModel):
+    finding_ids: list[str]
+
+
+class DeckFixResponse(BaseModel):
+    report: list[dict]
+    findings: list[Finding]
 
 
 class LiveSlideRequest(BaseModel):

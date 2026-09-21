@@ -182,3 +182,138 @@ def test_deck_file_path_rejects_dotdot():
     assert store.deck_file_path(deck_id, "../secret.txt") is None
     assert store.deck_file_path(deck_id, "..\\secret.txt") is None
     assert store.deck_file_path(deck_id, "deck.pptx") is not None
+
+
+# ---------- T-12: варианты вёрстки, аудит и починка по запросу ----------
+
+def _fake_convert(monkeypatch, png_count: int = 5) -> None:
+    """Конвертер подменён: файлы фейковые, окно PowerPoint/LibreOffice не открывается."""
+
+    def fake_to_pdf(pptx_path, out_path):
+        out_path.write_bytes(b"%PDF-1.4 fake")
+        return out_path
+
+    def fake_to_png(pptx_path, out_dir, width_px=1280):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for i in range(png_count):
+            p = out_dir / f"slide-{i + 1}.png"
+            p.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+            paths.append(p)
+        return paths
+
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.convert.to_pdf", fake_to_pdf)
+    monkeypatch.setattr("designer.pipeline.convert.to_png", fake_to_png)
+
+
+def test_generate_deck_with_three_variants_produces_three_pptx(templates):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client, variants=["a", "b", "c"])
+
+    assert deck.variant == "a"
+    for variant in ("a", "b", "c"):
+        pptx_path = store.deck_variant_file_path(deck.id, variant, "deck.pptx")
+        assert pptx_path is not None and pptx_path.is_file()
+        prs = Presentation(str(pptx_path))
+        assert len(prs.slides) >= 1
+
+    # прежний путь без варианта отвечает и указывает на вариант a
+    old_path = store.deck_file_path(deck.id, "deck.pptx")
+    assert old_path == store.deck_variant_file_path(deck.id, "a", "deck.pptx")
+    assert old_path.is_file()
+
+
+def test_contextual_audit_runs_once_per_deck(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=5)
+
+    calls = {"slide": 0, "deck": 0}
+
+    def fake_audit_slide(scene, png, source_text, client):
+        calls["slide"] += 1
+        return []
+
+    def fake_audit_deck(scenes, client):
+        calls["deck"] += 1
+        return []
+
+    monkeypatch.setattr("designer.pipeline.audit_slide", fake_audit_slide)
+    monkeypatch.setattr("designer.pipeline.audit_deck", fake_audit_deck)
+
+    pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                            lambda e: None, client=client, variants=["a", "b", "c"])
+
+    # audit_deck зовётся строго на колоду, не на вариант: три варианта — один вызов.
+    assert calls["deck"] == 1
+    assert calls["slide"] == 5
+
+
+def test_run_contextual_audit_for_other_variant_on_request(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=3)
+    monkeypatch.setattr("designer.pipeline.audit_slide", lambda *a, **k: [])
+    monkeypatch.setattr("designer.pipeline.audit_deck", lambda *a, **k: [])
+
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client, variants=["a", "b"])
+
+    state_b_before = store.load_deck_state(deck.id, "b")
+    assert all(f["kind"] != "contextual" for f in state_b_before["findings"])  # b ещё не аудирован
+
+    calls = {"slide": 0}
+    monkeypatch.setattr(
+        "designer.pipeline.audit_slide",
+        lambda scene, png, text, client: (calls.__setitem__("slide", calls["slide"] + 1), [])[1],
+    )
+
+    new_findings = pipeline.run_contextual_audit(deck.id, "b", client=client)
+
+    assert calls["slide"] > 0
+    assert isinstance(new_findings, list)
+
+
+def test_run_contextual_audit_without_rendered_slides_raises(templates):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client)
+
+    with pytest.raises(RuntimeError):
+        pipeline.run_contextual_audit(deck.id, "a", client=client)
+
+
+def test_apply_fixes_rebuilds_files_and_returns_report(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client)
+
+    def fake_apply_fixes(specs, scenes, findings, finding_ids, ds):
+        report = [{"finding_id": fid, "status": "fixed", "what": "передвинут в поля"} for fid in finding_ids]
+        return specs, scenes, report
+
+    monkeypatch.setattr("designer.pipeline.audit_fixes.apply_fixes", fake_apply_fixes)
+
+    report, findings = pipeline.apply_fixes(deck.id, "a", ["fake.finding.0"])
+
+    assert report == [{"finding_id": "fake.finding.0", "status": "fixed", "what": "передвинут в поля"}]
+    assert isinstance(findings, list)
+
+    pptx_path = store.deck_variant_file_path(deck.id, "a", "deck.pptx")
+    assert pptx_path.is_file()
+    prs = Presentation(str(pptx_path))
+    assert len(prs.slides) == 5
+
+    new_state = store.load_deck_state(deck.id, "a")
+    assert new_state["status"] == "done"
+
+
+def test_apply_fixes_unknown_deck_raises():
+    with pytest.raises(ValueError):
+        pipeline.apply_fixes("no-such-deck", "a", ["x"])
