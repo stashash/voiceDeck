@@ -6,7 +6,16 @@
 from __future__ import annotations
 
 from designer.contracts import DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
-from designer.layout.capacity import content_region, linked_groups, main_group, primary_group, unit_text_slots
+from designer.layout.capacity import (
+    content_region,
+    line_capacity,
+    linked_groups,
+    main_group,
+    primary_group,
+    slide_pt,
+    title_step,
+    unit_text_slots,
+)
 from designer.parse import geometry as geo
 
 # Семьи типов: внутри семьи замена читается естественно.
@@ -57,6 +66,8 @@ W_CONFIDENCE = 0.5
 P_REPEAT = 0.8
 P_REPEAT_LAST = 2.5
 P_UNIT_SLOTS = 1.0
+P_NUMBER_FIT = 1.2
+P_EMPTY_UNITS = 2.0
 
 VIZ_ROOM = 0.4
 """Доля слайда, с которой свободной рамки хватает под диаграмму или таблицу."""
@@ -184,6 +195,27 @@ def _number_slot(pattern: Pattern) -> bool:
             or any(slot.role == "number" for g in pattern.groups for slot in g.unit_slots))
 
 
+def _number_penalty(pattern: Pattern, intent: SlideIntent, ds: DesignSystem | None) -> float:
+    """Штраф за слот, в который число намерения не встаёт даже на ступени title."""
+    value = next((item.number for item in intent.items if item.number), None)
+    slots = [slot for slot in pattern.slots if slot.role == "number"]
+    if not value or ds is None or not slots:
+        return 0.0
+    floor = title_step(ds.tokens.type_scale)
+    if not floor:
+        return 0.0
+    room = line_capacity(slots[0].box, floor, slide_pt(ds.slide_size_emu))
+    return 0.0 if room >= len(value) else P_NUMBER_FIT
+
+
+def _empty_units_penalty(pattern: Pattern, intent: SlideIntent) -> float:
+    """Штраф за блоки, которые заполнить нечем: ни своих текстовых слотов, ни связанных."""
+    group = primary_group(pattern)
+    if not intent.items or group is None:
+        return 0.0
+    return 0.0 if unit_text_slots(group, linked_groups(pattern, group)) else P_EMPTY_UNITS
+
+
 def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
     """Годится ли паттерн под намерение. Негодный берут, только когда годных нет совсем."""
     if pattern.needs_images:
@@ -229,6 +261,8 @@ def score_pattern(
         + W_TITLE * _title_score(pattern, intent)
         + W_CONFIDENCE * pattern.kind_confidence
         - _fit_penalty(pattern, intent.items)
+        - _number_penalty(pattern, intent, ds)
+        - _empty_units_penalty(pattern, intent)
         - _penalty(pattern, used)
     )
     return round(total, 6)

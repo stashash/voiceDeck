@@ -19,13 +19,19 @@ from designer.contracts import (
     Slot,
 )
 from designer.layout.capacity import (
+    OVERLAP_MIN,
     content_region,
-    fit_size,
     free_box,
+    head_top,
+    ink_box,
+    line_capacity,
     linked_groups,
     primary_group,
     size_floor,
     slide_pt,
+    slot_size,
+    step_down,
+    text_lines,
     unit_boxes,
     unit_count,
     unit_slot_box,
@@ -82,8 +88,22 @@ def _item_text(item: Item) -> str:
     return _join(item.heading, item.body)
 
 
+def _number_text(value: str, slot: Slot, slide: tuple[float, float] | None) -> str:
+    """Номер без ведущего нуля, когда «01» не встаёт в слот в одну строку."""
+    size = slot.style.size_pt
+    if slide is None or not size:
+        return value
+    if len(value) <= line_capacity(slot.box, size, slide):
+        return value
+    return value.lstrip("0") or value
+
+
 def _unit_texts(
-    groups: list[RepeatGroup], items: list[Item], n: int, lead_taken: bool = False
+    groups: list[RepeatGroup],
+    items: list[Item],
+    n: int,
+    lead_taken: bool = False,
+    slide: tuple[float, float] | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     """Пункты по слотам блока: номер, заголовок, пояснение.
 
@@ -109,7 +129,7 @@ def _unit_texts(
                 pass  # число уже стоит крупным слотом слайда
             elif numbers:
                 gid, slot = numbers[0]
-                texts[gid][slot.id] = item.number or str(index + 1)
+                texts[gid][slot.id] = _number_text(item.number or str(index + 1), slot, slide)
             elif item.number:
                 # Номера в блоке нет: число не теряем, оно идёт впереди заголовка.
                 head = f"{item.number} {head}".strip()
@@ -183,7 +203,7 @@ def _fitted(
         text, size = texts.get(slot.id, ""), slot.style.size_pt
         if not text or not size:
             continue
-        out[slot.id] = fit_size(text, slot.box, size, scale, slide, size_floor(scale, slot.role))
+        out[slot.id] = slot_size(text, slot.box, size, slot.role, scale, slide)
 
     group = next((g for g in pattern.groups if g.id == spec.group_id), None)
     if group is None or not n:
@@ -199,13 +219,13 @@ def _fitted(
             if not size:
                 continue
             sizes = [
-                fit_size(
+                slot_size(
                     unit_texts[index][slot.id],
                     unit_slot_box(old, new, slot.box),
                     size,
+                    slot.role,
                     scale,
                     slide,
-                    size_floor(scale, slot.role),
                 )
                 for index, new in enumerate(boxes)
                 if index < len(unit_texts) and unit_texts[index].get(slot.id)
@@ -213,6 +233,105 @@ def _fitted(
             if sizes:
                 # Один кегль на все блоки: разнобой внутри ряда виден сразу.
                 out[slot.id] = min(sizes)
+    return out
+
+
+def _room_below(box: Box, busy: list[Box]) -> float:
+    """Высота от верха рамки до ближайшего, что стоит под ней."""
+    tops = [b[1] for b in busy
+            if b[1] > box[1] + 1e-9 and min(geo.right(box), geo.right(b)) - max(box[0], b[0]) > 0]
+    return min([*tops, geo.bottom(box)]) - box[1]
+
+
+def _standing(
+    pattern: Pattern, spec: SlideSpec, texts: dict[str, str], fitted: dict[str, float],
+    slide: tuple[float, float], n: int, skip: str,
+) -> list[Box]:
+    """Что уже стоит на слайде: набранные строки слотов, блоки групп и картинки шаблона."""
+    out = [ink_box(s.box, texts[s.id], fitted.get(s.id, s.style.size_pt or 0.0), slide)
+           for s in pattern.slots if s.id != skip and texts.get(s.id)]
+    out += [a.box for a in pattern.areas if not a.placeholder and a.kind not in _SAMPLE_VIZ]
+    group = next((g for g in pattern.groups if g.id == spec.group_id), None)
+    if group is not None and n:
+        linked = [g for g in pattern.groups if g.id in spec.linked_unit_text]
+        main, other = unit_boxes(group, linked, n)
+        out += [*main, *(box for boxes in other.values() for box in boxes)]
+    return out
+
+
+def _room_fix(
+    pattern: Pattern, spec: SlideSpec, texts: dict[str, str], fitted: dict[str, float],
+    ds: DesignSystem, n: int,
+) -> None:
+    """Крупный слот ужимается до высоты, свободной над тем, что под ним.
+
+    Рамка разделителя и крупного числа в шаблоне часто ниже самой строки: она выходит
+    из рамки и наезжает на подпись. Обычный текст такой правки не требует, он и так по шкале.
+    """
+    slide = slide_pt(ds.slide_size_emu)
+    scale = ds.tokens.type_scale
+    top = head_top(scale)
+    if top is None:
+        return
+    for slot in pattern.slots:
+        text, size = texts.get(slot.id, ""), slot.style.size_pt or 0.0
+        if not text or size <= top + 0.01:
+            continue
+        room = _room_below(slot.box, _standing(pattern, spec, texts, fitted, slide, n, slot.id))
+        if room >= slot.box[3] - 1e-9:
+            continue
+        box = (slot.box[0], slot.box[1], slot.box[2], max(room, 0.0))
+        fitted[slot.id] = slot_size(text, box, size, slot.role, scale, slide)
+
+
+def _hit_slots(
+    head: Slot,
+    text: str,
+    size: float,
+    below: list[Slot],
+    texts: dict[str, str],
+    fitted: dict[str, float],
+    slide: tuple[float, float],
+) -> list[Slot]:
+    """Слоты под заголовком, на которые заходят его набранные строки."""
+    ink = ink_box(head.box, text, size, slide)
+    out = []
+    for slot in below:
+        own = fitted.get(slot.id, slot.style.size_pt or 0.0)
+        if geo.overlap(ink, ink_box(slot.box, texts[slot.id], own, slide)) > OVERLAP_MIN:
+            out.append(slot)
+    return out
+
+
+def _head_fix(
+    pattern: Pattern, head: Slot | None, texts: dict[str, str], fitted: dict[str, float], ds: DesignSystem
+) -> set[int]:
+    """Заголовок, ставший выше образца, разводится с тем, что стоит под ним.
+
+    Сначала заголовок опускается на ступень шкалы. Если строки всё равно заходят на слот
+    под ним, текст того слота убирается, а его фигура уходит со слайда.
+    """
+    if head is None or not texts.get(head.id):
+        return set()
+    slide = slide_pt(ds.slide_size_emu)
+    scale = ds.tokens.type_scale
+    text = texts[head.id]
+    size = fitted.get(head.id, head.style.size_pt or 0.0)
+    if not size or text_lines(text, head.box, size, slide) <= head.max_lines:
+        return set()
+    below = [s for s in pattern.slots
+             if s.id != head.id and texts.get(s.id) and s.box[1] > head.box[1]]
+    if not _hit_slots(head, text, size, below, texts, fitted, slide):
+        return set()
+    lower = step_down(scale, size, size_floor(scale, head.role))
+    if lower < size:
+        size = lower
+        fitted[head.id] = size
+    out: set[int] = set()
+    for slot in _hit_slots(head, text, size, below, texts, fitted, slide):
+        texts[slot.id] = ""
+        fitted.pop(slot.id, None)
+        out.add(slot.shape_id)
     return out
 
 
@@ -234,6 +353,9 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         texts[lead_slot.id] = lead
 
     group = primary_group(pattern) if want is None else None
+    if group is not None and not group.unit_slots:
+        # Блоки без единого текстового слота это оформление: заполнить их нечем.
+        group = None
     linked = linked_groups(pattern, group) if group is not None else []
     rest = list(intent.items)
     n = 0
@@ -243,7 +365,8 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
             n = min(n, other.max_units)
         n = max(n, group.min_units)
         linked = [other for other in linked if other.min_units <= n <= other.max_units]
-        spread = _unit_texts([group, *linked], rest, n, lead_slot is not None and len(rest) == 1)
+        spread = _unit_texts([group, *linked], rest, n,
+                             lead_slot is not None and len(rest) == 1, slide_pt(ds.slide_size_emu))
         spec.group_id = group.id
         spec.unit_text = spread[group.id]
         spec.linked_unit_text = {other.id: spread[other.id] for other in linked}
@@ -276,6 +399,8 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.viz_area_id, spec.viz_box = _viz_place(pattern, ds, want, busy)
 
     spec.slot_text = texts
-    spec.remove_shape_ids = _removed(pattern, spec, texts, n)
     spec.fitted_size_pt = _fitted(pattern, spec, texts, ds, n)
+    _room_fix(pattern, spec, texts, spec.fitted_size_pt, ds, n)
+    cleared = _head_fix(pattern, title, texts, spec.fitted_size_pt, ds)
+    spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared)
     return spec

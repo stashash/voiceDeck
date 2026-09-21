@@ -1,4 +1,4 @@
-"""Подбор паттерна под намерение. Задачи T-07 и T-19."""
+"""Подбор паттерна под намерение. Задачи T-07, T-19 и T-22."""
 import random
 
 import pytest
@@ -200,6 +200,47 @@ def test_final_slide_avoids_blocks_and_visualisation():
     ds = _ds([_title(), _cards(), _chart()])
     intent = SlideIntent(id="s8", kind=SlideKind.thanks, title="Спасибо за внимание")
     assert choose_pattern(intent, ds, []).id == "p001"
+
+
+# ---------- дефекты живой колоды: пустые блоки и длина крупного числа ----------
+
+def _bars(pid="p002", kind=SlideKind.steps):
+    """Ряд цветных полос без единого текстового слота: заполнить их нечем."""
+    return _pattern(pid, kind, groups=[_group("g1", 3, 6, [])])
+
+
+def test_pattern_whose_blocks_have_no_text_is_not_taken():
+    ds = _ds([_bars(), _cards("p005")])
+    intent = SlideIntent(id="s1", kind=SlideKind.steps, title="Как идёт работа", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_empty_blocks_lose_even_when_no_pattern_fits():
+    photo = _cards("p005")
+    photo.needs_images = True
+    ds = _ds([_bars(), photo])
+    intent = SlideIntent(id="s1", kind=SlideKind.steps, title="Как идёт работа", items=_items(3))
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def _numbered(pid, width):
+    return _pattern(pid, SlideKind.big_number, confidence=0.9,
+                    slots=[_slot(1, "title", (0.05, 0.08, 0.6, 0.12), 36),
+                           _slot(7, "number", (0.05, 0.35, width, 0.3), 72)])
+
+
+def test_big_number_pattern_must_fit_the_whole_value():
+    ds = _ds([_numbered("p002", 0.03), _numbered("p005", 0.4)])
+    intent = SlideIntent(id="s1", kind=SlideKind.big_number, title="Сколько это занимает",
+                         items=[Item(number="120", heading="минут на колоду")])
+    assert choose_pattern(intent, ds, []).id == "p005"
+
+
+def test_short_value_fits_the_narrow_slot_too():
+    ds = _ds([_numbered("p002", 0.03), _numbered("p005", 0.4)])
+    intent = SlideIntent(id="s1", kind=SlideKind.big_number, title="Сколько это занимает",
+                         items=[Item(number="5", heading="минут на колоду")])
+    assert choose_pattern(intent, ds, []).id == "p002"
 
 
 def test_visualisation_needs_room_on_the_slide():

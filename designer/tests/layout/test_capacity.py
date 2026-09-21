@@ -1,10 +1,11 @@
-"""Вместимость слотов при перекладке блоков. Задачи T-07 и T-19."""
+"""Вместимость слотов при перекладке блоков. Задачи T-07, T-19 и T-22."""
 from designer.contracts import (
     Margins, Pattern, RepeatGroup, RepeatUnit, SlideKind, Slot, TextStyle, TypeStep,
 )
 from designer.layout.capacity import (
-    box_capacity, content_region, fit_size, free_box, linked_groups, main_group, primary_group,
-    size_floor, slide_pt, slot_limits, unit_boxes, unit_text_slots,
+    box_capacity, content_region, fit_size, free_box, head_top, line_capacity, linked_groups,
+    main_group, primary_group, size_floor, slide_pt, slot_limits, slot_size, text_lines,
+    title_step, unit_boxes, unit_text_slots, word_size,
 )
 
 SLIDE = (9144000, 5143500)
@@ -121,6 +122,53 @@ def test_step_above_the_current_size_does_not_hold_the_font():
     scale = [TypeStep(size_pt=36, role="title", share=0.5), TypeStep(size_pt=18, role="body", share=0.5)]
     assert size_floor(scale, "heading") == 36.0
     assert fit_size("и" * 500, (0.05, 0.1, 0.2, 0.06), 20.0, scale, SLIDE_PT, 36.0) == 18.0
+
+
+# ---------- подгонка по слову и промежуточный кегль ----------
+
+WORD = "Согласование"
+"""Слово из двенадцати знаков: при крупном кегле оно шире рамки разделителя."""
+
+
+def test_font_fits_the_longest_word_in_the_width():
+    box = (0.05, 0.30, 0.30, 0.20)
+    size = fit_size(WORD, box, 80.0, SCALE, SLIDE_PT)
+    assert size < 80.0
+    assert size <= word_size(WORD, box, SLIDE_PT)
+    assert line_capacity(box, size, SLIDE_PT) >= len(WORD)
+
+
+def test_big_slot_gets_a_size_between_the_steps():
+    scale = [TypeStep(size_pt=28, role="title", share=0.3),
+             TypeStep(size_pt=18, role="body", share=0.4),
+             TypeStep(size_pt=12, role="caption", share=0.3)]
+    box = (0.05, 0.30, 0.30, 0.20)
+    size = slot_size(WORD, box, 80.0, "title", scale, SLIDE_PT)
+    assert size not in {28.0, 18.0, 12.0}
+    assert size >= title_step(scale)
+    assert size <= word_size(WORD, box, SLIDE_PT)
+
+
+def test_intermediate_size_below_the_title_step_is_not_taken():
+    """Промежуточный кегль ниже ступени title не берут: слот идёт по ступеням, как обычный."""
+    box = (0.05, 0.30, 0.06, 0.20)
+    size = slot_size(WORD, box, 80.0, "title", SCALE, SLIDE_PT)
+    assert size < title_step(SCALE)
+    assert size in {step.size_pt for step in SCALE}
+
+
+def test_scale_names_the_top_of_headings_and_the_title_step():
+    assert head_top(SCALE) == 36.0
+    assert title_step(SCALE) == 36.0
+    without_title = [TypeStep(size_pt=30, role="heading", share=0.5),
+                     TypeStep(size_pt=14, role="body", share=0.5)]
+    assert title_step(without_title) == 30.0
+
+
+def test_text_lines_count_the_wrapped_lines():
+    box = (0.05, 0.10, 0.20, 0.30)
+    assert text_lines("коротко", box, 12.0, SLIDE_PT) == 1
+    assert text_lines("и" * 60, box, 12.0, SLIDE_PT) == 3
 
 
 # ---------- связанные группы ----------

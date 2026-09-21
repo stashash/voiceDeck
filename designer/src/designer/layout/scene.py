@@ -22,10 +22,9 @@ from designer.contracts import (
     TextStyle,
 )
 from designer.layout.capacity import (
-    fit_size,
     primary_group,
-    size_floor,
     slide_pt,
+    slot_size,
     unit_boxes,
     unit_count,
 )
@@ -109,8 +108,7 @@ def _text_element(
     if size_pt:
         fitted = size_pt
     else:
-        scale = ds.tokens.type_scale
-        fitted = fit_size(text, clipped, size, scale, slide, size_floor(scale, role)) if size else size
+        fitted = slot_size(text, clipped, size, role, ds.tokens.type_scale, slide) if size else size
     return Element(
         id=el_id,
         type="text",

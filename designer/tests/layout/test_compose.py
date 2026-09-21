@@ -1,4 +1,4 @@
-"""Намерение -> инструкция сборки слайда. Задачи T-07 и T-19."""
+"""Намерение -> инструкция сборки слайда. Задачи T-07, T-19 и T-22."""
 from designer.contracts import (
     Area, ChartSpec, DesignSystem, Item, Margins, Pattern, RepeatGroup, RepeatUnit,
     Series, SlideIntent, SlideKind, Slot, TableSpec, TextStyle, Tokens, TypeStep,
@@ -248,3 +248,90 @@ def test_fitted_size_steps_down_for_a_long_heading():
     spec = compose(_intent(items=items), _cards(), _ds())
     assert spec.fitted_size_pt["s102"] == 18.0  # один кегль на все блоки ряда
     assert spec.fitted_size_pt["s1"] == 36.0
+
+
+# ---------- дефекты живой колоды: заголовок, пустые блоки, короткие номера ----------
+
+LONG_TITLE = "Три причины попробовать сервис уже на этой неделе, а не потом"
+
+
+def _head_pair(title_box, sub_box, title_size=36.0):
+    """Заголовок и подзаголовок вплотную под ним: длинный заголовок на него наедет."""
+    slots = [_slot(1, "title", title_box, title_size), _slot(2, "subtitle", sub_box, 18)]
+    return Pattern(id="p009", source_slide=1, layout_name="макет", kind=SlideKind.section,
+                   kind_confidence=0.8, theme="light", slots=slots)
+
+
+def _scale_ds(steps):
+    ds = _ds()
+    ds.tokens.type_scale = [TypeStep(size_pt=size, role=role, share=1 / len(steps))
+                            for size, role in steps]
+    return ds
+
+
+def test_tall_title_steps_down_over_the_subtitle():
+    ds = _scale_ds([(36, "title"), (28, "heading"), (24, "heading"), (18, "body")])
+    pattern = _head_pair((0.05, 0.05, 0.5, 0.18), (0.05, 0.19, 0.5, 0.06))
+    spec = compose(_intent(kind=SlideKind.section, title=LONG_TITLE[:40], items=[]), pattern, ds)
+    assert spec.fitted_size_pt["s1"] == 24.0
+    assert spec.slot_text["s2"] == "Почему это работает"
+    assert 2 not in spec.remove_shape_ids
+
+
+def test_subtitle_leaves_when_stepping_down_does_not_help():
+    ds = _scale_ds([(36, "title"), (18, "body")])
+    pattern = _head_pair((0.05, 0.05, 0.5, 0.18), (0.05, 0.15, 0.5, 0.06))
+    spec = compose(_intent(kind=SlideKind.section, title=LONG_TITLE, items=[]), pattern, ds)
+    assert spec.slot_text["s2"] == ""
+    assert 2 in spec.remove_shape_ids
+    assert "s2" not in spec.fitted_size_pt
+
+
+def test_short_title_leaves_the_subtitle_alone():
+    ds = _scale_ds([(36, "title"), (18, "body")])
+    pattern = _head_pair((0.05, 0.05, 0.5, 0.18), (0.05, 0.15, 0.5, 0.06))
+    spec = compose(_intent(kind=SlideKind.section, title="Три причины", items=[]), pattern, ds)
+    assert spec.slot_text["s2"] == "Почему это работает"
+    assert 2 not in spec.remove_shape_ids
+
+
+def test_group_without_text_slots_leaves_the_slide():
+    pattern = _cards()
+    bars = _second_group()
+    bars.unit_slots = []
+    pattern.groups = [bars]
+    pattern.primary_group_id = bars.id
+    spec = compose(_intent(items=_items(3)), pattern, _ds())
+    assert spec.group_id is None
+    assert {300, 301, 302} <= set(spec.remove_shape_ids)
+
+
+def test_linked_group_without_text_slots_keeps_the_count_of_the_main_one():
+    pattern = _linked_steps()
+    pattern.groups[0].unit_slots = []  # от ряда номеров осталось одно оформление
+    spec = compose(_intent(kind=SlideKind.steps, items=_items(2)), pattern, _ds())
+    assert spec.group_id == "g2"
+    assert len(spec.linked_unit_text["g1"]) == len(spec.unit_text) == 2
+    assert 402 in spec.remove_shape_ids and 400 not in spec.remove_shape_ids
+
+
+def test_number_drops_the_leading_zero_in_a_tight_slot():
+    pattern = _cards()
+    pattern.groups[0].unit_slots[0] = _slot(101, "number", (0.0, 0.0, 0.02, 0.05), 24)
+    items = [Item(number="01", heading="Разбор"), Item(number="02", heading="Сборка")]
+    spec = compose(_intent(kind=SlideKind.steps, items=items), pattern, _ds())
+    assert [unit["s101"] for unit in spec.unit_text] == ["1", "2"]
+
+
+def test_big_number_shrinks_to_the_room_above_the_caption():
+    """Строка крупного числа выше своей рамки: она ужимается до подписи под ней."""
+    pattern = Pattern(id="p010", source_slide=1, layout_name="макет", kind=SlideKind.big_number,
+                      kind_confidence=0.8, theme="light",
+                      slots=[_slot(1, "title", (0.05, 0.05, 0.6, 0.10), 36),
+                             _slot(7, "number", (0.05, 0.25, 0.3, 0.50), 160),
+                             _slot(8, "caption", (0.05, 0.55, 0.4, 0.08), 16)])
+    intent = _intent(kind=SlideKind.big_number, title="Сколько это занимает", key_message="",
+                     items=[Item(number="5", heading="минут на колоду")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s7"] == "5"
+    assert spec.fitted_size_pt["s7"] * 1.2 / SLIDE_PT[1] <= 0.55 - 0.25 + 1e-9

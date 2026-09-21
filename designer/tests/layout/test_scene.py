@@ -1,4 +1,4 @@
-"""Сборка сцены слайда: фигуры образца, новый текст, переложенные блоки. Задачи T-07 и T-19."""
+"""Сборка сцены слайда: фигуры образца, новый текст, переложенные блоки. Задачи T-07, T-19, T-22."""
 import re
 
 import pytest
@@ -8,6 +8,7 @@ from pptx.util import Emu, Pt
 
 from designer.audit.deterministic import run_checks
 from designer.contracts import ChartSpec, Item, Series, SlideIntent, SlideKind, TableSpec
+from designer.layout.capacity import title_step
 from designer.layout.compose import compose
 from designer.layout.match import SAMPLE_MIN, choose_pattern
 from designer.layout.scene import build_scene
@@ -333,6 +334,48 @@ def test_audit_finds_no_placeholder_text_and_no_overlap_with_the_visualisation(d
         hits = [f for f in findings
                 if f.check_id == "layout.overlap" and viz_ids & set(f.element_ids)]
         assert not hits, f"{name}: {[f.message for f in hits[:3]]}"
+
+
+# ---------- дефекты живой колоды: длинное слово, заголовок и то, что под ним ----------
+
+def test_long_word_of_a_separator_does_not_break(packages):
+    """Разделитель: слово целиком в рамке, кегль не ниже ступени title, переполнения нет."""
+    for name, ds, package_dir in packages:
+        intent = SlideIntent(id="s1", kind=SlideKind.section, title="Реструктуризация")
+        pattern = choose_pattern(intent, ds, [])
+        spec = compose(intent, pattern, ds)
+        scene = build_scene(spec, pattern, ds, package_dir)
+        overflow = [f for f in run_checks([scene], ds) if f.check_id == "layout.text_overflow"]
+        assert not overflow, f"{name}: {[f.message for f in overflow[:2]]}"
+        said = [el for el in scene.elements if el.type == "text" and el.text == intent.title]
+        assert said, f"{name}: заголовка нет на слайде"
+        floor = title_step(ds.tokens.type_scale)
+        for el in said:
+            assert el.style.size_pt >= floor - 1e-6, f"{name}: {el.style.size_pt} вместо {floor}"
+
+
+def test_no_text_runs_into_other_text_on_every_template(decks):
+    """Заголовок не наезжает на подзаголовок, крупное число на подпись под ним."""
+    for name, ds, deck in decks:
+        scenes = _scenes(deck)
+        texts = {(scene.slide_id, el.id)
+                 for scene in scenes for el in scene.elements if el.type == "text"}
+        hits = [f for f in run_checks(scenes, ds)
+                if f.check_id == "layout.overlap"
+                and all((f.slide_id, el) in texts for el in f.element_ids)]
+        assert not hits, f"{name}: {[f.message for f in hits[:3]]}"
+
+
+def test_no_block_of_the_deck_stands_empty(decks):
+    """Блок без текстового слота на слайде не остаётся: его нечем заполнить."""
+    for name, _, deck in decks:
+        for intent, pattern, spec, _ in deck:
+            for group in pattern.groups:
+                if group.unit_slots or group.id in spec.linked_unit_text:
+                    continue
+                shapes = {sid for unit in group.units for sid in unit.shape_ids}
+                left = shapes - set(spec.remove_shape_ids)
+                assert not left, f"{name}, слайд {intent.id}: {sorted(left)[:3]}"
 
 
 def test_removed_shapes_do_not_reach_the_scene(decks):
