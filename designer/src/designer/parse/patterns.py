@@ -77,6 +77,10 @@ FLAT_VARIANCE = 600
 """Разброс цвета картинки, ниже которого на ней нет деталей."""
 
 PLACEHOLDER_SHARE = 0.15
+LAYOUT_PICTURE_MIN_AREA = 0.05
+"""Доля кадра, с которой картинка макета считается иллюстрацией, а не значком."""
+LAYOUT_PICTURE_GAP = 0.02
+"""Зазор между текстом и картинкой макета, доля ширины кадра."""
 """Доля слайда под заглушкой, с которой слайд без своей картинки выглядит недоделанным."""
 
 TEAM_CAPTION_CHARS = 40
@@ -999,6 +1003,34 @@ def _needs_images(groups: list[RepeatGroup], areas: list[Area], primary_id: str 
     return any(a.placeholder and geo.area(a.box) > PLACEHOLDER_SHARE for a in areas)
 
 
+def _layout_pictures(slide, slide_size) -> list[geo.Box]:
+    """Картинки макета не на весь кадр: заполнитель шаблона бывает шире них, а текст на них не читается."""
+    boxes = []
+    for shape in slide.slide_layout.shapes:
+        if shape.is_placeholder or _shape_kind(shape) != "image":
+            continue
+        box = _shape_box(shape, IDENTITY, slide_size)
+        if box[2] < geo.FULL_BLEED or box[3] < geo.FULL_BLEED:
+            boxes.append(box)
+    return boxes
+
+
+def _clip_to_layout(slot: Slot, slide, slide_size) -> Slot:
+    """Слот сужается до левого края картинки макета, на которую он заходит справа.
+
+    Заполнитель титула в шаблоне бывает на всю ширину, а справа в макете стоит иллюстрация:
+    короткий текст образца до неё не доходит, длинный лёг бы на неё.
+    """
+    x, y, w, h = slot.box
+    right = x + w
+    for px, py, pw, ph in _layout_pictures(slide, slide_size):
+        if py < y + h and py + ph > y and x < px < right and pw * ph > LAYOUT_PICTURE_MIN_AREA:
+            right = min(right, px - LAYOUT_PICTURE_GAP)
+    if right >= x + w - 1e-6 or right - x < w * 0.3:
+        return slot
+    return slot.model_copy(update={"box": (x, y, right - x, h)})
+
+
 def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt) -> Pattern:
     shapes = flatten_shapes(slide.shapes, slide_size, theme)
     by_id = {s.shape_id: s for s in shapes}
@@ -1027,7 +1059,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
     free = sorted((s for s in shapes if s.shape_id not in taken), key=_reading_order)
     texts = [s for s in free if _is_text_slot(s)]
     roles = _slide_roles(texts)
-    slots = [_make_slot(s, roles[s.shape_id], slide_pt) for s in texts]
+    slots = [_clip_to_layout(_make_slot(s, roles[s.shape_id], slide_pt), slide, slide_size) for s in texts]
 
     plain = [s for s in free if not _is_text_slot(s) and not _is_photo_placeholder(s)]
     sample = _chart_sample(plain)

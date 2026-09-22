@@ -139,7 +139,7 @@ def _live(placed: dict[int, _Placed], shape_id: int) -> _Placed | None:
 
 # ---------- заполнение слайда ----------
 
-def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern) -> None:
+def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern, slide_size: tuple[int, int]) -> None:
     slots = {slot.id: slot for slot in pattern.slots}
     for slot_id, text in spec.slot_text.items():
         slot = slots.get(slot_id)
@@ -147,6 +147,8 @@ def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern) -
             continue
         item = _live(placed, slot.shape_id)
         if item is not None:
+            if abs(item.box[2] - slot.box[2]) > 0.005:
+                _set_box(item, slot.box, slide_size)  # разбор сузил слот, чтобы текст не лёг на картинку макета
             set_text(item.element, text, spec.fitted_size_pt.get(slot_id), wrap=slot.role != "number")
 
 
@@ -382,7 +384,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     issue = _next_id(slide)
     _relayout_if_bare(slide, spec, pattern, ds)
     _remove_shapes(placed, spec.remove_shape_ids)
-    _fill_slots(placed, spec, pattern)
+    _fill_slots(placed, spec, pattern, ds.slide_size_emu)
     _fill_group(placed, spec, pattern, ds, issue)
     _fill_viz(slide, placed, spec, pattern, ds)
     _prune_groups(slide)

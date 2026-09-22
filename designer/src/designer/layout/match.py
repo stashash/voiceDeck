@@ -303,5 +303,8 @@ def choose_pattern(intent: SlideIntent, ds: DesignSystem, used: list[str] | None
     if not ds.patterns:
         raise ValueError("в дизайн-системе нет ни одного паттерна")
     seen = list(used or [])
+    if intent.kind is SlideKind.big_number and not any(_number_slot(p) for p in ds.patterns):
+        # В шаблоне нет слайда с крупной цифрой: число уходит в заголовок раздела, а не в мелкую плашку.
+        intent = intent.model_copy(update={"kind": SlideKind.section})
     suitable = [p for p in ds.patterns if fits(intent, p, ds)]
     return min(suitable or ds.patterns, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))

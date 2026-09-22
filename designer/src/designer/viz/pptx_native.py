@@ -36,10 +36,11 @@ def _steps(tokens: Tokens) -> list[float]:
 
 
 def _cap_size_pt(tokens: Tokens) -> float | None:
-    """Потолок подписей: ступень title. Крупнее них подписи диаграммы уже спорят с заголовком."""
-    title = [step.size_pt for step in tokens.type_scale if step.role == "title" and step.size_pt > 0]
-    if title:
-        return max(title)
+    """Потолок подписей: ступень body, иначе title. Крупнее подписи таблицы и диаграммы спорят с заголовком."""
+    for role in ("body", "title"):
+        sizes = [step.size_pt for step in tokens.type_scale if step.role == role and step.size_pt > 0]
+        if sizes:
+            return max(sizes)
     steps = _steps(tokens)
     return steps[len(steps) // 2] if steps else None
 
