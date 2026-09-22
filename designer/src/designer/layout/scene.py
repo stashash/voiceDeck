@@ -19,12 +19,16 @@ from designer.contracts import (
     RepeatGroup,
     Scene,
     SlideSpec,
+    Slot,
     TextStyle,
 )
 from designer.layout.capacity import (
+    LINE_HEIGHT,
+    number_caption,
     primary_group,
     slide_pt,
     slot_size,
+    split_number,
     unit_boxes,
     unit_count,
 )
@@ -216,6 +220,26 @@ def _unit_elements(
     return out
 
 
+def _captioned_number(
+    slot: Slot, text: str, z: int, ds: DesignSystem, slide: tuple[float, float],
+    size_pt: float | None, caption_pt: float | None,
+) -> list[Element]:
+    """Число и подпись из одной фигуры образца: число строкой сверху, подпись под ним своим кеглем."""
+    number, caption = split_number(text)
+    size = size_pt or slot.style.size_pt or 0.0
+    x, y, w, h = slot.box
+    head = min(h, size * LINE_HEIGHT / slide[1]) if size else h / 2
+    out = [
+        _text_element(slot.id, slot.role, (x, y, w, head), number, slot.style, z, slot.shape_id, ds, slide, size_pt),
+        _text_element(
+            f"{slot.id}c", "caption", (x, y + head, w, h - head), caption,
+            slot.style.model_copy(update={"size_pt": caption_pt or slot.style.size_pt, "bold": False}),
+            z, slot.shape_id, ds, slide, caption_pt,
+        ),
+    ]
+    return [element for element in out if element is not None]
+
+
 def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir: Path) -> Scene:
     """Сцена слайда: каждый объект с окончательной рамкой, текстом и ссылкой на фигуру образца."""
     pres = _presentation(Path(package_dir) / SOURCE_NAME)
@@ -259,11 +283,19 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
     for slot in pattern.slots:
         if slot.id == viz_id or slot.shape_id in removed:
             continue
+        text = spec.slot_text.get(slot.id, "")
+        if number_caption(slot) and split_number(text)[1]:
+            info = infos.get(slot.shape_id)
+            elements.extend(_captioned_number(
+                slot, text, order.get(slot.shape_id, 0), ds, slide_size,
+                spec.fitted_size_pt.get(slot.id), info.tail_size_pt if info else None,
+            ))
+            continue
         element = _text_element(
             slot.id,
             slot.role,
             slot.box,
-            spec.slot_text.get(slot.id, ""),
+            text,
             slot.style,
             order.get(slot.shape_id, 0),
             slot.shape_id,

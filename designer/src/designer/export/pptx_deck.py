@@ -17,6 +17,7 @@ from pptx.oxml.ns import qn
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
+from designer.layout.capacity import number_caption, split_number
 from designer.layout.units import map_shape_box, place_units
 from designer.parse.package import SOURCE_NAME
 from designer.viz.pptx_native import add_chart, add_table
@@ -147,9 +148,13 @@ def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern, s
             continue
         item = _live(placed, slot.shape_id)
         if item is not None:
-            if abs(item.box[2] - slot.box[2]) > 0.005:
-                _set_box(item, slot.box, slide_size)  # разбор сузил слот, чтобы текст не лёг на картинку макета
-            set_text(item.element, text, spec.fitted_size_pt.get(slot_id), wrap=slot.role != "number")
+            if abs(item.box[2] - slot.box[2]) > 0.005 or abs(item.box[3] - slot.box[3]) > 0.005:
+                # Разбор сузил слот до картинки макета или укоротил до плашки: текст туда не заходит.
+                _set_box(item, slot.box, slide_size)
+            # Число с подписью в одной фигуре: подписи нужен перенос, каждой строке своё оформление.
+            captioned = number_caption(slot) and bool(split_number(text)[1])
+            set_text(item.element, text, spec.fitted_size_pt.get(slot_id),
+                     wrap=slot.role != "number" or captioned, per_line=captioned)
 
 
 def _group_of(pattern: Pattern, group_id: str | None) -> RepeatGroup | None:

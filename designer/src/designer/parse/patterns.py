@@ -46,6 +46,9 @@ IDENTITY = (1.0, 1.0, 0.0, 0.0)
 
 NUMBER_RE = re.compile(r"^\d[\d\s.,:+\-/×xX]*\s*(%|[^\W\d_]{1,3})?$")
 
+NUMBER_MASK_RE = re.compile(r"^([xхXХ]{1,4}\s*%|[xхXХ]{2,4})$")
+"""Маска числа в образце: «ххх%», «x%», «XX»."""
+
 NUMBER_MAX_CHARS = 6
 """Длина числового образца: «43 %», «1 200», «5 лет»."""
 
@@ -77,11 +80,16 @@ FLAT_VARIANCE = 600
 """Разброс цвета картинки, ниже которого на ней нет деталей."""
 
 PLACEHOLDER_SHARE = 0.15
+"""Доля слайда под заглушкой, с которой слайд без своей картинки выглядит недоделанным."""
+
 LAYOUT_PICTURE_MIN_AREA = 0.05
 """Доля кадра, с которой картинка макета считается иллюстрацией, а не значком."""
+
 LAYOUT_PICTURE_GAP = 0.02
 """Зазор между текстом и картинкой макета, доля ширины кадра."""
-"""Доля слайда под заглушкой, с которой слайд без своей картинки выглядит недоделанным."""
+
+PLATE_PAD = 0.02
+"""Отступ текста от нижнего края плашки, доля высоты кадра."""
 
 TEAM_CAPTION_CHARS = 40
 """Длина подписи блока, которая читается как имя и должность, а не как абзац."""
@@ -121,6 +129,8 @@ class ShapeInfo:
     box: geo.Box
     text: str = ""
     size_pt: float = DEFAULT_SIZE_PT
+    tail_size_pt: float | None = None
+    """Кегль текста после первого переноса строки, если он задан у самого фрагмента."""
     style: TextStyle = field(default_factory=TextStyle)
     placeholder: str | None = None
     image_part: str | None = None
@@ -208,6 +218,7 @@ def flatten_shapes(container, slide_size, theme, transform=IDENTITY, out=None) -
             box=box,
             text=text[:300],
             size_pt=size,
+            tail_size_pt=_tail_size(shape),
             style=_text_style(shape, size, theme),
             placeholder=_placeholder_role(shape),
             image_part=_blip_part_name(shape),
@@ -343,6 +354,23 @@ def _font_size(shape) -> float:
     if size is None:
         size = DEFAULT_SIZE_PT
     return round(size * _autofit_scale(shape), 1)
+
+
+def _tail_size(shape) -> float | None:
+    """Кегль первого фрагмента после первого переноса строки: подпись под числом в той же рамке."""
+    if not shape.has_text_frame:
+        return None
+    seen_break = False
+    for para in shape.text_frame._txBody.findall(qn("a:p")):
+        for node in para:
+            if node.tag == qn("a:br"):
+                seen_break = True
+            elif node.tag == qn("a:r") and seen_break and (node.findtext(qn("a:t")) or "").strip():
+                props = node.find(qn("a:rPr"))
+                size = props.get("sz") if props is not None else None
+                return int(size) / 100 if size else None
+        seen_break = True  # следующий абзац тоже начинается с новой строки
+    return None
 
 
 def _first_run_props(shape):
@@ -666,12 +694,30 @@ def _capacity(box: geo.Box, size_pt: float, slide_pt: tuple[float, float]) -> tu
 
 def _is_number(text: str) -> bool:
     value = text.strip()
-    return bool(value) and len(value) <= NUMBER_MAX_CHARS and bool(NUMBER_RE.match(value))
+    return bool(value) and len(value) <= NUMBER_MAX_CHARS and bool(
+        NUMBER_RE.match(value) or NUMBER_MASK_RE.match(value)
+    )
+
+
+def _is_captioned_number(info: ShapeInfo) -> bool:
+    """Число и подпись в одной рамке: первая строка число, после переноса подпись вдвое мельче.
+
+    Так в шаблоне бывает нарисован слайд с крупным числом: «ххх%», перенос, «данные показателя».
+    Подпись того же кегля, что и число («2019», перенос, «Запуск»), это пункт хронологии.
+    """
+    parts = re.split(r"[\v\n]", info.text.strip(), maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip() or not _is_number(parts[0]) or not info.tail_size_pt:
+        return False
+    return info.size_pt >= info.tail_size_pt * NUMBER_RATIO
+
+
+def _numeric(info: ShapeInfo) -> bool:
+    return _is_number(info.text) or _is_captioned_number(info)
 
 
 def _body_size(items: list[ShapeInfo]) -> float:
     """Кегль основного текста слайда: середина кеглей нечисловых подписей."""
-    sizes = sorted(i.size_pt for i in items if i.has_text and not _is_number(i.text))
+    sizes = sorted(i.size_pt for i in items if i.has_text and not _numeric(i))
     if not sizes:
         return DEFAULT_SIZE_PT
     return sizes[len(sizes) // 2]
@@ -731,7 +777,7 @@ def _slide_roles(items: list[ShapeInfo]) -> dict[int, str]:
             roles[info.shape_id] = "subtitle"
         elif info.placeholder == "footer" or (info.box[1] > 0.86 and info.size_pt <= 14):
             roles[info.shape_id] = "footer"
-        elif _is_number(info.text):
+        elif _numeric(info):
             roles[info.shape_id] = "number"
         elif info.size_pt >= top_size * 0.7:
             roles[info.shape_id] = "heading"
@@ -751,7 +797,7 @@ def _unit_roles(items: list[ShapeInfo]) -> dict[int, str]:
     top_size = max(i.size_pt for i in ordered)
     head_done = False
     for info in ordered:
-        if _is_number(info.text):
+        if _numeric(info):
             roles[info.shape_id] = "number"
         elif not head_done and info.size_pt >= top_size - 0.01:
             roles[info.shape_id] = "heading"
@@ -1015,6 +1061,31 @@ def _layout_pictures(slide, slide_size) -> list[geo.Box]:
     return boxes
 
 
+def _clip_to_plate(slot: Slot, decor: list[ShapeInfo], slide_pt) -> Slot:
+    """Слот, который начинается на плашке и выходит за её нижний край, укорачивается до плашки.
+
+    Образец держит на плашке строку-другую, а рамка текста у него уходит ниже плашки:
+    по такой рамке подгонка разрешает лишнюю строку, и она ложится под край плашки.
+    """
+    x, y, w, h = slot.box
+    bottom = y + h
+    for info in decor:
+        if info.kind not in ("shape", "text") or info.has_text:
+            continue
+        px, py, pw, ph = info.box
+        if pw >= geo.FULL_BLEED and ph >= geo.FULL_BLEED:
+            continue  # подложка на весь кадр это фон
+        inside = px - 1e-3 <= x and x + w <= px + pw + 1e-3 and py <= y < py + ph
+        if inside and y + h > py + ph + 1e-3:
+            bottom = min(bottom, py + ph - PLATE_PAD)
+    size = slot.style.size_pt or DEFAULT_SIZE_PT
+    if bottom >= y + h - 1e-6 or (bottom - y) * slide_pt[1] < 2 * size * LINE_HEIGHT:
+        return slot  # плашка на одну строку: рамка текста шире неё ради отступа, а не ради строк
+    box = (x, y, w, bottom - y)
+    chars, lines = _capacity(box, size, slide_pt)
+    return slot.model_copy(update={"box": box, "max_chars": chars, "max_lines": lines})
+
+
 def _clip_to_layout(slot: Slot, slide, slide_size) -> Slot:
     """Слот сужается до левого края картинки макета, на которую он заходит справа.
 
@@ -1071,6 +1142,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
 
     used = taken | {s.shape_id for s in texts} | {a.shape_id for a in areas if a.shape_id}
     decor = [s for s in shapes if s.shape_id not in used]
+    slots = [_clip_to_plate(slot, decor, slide_pt) for slot in slots]
 
     color, asset = _background(slide, theme)
     bleed_color, bleed_asset = _full_bleed_fill(shapes, slide, theme)

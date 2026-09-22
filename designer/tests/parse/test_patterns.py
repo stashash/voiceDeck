@@ -154,7 +154,7 @@ def test_team_slides_keep_places_for_photos(templates, number):
     assert holders and all(a.kind == "image" for a in holders)
 
 
-@pytest.mark.parametrize("part,number", [("Education", 18), ("VK Tech", 33)])
+@pytest.mark.parametrize("part,number", [("Education", 18), ("VK Tech", 33), ("WorkSpace", 17)])
 def test_slide_built_around_one_number(templates, part, number):
     pattern = slide_of(templates, part, number)
     assert pattern.kind is SlideKind.big_number

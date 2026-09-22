@@ -435,3 +435,16 @@ def test_big_number_shrinks_to_the_room_above_the_caption():
     spec = compose(intent, pattern, _ds())
     assert spec.slot_text["s7"] == "5"
     assert spec.fitted_size_pt["s7"] * 1.2 / SLIDE_PT[1] <= 0.55 - 0.25 + 1e-9
+
+
+def test_caption_goes_under_the_number_when_the_sample_holds_both():
+    number = _slot(6, "number", (0.5, 0.2, 0.35, 0.3), 80).model_copy(
+        update={"sample_text": "ххх%\vданные показателя"})
+    pattern = _cards(extra_slots=[number, _slot(7, "body", (0.05, 0.4, 0.3, 0.2), 16)])
+    pattern.groups = []
+    intent = _intent(kind=SlideKind.big_number, key_message="",
+                     items=[Item(number="8:30", heading="новое время готовности отчёта")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s6"] == "8:30\nновое время готовности отчёта"
+    assert spec.slot_text["s7"] == ""
+    assert spec.fitted_size_pt["s6"] >= 36

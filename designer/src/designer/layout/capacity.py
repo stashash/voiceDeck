@@ -118,6 +118,18 @@ def word_size(text: str, box: Box, slide: tuple[float, float]) -> float:
     return box[2] * slide[0] / (len(word) * CHAR_WIDTH)
 
 
+def number_caption(slot: Slot) -> bool:
+    """Слот числа с подписью в той же рамке: в образце за числом идёт перенос и подпись мельче."""
+    sample = slot.sample_text.strip().replace("\v", "\n")
+    return slot.role == "number" and "\n" in sample
+
+
+def split_number(text: str) -> tuple[str, str]:
+    """Число и подпись под ним: первая строка и всё, что после переноса."""
+    number, _, caption = text.partition("\n")
+    return number, caption
+
+
 def text_lines(text: str, box: Box, size_pt: float, slide: tuple[float, float]) -> int:
     """Сколько строк занимает набранный текст. Считается так же, как в аудите."""
     if not text or size_pt <= 0 or box[2] <= 0:
@@ -216,6 +228,7 @@ def number_size(
     по ширине рамки, а не по ступеням шкалы, и с запасом на ширину цифр. Ниже floor
     число не опускается: мельче его на слайде не видно, а узкую рамку отбирает подбор паттерна.
     """
+    text = split_number(text)[0]  # подпись под числом набрана своим кеглем образца
     if not text or size_pt <= 0 or box[2] <= 0:
         return size_pt
     width = box[2] * slide[0] / (len(text) * CHAR_WIDTH * NUMBER_MARGIN)

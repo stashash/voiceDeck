@@ -28,10 +28,12 @@ from designer.layout.capacity import (
     lead_number,
     line_capacity,
     linked_groups,
+    number_caption,
     primary_group,
     size_floor,
     slide_pt,
     slot_size,
+    split_number,
     step_down,
     text_lines,
     unit_boxes,
@@ -123,13 +125,16 @@ def _hint_slots(pattern: Pattern) -> dict[str, int]:
 
 
 def _take(
-    free: list[Slot], roles: tuple[str, ...], biggest: bool = False, avoid: Box | None = None
+    free: list[Slot], roles: tuple[str, ...], biggest: bool = False, avoid: Box | None = None,
+    text: str = "",
 ) -> Slot | None:
     """Забрать свободный слот одной из ролей: первый по порядку чтения или самый крупный.
 
     avoid это рамка, отданная диаграмме или таблице: слот из неё берут, только если другого нет.
+    text это то, что ляжет в слот: подпись месяца «Апр» из образца диаграммы фразу не держит.
     """
-    matches = [slot for slot in free if slot.role in roles]
+    room = min(len(text), HINT_CHARS)
+    matches = [slot for slot in free if slot.role in roles and slot.max_chars >= room]
     if avoid is not None:
         matches = [slot for slot in matches if not _inside(slot.box, avoid)] or matches
     if not matches:
@@ -145,6 +150,40 @@ def _join(*parts: str) -> str:
 
 def _item_text(item: Item) -> str:
     return _join(item.heading, item.body)
+
+
+def _captioned_numbers(
+    intent: SlideIntent, lead: str | None, lead_slot: Slot | None, free: list[Slot],
+    avoid: Box | None, texts: dict[str, str],
+) -> list[Item]:
+    """Числа пунктов по свободным слотам числа, подпись пункта под числом в той же рамке.
+
+    Шаблон рисует слайд с числом одной фигурой: «ххх%», перенос, «данные показателя».
+    Пункт, чьи число и подпись встали в такую фигуру, дальше по слотам не идёт.
+    Возвращает пункты, которые ещё надо разложить.
+    """
+    rest = list(intent.items)
+    placed: list[tuple[Slot, Item]] = []
+    if lead_slot is not None:
+        owner = next((item for item in rest if item.number == lead), None)
+        if owner is None and len(rest) == 1 and not rest[0].number:
+            owner = rest[0]  # число взято из заголовка, единственный пункт его поясняет
+        if owner is not None:
+            placed.append((lead_slot, owner))
+    for item in rest:
+        if not item.number or any(item is done for _, done in placed):
+            continue
+        slot = _take(free, ("number",), avoid=avoid)
+        if slot is None:
+            break
+        texts[slot.id] = item.number
+        placed.append((slot, item))
+    for slot, item in placed:
+        caption = _item_text(item)
+        if number_caption(slot) and caption:
+            texts[slot.id] = f"{split_number(texts[slot.id])[0]}\n{caption}"
+            rest = [other for other in rest if other is not item]
+    return rest
 
 
 def _number_text(value: str, slot: Slot, slide: tuple[float, float] | None) -> str:
@@ -363,12 +402,19 @@ def _room_below(box: Box, busy: list[Box]) -> float:
     return min([*tops, geo.bottom(box)]) - box[1]
 
 
+def _slot_ink(slot: Slot, text: str, size: float, slide: tuple[float, float]) -> Box:
+    """Набранные строки слота. Число с подписью занимает рамку целиком: подпись стоит под числом."""
+    if number_caption(slot) and split_number(text)[1]:
+        return slot.box
+    return ink_box(slot.box, text, size, slide)
+
+
 def _standing(
     pattern: Pattern, spec: SlideSpec, texts: dict[str, str], fitted: dict[str, float],
     slide: tuple[float, float], n: int, skip: str,
 ) -> list[Box]:
     """Что уже стоит на слайде: набранные строки слотов, блоки групп и картинки шаблона."""
-    out = [ink_box(s.box, texts[s.id], fitted.get(s.id, s.style.size_pt or 0.0), slide)
+    out = [_slot_ink(s, texts[s.id], fitted.get(s.id, s.style.size_pt or 0.0), slide)
            for s in pattern.slots if s.id != skip and texts.get(s.id)]
     out += [a.box for a in pattern.areas if not a.placeholder and a.kind not in _SAMPLE_VIZ]
     group = next((g for g in pattern.groups if g.id == spec.group_id), None)
@@ -418,7 +464,7 @@ def _hit_slots(
     out = []
     for slot in below:
         own = fitted.get(slot.id, slot.style.size_pt or 0.0)
-        if geo.overlap(ink, ink_box(slot.box, texts[slot.id], own, slide)) > OVERLAP_MIN:
+        if geo.overlap(ink, _slot_ink(slot, texts[slot.id], own, slide)) > OVERLAP_MIN:
             out.append(slot)
     return out
 
@@ -481,6 +527,8 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         group = None
     linked = linked_groups(pattern, group) if group is not None else []
     rest = list(intent.items)
+    if group is None:
+        rest = _captioned_numbers(intent, lead, lead_slot, free, region, texts)
     n = 0
     if rest and group is not None:
         n = unit_count(group, len(rest))
@@ -497,22 +545,23 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         rest = []
 
     if intent.key_message:
+        message = intent.key_message
         slot = (
-            _take(free, ("subtitle",), avoid=region)
-            or _take(free, ("body",), biggest=True, avoid=region)
-            or _take(free, ("heading",), biggest=True, avoid=region)
-            or _take(free, ("caption",), biggest=True, avoid=region)
+            _take(free, ("subtitle",), avoid=region, text=message)
+            or _take(free, ("body",), biggest=True, avoid=region, text=message)
+            or _take(free, ("heading",), biggest=True, avoid=region, text=message)
+            or _take(free, ("caption",), biggest=True, avoid=region, text=message)
         )
         if slot is not None:
-            texts[slot.id] = intent.key_message
+            texts[slot.id] = message
 
     if intent.attribution:
-        slot = _take(free, _SIDE_ROLES, avoid=region)
+        slot = _take(free, _SIDE_ROLES, avoid=region, text=intent.attribution)
         if slot is not None:
             texts[slot.id] = intent.attribution
 
     for item in rest:
-        slot = _take(free, _ITEM_ROLES, avoid=region)
+        slot = _take(free, _ITEM_ROLES, avoid=region, text=_item_text(item))
         if slot is None:
             break
         texts[slot.id] = _item_text(item)

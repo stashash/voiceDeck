@@ -137,3 +137,13 @@ def test_set_text_without_size_keeps_sample_size(tmp_path):
 
     shape = _reopen(prs, tmp_path)
     assert shape.text_frame.paragraphs[0].runs[0].font.size == SAMPLE_SIZE
+
+
+def test_number_and_caption_keep_their_own_sizes(tmp_path):
+    prs, box = _textbox()
+    set_text(box, "8:30\nновое время готовности отчёта", size_pt=60, per_line=True)
+    shape = _reopen(prs, tmp_path)
+    runs = [r for p in shape.text_frame.paragraphs for r in p.runs]
+    assert [r.text for r in runs] == ["8:30", "новое время готовности отчёта"]
+    assert runs[0].font.size == Pt(60)
+    assert runs[1].font.size == Pt(11)

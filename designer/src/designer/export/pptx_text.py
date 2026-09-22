@@ -13,7 +13,9 @@ from pptx.oxml.ns import nsdecls, qn
 _XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
 
-def set_text(shape, text: str, size_pt: float | None = None, wrap: bool = True) -> None:
+def set_text(
+    shape, text: str, size_pt: float | None = None, wrap: bool = True, per_line: bool = False
+) -> None:
     """Пишет текст в фигуру, сохраняя оформление первого фрагмента первого абзаца.
 
     Лишние фрагменты и абзацы убираются, перевод строки даёт новый абзац с тем же оформлением.
@@ -22,11 +24,24 @@ def set_text(shape, text: str, size_pt: float | None = None, wrap: bool = True) 
 
     size_pt — кегль после подгонки вёрстки. Если задан, ставится всем фрагментам,
     а автоподбор кегля PowerPoint у фигуры выключается: иначе размер поплывёт при открытии.
+
+    per_line — каждая строка берёт оформление своей строки образца, последняя за всех остальных,
+    а size_pt ставится только первой. Так число и подпись под ним в одной фигуре остаются
+    каждое своим кеглем и цветом.
     """
     body = _text_body(shape)
     if body is None:
         return
     run_props, para_props = _sample_props(body)
+    if per_line:
+        styles = _line_props(body) or [run_props]
+        if size_pt is not None:
+            styles[0] = _with_size(styles[0], size_pt)
+            _disable_autofit(body)
+        for para in body.findall(qn("a:p")):
+            body.remove(para)
+        body.append(_broken_paragraph(_lines(text), styles, para_props))
+        return
     if size_pt is not None:
         run_props = _with_size(run_props, size_pt)
         _disable_autofit(body)
@@ -103,6 +118,44 @@ def _lines(text: str) -> list[str]:
     plain = text.replace("\r\n", "\n").replace("\r", "\n").replace("\v", "\n")
     plain = "".join(ch if ch >= " " or ch in "\t\n" else " " for ch in plain)
     return plain.split("\n")
+
+
+def _line_props(body) -> list:
+    """Оформление строк образца по порядку: строку начинает абзац или перенос внутри абзаца."""
+    out = []
+    for para in body.findall(qn("a:p")):
+        line = None
+        for node in para:
+            if node.tag == qn("a:br"):
+                if line is not None:
+                    out.append(line)
+                line = None
+            elif node.tag == qn("a:r") and line is None and (node.findtext(qn("a:t")) or "").strip():
+                line = node.find(qn("a:rPr"))
+                if line is None:
+                    line = parse_xml("<a:rPr %s/>" % nsdecls("a"))
+        if line is not None:
+            out.append(line)
+    return out
+
+
+def _broken_paragraph(lines: list[str], styles: list, para_props):
+    """Один абзац, строки через перенос: как число и подпись под ним в образце."""
+    para = parse_xml("<a:p %s/>" % nsdecls("a"))
+    if para_props is not None:
+        para.append(copy.deepcopy(para_props))
+    for index, line in enumerate(lines):
+        props = styles[min(index, len(styles) - 1)]
+        if index:
+            para.append(parse_xml("<a:br %s/>" % nsdecls("a")))
+        run = parse_xml("<a:r %s><a:t/></a:r>" % nsdecls("a"))
+        if props is not None:
+            run.insert(0, copy.deepcopy(props))
+        text_node = run.find(qn("a:t"))
+        text_node.text = line
+        text_node.set(_XML_SPACE, "preserve")
+        para.append(run)
+    return para
 
 
 def _paragraph(line: str, run_props, para_props):
