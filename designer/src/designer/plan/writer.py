@@ -74,6 +74,10 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     # Поэтому сверяем только фрагменты без числительных: там любое число на слайде выдумано.
     if intent.title and not _NUMBER_WORDS.search(chunk_text):
         _drop_unknown_numbers(intent, _numbers_in_text(chunk_text), strip_text=True)
+    # Крупное число держит одно значение. Несколько показателей в одной реплике это карточки,
+    # иначе пункты втискиваются в подписи под одним числом.
+    if intent.kind is SlideKind.big_number and len(intent.items) > 1 and SlideKind.cards in kinds:
+        intent.kind = SlideKind.cards
     return intent
 
 

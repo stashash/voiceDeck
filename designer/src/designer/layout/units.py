@@ -38,6 +38,10 @@ def place_units(group: RepeatGroup, n: int) -> list[Box]:
     gap = max(step_x - unit_w, 0.0)
     span = cols * unit_w + (cols - 1) * gap
     if group.direction == "row" or n <= cols:
+        if n > cols:
+            # Редкий ряд (зазор шире блока) при добавлении блоков сжимал их до нечитаемой ширины:
+            # лишний зазор отдаётся блокам, ширина ряда остаётся как в образце.
+            gap = min(gap, unit_w * 0.25)
         return _row(x0, y0, span, gap, unit_h, n)
     rows = math.ceil(n / cols)
     boxes: list[Box] = []
