@@ -228,7 +228,9 @@ def test_deck_state_lists_slide_images_and_serves_them(client, templates, monkey
     state = client.get(f"/decks/{deck_id}")
     assert state.status_code == 200
     addresses = state.json()["slide_images"]
-    assert addresses == [f"/decks/{deck_id}/a/slides/{n}.png" for n in range(1, 6)]
+    # В адресе метка времени файла: после починки картинка перерисована, браузер не берёт прежнюю из кэша.
+    assert [a.split("?")[0] for a in addresses] == [f"/decks/{deck_id}/a/slides/{n}.png" for n in range(1, 6)]
+    assert all(a.split("?v=")[1].isdigit() for a in addresses)
     assert state.json()["variants"]["a"]["slide_images"] == addresses
 
     image = client.get(addresses[0])

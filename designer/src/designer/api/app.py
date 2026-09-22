@@ -155,7 +155,13 @@ def get_deck(deck_id: str) -> DeckStateResponse:
 def _variant_state(deck_id: str, variant: str) -> DeckVariantState:
     """Состояние варианта с адресами картинок слайдов: их пишет конвейер после экспорта pptx."""
     state = DeckVariantState(**store.load_deck_state(deck_id, variant))
-    state.slide_images = [f"/decks/{deck_id}/{variant}/slides/{number}.png"
+    # После починки картинка перерисована по тому же адресу: метка времени файла в адресе
+    # не даёт браузеру показать прежнюю из кэша.
+    def _stamp(number: int) -> int:
+        path = store.deck_variant_slide_path(deck_id, variant, number)
+        return int(path.stat().st_mtime) if path is not None else 0
+
+    state.slide_images = [f"/decks/{deck_id}/{variant}/slides/{number}.png?v={_stamp(number)}"
                            for number in store.deck_variant_slide_numbers(deck_id, variant)]
     return state
 
