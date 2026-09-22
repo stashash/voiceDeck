@@ -2,13 +2,13 @@ name: Deploy Frontend to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
-  id-token: write
+  id-token: ***
 
 # Avoid concurrent deploys clobbering each other
 concurrency:
@@ -38,6 +38,11 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+      # Tell Pages what URL this artifact will live at. Required for
+      # `actions/deploy-pages@v4` to wire up the environment correctly.
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -53,3 +58,10 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
+          # SPA fallback: any unknown path falls back to /index.html
+          # so client-side routing keeps working after page reloads.
+          single_page_app: true
+          # 404.html with same content as index.html for legacy hash routing
+          index.html: /index.html
