@@ -356,3 +356,11 @@ def test_font_size_falls_back_to_default(tmp_path):
     slot = extract_patterns(deck)[0].slots[0]
     assert slot.style.size_pt == 18.0
     assert slot.max_lines == 2
+
+
+def test_card_header_plate_moves_with_its_card(templates):
+    pattern = slide_of(templates, "WorkSpace", 16)
+    units = next(g for g in pattern.groups if g.id == pattern.primary_group_id).units
+    # Плашки 692 и 696 есть у первых двух карточек, третья залита целиком.
+    assert 692 in units[0].shape_ids and 696 in units[1].shape_ids
+    assert not {692, 696} & {shape.shape_id for shape in pattern.decor}

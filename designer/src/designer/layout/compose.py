@@ -258,8 +258,13 @@ def _own_area(pattern: Pattern, want: str) -> Area | None:
 def _viz_place(
     pattern: Pattern, ds: DesignSystem, want: str, busy: list[Box]
 ) -> tuple[str | None, Box | None]:
-    """Где встанет диаграмма или таблица: своя область шаблона или свободная рамка слайда."""
-    frame = free_box(content_region(pattern, ds.tokens.margins), busy)
+    """Где встанет диаграмма или таблица: своя область шаблона или свободная рамка слайда.
+
+    Картинка макета со слайда не уходит, поэтому свободная рамка обходит и её.
+    """
+    layout = next((item for item in ds.layouts if item.name == pattern.layout_name), None)
+    pictures = list(layout.pictures) if layout is not None else []
+    frame = free_box(content_region(pattern, ds.tokens.margins), [*busy, *pictures])
     own = _own_area(pattern, want)
     if own is not None and not any(geo.overlap(own.box, box) > 0 for box in busy):
         if frame is None or geo.area(own.box) >= AREA_KEEP * geo.area(frame):
@@ -483,7 +488,9 @@ def _head_fix(
     scale = ds.tokens.type_scale
     text = texts[head.id]
     size = fitted.get(head.id, head.style.size_pt or 0.0)
-    if not size or text_lines(text, head.box, size, slide) <= head.max_lines:
+    # Наезд считается по набранным строкам, а не по рамке: рамка заголовка в шаблоне бывает
+    # на две строки, а подзаголовок стоит сразу под первой.
+    if not size or text_lines(text, head.box, size, slide) <= 1:
         return set()
     below = [s for s in pattern.slots
              if s.id != head.id and texts.get(s.id) and s.box[1] > head.box[1]]

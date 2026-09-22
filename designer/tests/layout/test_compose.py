@@ -448,3 +448,13 @@ def test_caption_goes_under_the_number_when_the_sample_holds_both():
     assert spec.slot_text["s6"] == "8:30\nновое время готовности отчёта"
     assert spec.slot_text["s7"] == ""
     assert spec.fitted_size_pt["s6"] >= 36
+
+
+def test_chart_frame_goes_around_the_layout_picture():
+    from designer.contracts import LayoutInfo
+    chart = ChartSpec(type="column", categories=["I", "II"], series=[Series(name="план", values=[1, 2])])
+    pattern = _cards()
+    ds = _ds()
+    ds.layouts = [LayoutInfo(name="макет", master_index=0, pictures=[(0.0, 0.0, 0.39, 1.0)])]
+    spec = compose(_intent(kind=SlideKind.chart, items=[], key_message="", chart=chart), pattern, ds)
+    assert spec.viz_box is not None and spec.viz_box[0] >= 0.39 - 1e-9

@@ -85,11 +85,17 @@ PLACEHOLDER_SHARE = 0.15
 LAYOUT_PICTURE_MIN_AREA = 0.05
 """Доля кадра, с которой картинка макета считается иллюстрацией, а не значком."""
 
+LAYOUT_BACKDROP_AREA = 0.5
+"""Доля кадра, выше которой картинка макета это подсветка фона: образец ставит текст прямо на неё."""
+
 LAYOUT_PICTURE_GAP = 0.02
 """Зазор между текстом и картинкой макета, доля ширины кадра."""
 
 PLATE_PAD = 0.02
 """Отступ текста от нижнего края плашки, доля высоты кадра."""
+
+UNIT_DECOR_INSIDE = 0.9
+"""Доля фигуры оформления внутри блока, с которой она принадлежит блоку."""
 
 TEAM_CAPTION_CHARS = 40
 """Длина подписи блока, которая читается как имя и должность, а не как абзац."""
@@ -1050,15 +1056,39 @@ def _needs_images(groups: list[RepeatGroup], areas: list[Area], primary_id: str 
 
 
 def _layout_pictures(slide, slide_size) -> list[geo.Box]:
+    """Картинки макета слайда не на весь кадр."""
+    return _pictures_of(slide.slide_layout, slide_size)
+
+
+def _pictures_of(layout, slide_size) -> list[geo.Box]:
     """Картинки макета не на весь кадр: заполнитель шаблона бывает шире них, а текст на них не читается."""
     boxes = []
-    for shape in slide.slide_layout.shapes:
+    for shape in layout.shapes:
         if shape.is_placeholder or _shape_kind(shape) != "image":
             continue
         box = _shape_box(shape, IDENTITY, slide_size)
         if box[2] < geo.FULL_BLEED or box[3] < geo.FULL_BLEED:
             boxes.append(box)
     return boxes
+
+
+def _attach_to_units(groups: list[RepeatGroup], decor: list[ShapeInfo]) -> list[ShapeInfo]:
+    """Оформление внутри блока едет вместе с блоком; возвращает то, что осталось оформлением слайда.
+
+    Повтор собирается из фигур, которые есть в каждом блоке. Плашка заголовка, которой нет
+    у одного из блоков (последняя карточка залита целиком), в повтор не попадает и без этой
+    правки остаётся на старом месте, когда блоки перестраиваются, и ложится на чужой заголовок.
+    """
+    rest = []
+    for info in decor:
+        unit = next((u for g in groups for u in g.units
+                     if geo.covered(info.box, u.box) >= UNIT_DECOR_INSIDE
+                     and geo.area(info.box) < geo.area(u.box)), None)
+        if unit is None:
+            rest.append(info)
+        else:
+            unit.shape_ids.append(info.shape_id)
+    return rest
 
 
 def _clip_to_plate(slot: Slot, decor: list[ShapeInfo], slide_pt) -> Slot:
@@ -1141,7 +1171,7 @@ def _pattern_of_slide(slide, number: int, theme: ThemeInfo, slide_size, slide_pt
         areas.append(sample[0])
 
     used = taken | {s.shape_id for s in texts} | {a.shape_id for a in areas if a.shape_id}
-    decor = [s for s in shapes if s.shape_id not in used]
+    decor = _attach_to_units(groups, [s for s in shapes if s.shape_id not in used])
     slots = [_clip_to_plate(slot, decor, slide_pt) for slot in slots]
 
     color, asset = _background(slide, theme)
@@ -1214,8 +1244,10 @@ def extract_layouts(pptx_path: Path) -> list[LayoutInfo]:
                 and (shape.height or 0) >= slide_size[1] * geo.FULL_BLEED
                 for shape in layout.shapes
             )
+            pictures = [box for box in _pictures_of(layout, slide_size)
+                        if LAYOUT_PICTURE_MIN_AREA < box[2] * box[3] <= LAYOUT_BACKDROP_AREA]
             layouts.append(
                 LayoutInfo(name=layout.name, master_index=master_index, placeholders=holders,
-                           full_bleed_picture=picture)
+                           full_bleed_picture=picture, pictures=pictures)
             )
     return layouts
