@@ -262,3 +262,23 @@ def test_visualisation_needs_room_on_the_slide():
                          chart=ChartSpec(type="column", categories=["I", "II"],
                                          series=[Series(name="план", values=[1, 2])]))
     assert choose_pattern(intent, ds, []).id == "p002"
+
+
+def test_pattern_painted_by_layout_picture_is_not_cut(templates, tmp_path):
+    """Подложки блоков бывают нарисованы в картинке макета: такой паттерн не берут под меньшее число блоков."""
+    from designer.parse.package import build_package
+    from designer.layout.match import _painted_units, choose_pattern, fits
+    from designer.layout.capacity import primary_group, unit_count
+
+    intent = SlideIntent(id="x", kind=SlideKind.cards, title="Три пункта",
+                         items=[Item(heading="а", body="1"), Item(heading="б", body="2"), Item(heading="в", body="3")])
+    for path in templates:
+        ds = build_package(path, tmp_path / path.stem)
+        for pattern in ds.patterns:
+            group = primary_group(pattern)
+            if group is None or not _painted_units(pattern, ds) or unit_count(group, 3) == len(group.units):
+                continue
+            assert not fits(intent, pattern, ds), pattern.id
+        chosen = choose_pattern(intent, ds)
+        group = primary_group(chosen)
+        assert group is None or not _painted_units(chosen, ds) or unit_count(group, 3) == len(group.units)

@@ -1104,7 +1104,14 @@ def extract_layouts(pptx_path: Path) -> list[LayoutInfo]:
                 )
                 info.style = _text_style(shape, info.size_pt, theme)
                 holders.append(_make_slot(info, info.placeholder or "other", slide_pt))
+            picture = any(
+                _shape_kind(shape) == "image"
+                and (shape.width or 0) >= slide_size[0] * geo.FULL_BLEED
+                and (shape.height or 0) >= slide_size[1] * geo.FULL_BLEED
+                for shape in layout.shapes
+            )
             layouts.append(
-                LayoutInfo(name=layout.name, master_index=master_index, placeholders=holders)
+                LayoutInfo(name=layout.name, master_index=master_index, placeholders=holders,
+                           full_bleed_picture=picture)
             )
     return layouts

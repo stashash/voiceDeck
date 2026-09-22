@@ -178,6 +178,7 @@ class LayoutInfo(BaseModel):
     name: str
     master_index: int
     placeholders: list[Slot] = Field(default_factory=list)
+    full_bleed_picture: bool = Field(default=False, description="макет несёт картинку на весь кадр: в ней могут быть нарисованы подложки и номера блоков образца")
 
 
 class DesignSystem(BaseModel):

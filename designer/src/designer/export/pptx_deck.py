@@ -337,9 +337,50 @@ def _remove_shapes(placed: dict[int, _Placed], shape_ids: list[int]) -> None:
         _drop(placed.get(shape_id))
 
 
+def _full_bleed_picture(layout, slide_size: tuple[int, int]) -> bool:
+    """Макет несёт картинку на весь кадр: в ней могут быть нарисованы подложки и номера блоков образца."""
+    w, h = slide_size
+    return any(
+        shape.shape_type == MSO_SHAPE_TYPE.PICTURE and (shape.width or 0) >= w * 0.85 and (shape.height or 0) >= h * 0.85
+        for shape in layout.shapes
+    )
+
+
+def _plainest_layout(master):
+    """Макет того же мастера без картинок и с наименьшим числом собственных фигур."""
+    def weight(layout):
+        pictures = sum(1 for s in layout.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE)
+        own = sum(1 for s in layout.shapes if not s.is_placeholder)
+        return (pictures, own, len(layout.shapes))
+    return min(master.slide_layouts, key=weight)
+
+
+def _relayout_if_bare(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
+    """Слайд с урезанным рядом блоков или с диаграммой уходит на чистый макет.
+
+    Подложки карточек и водяные номера образца бывают нарисованы в картинке макета, а не фигурами:
+    убрать четвёртую карточку из картинки нельзя, поэтому меняется сам макет.
+    """
+    layout = slide.slide_layout
+    if not _full_bleed_picture(layout, ds.slide_size_emu):
+        return
+    unit_shapes = {sid for g in pattern.groups for u in g.units for sid in u.shape_ids}
+    cut = bool(unit_shapes & set(spec.remove_shape_ids))
+    if not cut and spec.viz_box is None:
+        return
+    plain = _plainest_layout(layout.slide_master)
+    if plain is layout or _full_bleed_picture(plain, ds.slide_size_emu):
+        return
+    for rel in slide.part.rels.values():
+        if rel.reltype.endswith("/slideLayout"):
+            rel._target = plain.part  # python-pptx не даёт сменить макет иначе
+            break
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
+    _relayout_if_bare(slide, spec, pattern, ds)
     _remove_shapes(placed, spec.remove_shape_ids)
     _fill_slots(placed, spec, pattern)
     _fill_group(placed, spec, pattern, ds, issue)

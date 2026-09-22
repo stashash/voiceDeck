@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from designer.contracts import DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
 from designer.layout.capacity import (
+    unit_count,
     content_region,
     lead_number,
     line_capacity,
@@ -253,7 +254,15 @@ def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
     group = primary_group(pattern)
     if group is None or not intent.items:
         return True
+    if _painted_units(pattern, ds) and unit_count(group, len(intent.items)) != len(group.units):
+        return False  # подложки блоков нарисованы в картинке макета: лишний блок с неё не убрать
     return bool(unit_text_slots(group, linked_groups(pattern, group))) and not _units_collide(group)
+
+
+def _painted_units(pattern: Pattern, ds: DesignSystem) -> bool:
+    """Макет паттерна несёт картинку на весь кадр: подложки и номера блоков могут быть нарисованы в ней."""
+    layout = next((l for l in ds.layouts if l.name == pattern.layout_name), None)
+    return layout is not None and layout.full_bleed_picture
 
 
 def _title_score(pattern: Pattern, intent: SlideIntent) -> float:
