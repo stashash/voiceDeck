@@ -282,3 +282,14 @@ def test_pattern_painted_by_layout_picture_is_not_cut(templates, tmp_path):
         chosen = choose_pattern(intent, ds)
         group = primary_group(chosen)
         assert group is None or not _painted_units(chosen, ds) or unit_count(group, 3) == len(group.units)
+
+
+def test_explanation_does_not_go_into_a_label_chip():
+    from designer.contracts import Item
+    from designer.layout.match import _chip_penalty
+    items = [Item(heading="До перехода", body="11 утра, 9 инцидентов в месяц")]
+    label = [_slot(101, "heading", (0.0, 0.0, 0.24, 0.06), 20), _slot(102, "body", (0.0, 0.08, 0.06, 0.04), 12)]
+    chip = _pattern("p011", SlideKind.cards, groups=[_group("g1", 3, 3, label)])
+    roomy = _cards()
+    assert _chip_penalty(chip, items) > 0
+    assert _chip_penalty(roomy, items) == 0

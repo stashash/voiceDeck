@@ -71,6 +71,10 @@ P_UNIT_SLOTS = 1.0
 P_NUMBER_FIT = 1.2
 P_EMPTY_UNITS = 2.0
 P_LOST_ITEMS = 2.0
+P_CHIP = 2.0
+
+CHIP_CHARS = 20
+"""Вместимость слота в знаках, ниже которой слот блока это метка на плашке («Дата»), а не место под пояснение."""
 
 VIZ_ROOM = 0.4
 """Доля слайда, с которой свободной рамки хватает под диаграмму или таблицу."""
@@ -192,6 +196,23 @@ def _fit_penalty(pattern: Pattern, items: list[Item]) -> float:
     return 0.0 if len(slots) >= 2 else P_UNIT_SLOTS
 
 
+def _chip_penalty(pattern: Pattern, items: list[Item]) -> float:
+    """Штраф за блок, где пояснению пункта достаётся только метка на плашке.
+
+    На сравнении WorkSpace пояснение «11 утра, 9 инцидентов» ложилось в плашку «Дата» кеглем 12
+    и не читалось, а списки под заголовками колонок оставались пустыми.
+    """
+    group = primary_group(pattern)
+    longest = max((len(item.body) for item in items if item.body), default=0)
+    if group is None or not longest:
+        return 0.0
+    slots = unit_text_slots(group, linked_groups(pattern, group))
+    bodies = [slot for slot in slots if slot.role not in ("heading", "title", "number")]
+    if not bodies or max(slot.max_chars for slot in bodies) >= min(longest, CHIP_CHARS):
+        return 0.0
+    return P_CHIP
+
+
 def _number_slot(pattern: Pattern) -> bool:
     """Есть ли на слайде место под крупное число."""
     return (any(slot.role == "number" for slot in pattern.slots)
@@ -302,6 +323,7 @@ def score_pattern(
         + W_TITLE * _title_score(pattern, intent)
         + W_CONFIDENCE * pattern.kind_confidence
         - _fit_penalty(pattern, intent.items)
+        - _chip_penalty(pattern, intent.items)
         - _number_penalty(pattern, intent, ds)
         - _empty_units_penalty(pattern, intent)
         - (0.0 if _holds_items(pattern, intent) else P_LOST_ITEMS)
