@@ -93,6 +93,8 @@ def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             sample = sample_type_size(el, pattern)
             if sample is not None and abs(size - sample) <= _TYPE_SCALE_TOLERANCE_PT:
                 continue
+            if el.role == "number" and sample is not None and size <= sample + _TYPE_SCALE_TOLERANCE_PT:
+                continue  # крупное число подгоняется по ширине рамки, любой кегль до образца законен
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="template.type_scale", kind="deterministic",
                 severity="warning", message=f"Кегль {size:g} pt в {describe_element(el)} не входит в шкалу шаблона",

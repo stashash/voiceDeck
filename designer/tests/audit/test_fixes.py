@@ -262,3 +262,25 @@ def test_contextual_finding_skipped():
     assert report[0]["what"]
     assert new_scenes[0].elements[0].text == "a"
     assert new_specs[0].slot_text == {}
+
+
+def test_number_and_unchangeable_sizes_are_skipped():
+    """Крупное число не приводится к ступени шкалы, а починка без изменения не считается сделанной."""
+    from designer.audit.fixes import _fix_text_overflow, _fix_type_scale
+    from designer.contracts import Element, TextStyle, TypeStep, Finding
+
+    ds = _ds(type_scale=[TypeStep(role="body", size_pt=24, share=0.7), TypeStep(role="title", size_pt=48, share=0.3)])
+    number = Element(id="n1", type="text", role="number", box=(0.1, 0.3, 0.3, 0.2), z=1, text="12 %",
+                     style=TextStyle(size_pt=85.5))
+    long = Element(id="b1", type="text", role="body", box=(0.1, 0.1, 0.05, 0.02), z=1, text="очень длинная строка",
+                   style=TextStyle(size_pt=24))
+    scene = _scene("s1", [number, long])
+    spec = _spec("s1")
+    f_num = Finding(id="f1", slide_id="s1", check_id="template.type_scale", kind="deterministic", severity="warning",
+                    message="", element_ids=["n1"], fixable=True)
+    f_long = Finding(id="f2", slide_id="s1", check_id="layout.text_overflow", kind="deterministic", severity="warning",
+                     message="", element_ids=["b1"], fixable=True)
+    assert _fix_type_scale(f_num, scene, spec, None, ds) is None
+    assert number.style.size_pt == 85.5
+    assert _fix_text_overflow(f_long, scene, spec, None, ds) is None
+    assert long.style.size_pt == 24

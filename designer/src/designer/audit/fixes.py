@@ -7,6 +7,7 @@
 import re
 from collections.abc import Callable
 
+from designer.audit.deterministic import describe_element
 from designer.contracts import Box, DesignSystem, Element, Finding, Pattern, Scene, SlideSpec
 
 _COLOR_CHANNEL_TOLERANCE = 8
@@ -170,12 +171,16 @@ def _fix_type_scale(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     if el is None or el.type != "text" or el.style is None or el.style.size_pt is None:
         return None
     old_size = el.style.size_pt
+    if el.role == "number":
+        return None  # крупное число подогнано по ширине рамки: ступень шкалы его сломает
     new_size = min(scale, key=lambda s: (abs(s.size_pt - old_size), s.size_pt)).size_pt
+    if abs(new_size - old_size) < 0.5:
+        return None
     el.style = el.style.model_copy(update={"size_pt": new_size})
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, new_size)
-    return f"кегль «{el.id}» приведён с {old_size:g} к ступени шкалы {new_size:g} pt"
+    return f"кегль {describe_element(el)} приведён с {old_size:g} к ступени шкалы {new_size:g} pt"
 
 
 def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -197,7 +202,7 @@ def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern
         changed.append(f"заливка {old} на {el.fill}")
     if not changed:
         return None
-    return f"«{el.id}»: заменены " + "; ".join(changed)
+    return f"{describe_element(el)}: заменены " + "; ".join(changed)
 
 
 def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -220,11 +225,13 @@ def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern:
             break
     if chosen is None:
         chosen = candidates[-1]
+    if chosen >= old_size - 1e-6:
+        return None  # опускать некуда: текст не помещается и на нижней ступени
     el.style = el.style.model_copy(update={"size_pt": chosen})
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, chosen)
-    return f"кегль «{el.id}» опущен с {old_size:g} до {chosen:g} pt под вместимость рамки"
+    return f"кегль {describe_element(el)} опущен с {old_size:g} до {chosen:g} pt под вместимость рамки"
 
 
 def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -242,7 +249,7 @@ def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     if _creates_overlap(scene, el, new_box):
         return None
     el.box = new_box
-    return f"левый край «{el.id}» сдвинут к направляющей {nearest:g}"
+    return f"левый край {describe_element(el)} сдвинут к направляющей {nearest:g}"
 
 
 def _fix_in_margins(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -268,7 +275,7 @@ def _fix_in_margins(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     if dx == 0.0 and dy == 0.0:
         return None
     el.box = (x + dx, y + dy, w, h)
-    return f"«{el.id}» сдвинут внутрь полей слайда"
+    return f"{describe_element(el)} сдвинут внутрь полей слайда"
 
 
 def _fix_contrast(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -284,7 +291,7 @@ def _fix_contrast(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Patt
     best = max(palette, key=lambda c: _contrast(c, bg))
     old = el.style.color
     el.style = el.style.model_copy(update={"color": best})
-    return f"цвет текста «{el.id}» заменён с {old} на {best} для контраста к фону {bg}"
+    return f"цвет текста {describe_element(el)} заменён с {old} на {best} для контраста к фону {bg}"
 
 
 def _fix_placeholder_text(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -298,7 +305,7 @@ def _fix_placeholder_text(finding: Finding, scene: Scene, spec: SlideSpec, patte
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_slot_text(spec, slot, group, index, "")
-    return f"текст-заглушка «{old}» очищен в «{el.id}»"
+    return f"текст-заглушка «{old}» очищен в {describe_element(el)}"
 
 
 def _fix_bullets(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -316,7 +323,7 @@ def _fix_bullets(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Patte
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_slot_text(spec, slot, group, index, new_text)
-    return f"из «{el.id}» убраны лишние пункты: {'; '.join(removed)}"
+    return f"из {describe_element(el)} убраны лишние пункты: {'; '.join(removed)}"
 
 
 _FIXERS: dict[str, Callable] = {
