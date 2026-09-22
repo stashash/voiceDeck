@@ -58,3 +58,18 @@ def test_wrong_type_raises_clear_error(tmp_path, monkeypatch):
 
     with pytest.raises(SettingsError, match="port"):
         load_settings()
+
+
+def test_client_takes_live_model_from_settings(monkeypatch, tmp_path):
+    """Живой режим берёт свою модель, если она задана; иначе общую."""
+    from designer.llm.client import LlmClient
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DESIGNER_LLM_URL", "http://deck:1/v1")
+    monkeypatch.setenv("DESIGNER_LLM_MODEL", "deck-model")
+    monkeypatch.delenv("DESIGNER_LIVE_LLM_URL", raising=False)
+    monkeypatch.setenv("DESIGNER_LIVE_LLM_MODEL", "fast-model")
+    deck = LlmClient.from_env()
+    live = LlmClient.from_env(live=True)
+    assert (deck.base_url, deck.model) == ("http://deck:1/v1", "deck-model")
+    assert (live.base_url, live.model) == ("http://deck:1/v1", "fast-model")

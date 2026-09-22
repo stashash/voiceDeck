@@ -462,7 +462,7 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
     ds = load_package(package_dir)
 
     owns_client = client is None
-    client = client or LlmClient.from_env()
+    client = client or LlmClient.from_env(live=True)
     try:
         kinds = sorted({pattern.kind for pattern in ds.patterns})
         if not kinds:

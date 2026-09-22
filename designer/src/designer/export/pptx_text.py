@@ -35,6 +35,8 @@ def set_text(shape, text: str, size_pt: float | None = None, wrap: bool = True) 
         body_pr = body.find(qn("a:bodyPr"))
         if body_pr is not None:
             body_pr.set("wrap", "none")
+            # Кегль числа меньше образца: у нижнего края рамки оно ложится на подпись, по центру нет.
+            body_pr.set("anchor", "ctr")
     for para in body.findall(qn("a:p")):
         body.remove(para)
     for line in _lines(text):

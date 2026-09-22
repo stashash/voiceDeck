@@ -32,9 +32,25 @@ class LlmClient:
         self.call_durations_ms: list[int] = []
 
     @classmethod
-    def from_env(cls, timeout_s: float = 120.0, transport: httpx.BaseTransport | None = None) -> "LlmClient":
-        """Клиент с адресом и моделью по умолчанию из переменных окружения."""
-        return cls(DEFAULT_BASE_URL, DEFAULT_MODEL, timeout_s=timeout_s, transport=transport)
+    def from_env(cls, timeout_s: float = 120.0, transport: httpx.BaseTransport | None = None,
+                 live: bool = False) -> "LlmClient":
+        """Клиент с адресом и моделью из настроек: config.yaml, поверх него переменные окружения.
+
+        live=True берёт модель живого режима (DESIGNER_LIVE_LLM_*), когда она задана: для слайда
+        из речи нужна быстрая модель, для колоды точная.
+        """
+        from designer.settings import SettingsError, load_settings
+
+        try:
+            settings = load_settings()
+        except SettingsError as error:
+            print(f"настройки не прочитаны, взяты значения по умолчанию: {error}", flush=True)
+            return cls(DEFAULT_BASE_URL, DEFAULT_MODEL, timeout_s=timeout_s, transport=transport)
+        url, model = settings.llm_url, settings.llm_model
+        if live:
+            url = settings.live_llm_url or url
+            model = settings.live_llm_model or model
+        return cls(url, model, timeout_s=timeout_s, transport=transport)
 
     def close(self) -> None:
         self._client.close()
