@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
   pages: write
-  id-token: ***
+  id-token: write
 
 # Avoid concurrent deploys clobbering each other
 concurrency:
@@ -58,10 +58,4 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          artifact_name: github-pages
-          # SPA fallback: any unknown path falls back to /index.html
-          # so client-side routing keeps working after page reloads.
-          single_page_app: true
-          # 404.html with same content as index.html for legacy hash routing
-          index.html: /index.html
+
