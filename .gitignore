@@ -13,3 +13,6 @@ __pycache__/
 .pytest_cache/
 designer/out/
 *.egg-info/
+# Примеры колод: pptx и html тяжёлые, пересобираются examples/build.py
+examples/**/deck.pptx
+examples/**/deck.html

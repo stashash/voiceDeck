@@ -27,7 +27,7 @@
 | `layout.off_guides` | левый край блока не совпал ни с одной направляющей | вёрстка | да, сдвиг к направляющей | `designer/tests/audit/test_layout.py` |
 | `layout.image_aspect` | пропорции картинки на слайде разошлись с исходными больше чем на 3 % | вёрстка | нет | `designer/tests/audit/test_layout.py` |
 | `template.font` | шрифт не входит в токены дизайн-системы, либо гарнитур на слайде больше двух | шаблон | нет | `designer/tests/audit/test_template.py` |
-| `template.type_scale` | кегль не входит в типографическую шкалу шаблона | шаблон | да, ближайшая ступень шкалы | `designer/tests/audit/test_template.py` |
+| `template.type_scale` | кегль не входит в шкалу шаблона и не равен кеглю этого слота в образце; крупное число законно любым кеглем до образца, оно подгоняется по ширине рамки | шаблон | да, ближайшая ступень шкалы; число не трогается | `designer/tests/audit/test_template.py` |
 | `template.color` | цвет текста или заливки не входит в палитру | шаблон | да, ближайший цвет палитры | `designer/tests/audit/test_template.py` |
 | `template.pattern` | `pattern_id` сцены отсутствует в дизайн-системе | шаблон | нет | `designer/tests/audit/test_template.py` |
 | `template.contrast` | контраст текста к фону под ним ниже 4,5:1 (WCAG) | шаблон | да, цвет текста с максимальным контрастом из палитры | `designer/tests/audit/test_template.py` |
