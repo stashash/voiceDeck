@@ -5,7 +5,6 @@ on:
   workflow_run:
     workflows: ["release"]
     types: [completed]
-    branches-ignore: []
   # Manual deploy (e.g. re-deploy pinned image, or deploy a branch build)
   workflow_dispatch:
     inputs:
@@ -38,7 +37,6 @@ jobs:
     timeout-minutes: 30
     environment:
       name: production
-      url: http://localhost:8088
 
     steps:
       - name: Resolve image tag
@@ -58,64 +56,89 @@ jobs:
           set -euo pipefail
           echo "Target host : ${{ secrets.DEPLOY_HOST }}"
           echo "Target user : ${{ secrets.DEPLOY_USER }}"
-          echo "Target port : ${{ secrets.DEPLOY_PORT || '22' }}"
+          echo "Target port : ${{ secrets.DEPLOY_PORT }}"
           echo "Deploy path : ${{ secrets.DEPLOY_PATH }}"
-          echo "Image       : ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}"
+          echo "Image       : ghcr.io/${{ github.repository_owner }}/voiceDeck:${{ steps.tag.outputs.tag }}"
           echo "Dry-run     : ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}"
           test -n "${{ secrets.DEPLOY_HOST }}" || { echo "::error::DEPLOY_HOST secret is empty"; exit 1; }
           test -n "${{ secrets.DEPLOY_USER }}" || { echo "::error::DEPLOY_USER secret is empty"; exit 1; }
           test -n "${{ secrets.DEPLOY_SSH_KEY }}" || { echo "::error::DEPLOY_SSH_KEY secret is empty"; exit 1; }
           test -n "${{ secrets.DEPLOY_PATH }}" || { echo "::error::DEPLOY_PATH secret is empty"; exit 1; }
 
-      - name: Deploy (SSH)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || '22' }}
-          command_timeout: 15m
-          script: |
-            set -euo pipefail
-            DRY="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}"
-            IMAGE="ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}"
+      # Native SSH: works with any PEM/RSA key, no third-party action.
+      # We avoid appleboy/ssh-action because its embedded drone-ssh has a
+      # long-standing bug parsing the OpenSSH PRIVATE KEY format on ED25519.
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          # Ensure POSIX line endings (Windows paste may add CR):
+          sed -i 's/\r$//' ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Strict host-key checking via known_hosts:
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 644 ~/.ssh/known_hosts
 
-            cd "${{ secrets.DEPLOY_PATH }}"
+      - name: Deploy (native SSH)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_TAG:   ${{ steps.tag.outputs.tag }}
+          IS_DRY:      ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG}"
+          SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -p "$DEPLOY_PORT" -i ~/.ssh/id_ed25519)
 
-            echo "==> login to GHCR"
-            if [ "$DRY" = "true" ]; then echo "(dry-run) skipping docker login"; else
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          # Build the script we want to run on the remote.
+          # Single-quoted heredoc, with deliberate $VAR escapes only for runtime values.
+          read -r -d '' REMOTE <<REMOTE_EOF || true
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          IMAGE="$IMAGE"
+          APP_PORT="\$(grep -E '^APP_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8088)"
+          echo "==> exporting IMAGE into .env"
+          grep -q '^IMAGE=' .env 2>/dev/null || echo 'IMAGE=ghcr.io/stashash/voicedeck:latest' >> .env
+          sed -i.bak "s|^IMAGE=.*|IMAGE=\${IMAGE}|" .env
+
+          if [ "$IS_DRY" = "true" ]; then
+            echo "(dry-run) would run: docker login ghcr.io -u $GITHUB_ACTOR --password-stdin"
+            echo "(dry-run) would run: docker pull \$IMAGE"
+            echo "(dry-run) would run: docker compose pull app"
+            echo "(dry-run) would run: docker compose up -d --remove-orphans"
+            echo "(dry-run) would run: curl -fsS http://127.0.0.1:\${APP_PORT}/"
+            echo "DRY-RUN_OK"
+            exit 0
+          fi
+
+          echo "==> docker login GHCR"
+          echo "${GITHUB_TOKEN:-NO_TOKEN}" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+          echo "==> pulling \$IMAGE"
+          docker pull "\$IMAGE"
+
+          echo "==> compose up -d"
+          docker compose pull app
+          docker compose up -d --remove-orphans
+
+          echo "==> healthcheck"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 3
+            if curl -fsS "http://127.0.0.1:\${APP_PORT}/" > /dev/null 2>&1; then
+              echo "Service up after \${i} attempts"
+              docker compose ps
+              exit 0
             fi
+          done
+          echo "::error::Service did not respond on http after 30s"
+          docker compose logs --tail=200 app || true
+          exit 1
+          REMOTE_EOF
 
-            echo "==> exporting IMAGE into .env"
-            grep -q '^IMAGE=' .env 2>/dev/null || echo 'IMAGE=ghcr.io/stashash/voicedeck:latest' >> .env
-            sed -i.bak "s|^IMAGE=.*|IMAGE=${IMAGE}|" .env
-
-            echo "==> pulling image $IMAGE"
-            if [ "$DRY" = "true" ]; then echo "(dry-run) skipping pull"; else
-              docker pull "$IMAGE"
-            fi
-
-            echo "==> compose up -d"
-            if [ "$DRY" = "true" ]; then echo "(dry-run) skipping compose up"; else
-              docker compose pull app
-              docker compose up -d --remove-orphans
-            fi
-
-            echo "==> healthcheck"
-            if [ "$DRY" = "true" ]; then echo "(dry-run) skipping healthcheck"; else
-              for i in 1 2 3 4 5 6 7 8 9 10; do
-                sleep 3
-                if curl -fsS "http://127.0.0.1:${APP_PORT:-8088}/" > /dev/null 2>&1; then
-                  echo "Service up after ${i} attempts"
-                  docker compose ps
-                  exit 0
-                fi
-              done
-              echo "::error::Service did not respond on http after 30s"
-              docker compose logs --tail=200 app || true
-              exit 1
-            fi
+          ssh "${SSH_OPTS[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<< "$REMOTE"
 
       - name: Summary
         if: always()
@@ -123,8 +146,8 @@ jobs:
           {
             echo "## 🚀 Deploy result"
             echo
-            echo "- target:    \`${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PORT || '22' }}\`"
-            echo "- image:     \`ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}\`"
+            echo "- target:    \`${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PORT }}\`"
+            echo "- image:     \`ghcr.io/${{ github.repository_owner }}/voiceDeck:${{ steps.tag.outputs.tag }}\`"
             echo "- result:    \`${{ job.status }}\`"
             echo "- workflow:  \`${{ github.event_name }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
