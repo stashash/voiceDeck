@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   ship:
-    name: Deploy to ${{ secrets.DEPLOY_HOST }}
+    name: Deploy to production
     runs-on: ubuntu-latest
     if: >-
       (github.event_name == 'workflow_dispatch') ||
@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 30
     environment:
       name: production
-      url: ${{ format('http://{0}:{1}', secrets.DEPLOY_HOST, secrets.DEPLOY_PORT || '22') }}
+      url: http://localhost:8088
 
     steps:
       - name: Resolve image tag
