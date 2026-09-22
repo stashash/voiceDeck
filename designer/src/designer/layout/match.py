@@ -198,6 +198,18 @@ def _number_slot(pattern: Pattern) -> bool:
             or any(slot.role == "number" for g in pattern.groups for slot in g.unit_slots))
 
 
+def _big_number_slot(pattern: Pattern, ds: DesignSystem) -> bool:
+    """Место под число, набранное крупно: не ниже самой крупной ступени шкалы и вдвое крупнее текста.
+
+    Число в мелкой плашке блока тоже слот роли number, но крупным числом слайд от него не станет.
+    """
+    steps = [s.size_pt for s in ds.tokens.type_scale if s.size_pt > 0]
+    body = [s.size_pt for s in ds.tokens.type_scale if s.role == "body"]
+    floor = max([max(steps) if steps else 0.0, 2 * (max(body) if body else 0.0), 32.0])
+    slots = list(pattern.slots) + [slot for g in pattern.groups for slot in g.unit_slots]
+    return any(slot.role == "number" and (slot.style.size_pt or 0) >= floor for slot in slots)
+
+
 def _number_penalty(pattern: Pattern, intent: SlideIntent, ds: DesignSystem | None) -> float:
     """Штраф за слот, в который число намерения не встаёт даже на ступени title."""
     value = lead_number(intent)
@@ -241,7 +253,7 @@ def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
         return False  # паттерн держится на фото, а своих картинок у намерения нет
     if intent.kind in _PLAIN_KINDS and (pattern.groups or _samples(pattern)):
         return False
-    if intent.kind is SlideKind.big_number and not _number_slot(pattern):
+    if intent.kind is SlideKind.big_number and not _big_number_slot(pattern, ds):
         return False
     want = "chart" if intent.chart is not None else "table" if intent.table is not None else None
     if want is None:
@@ -303,7 +315,7 @@ def choose_pattern(intent: SlideIntent, ds: DesignSystem, used: list[str] | None
     if not ds.patterns:
         raise ValueError("в дизайн-системе нет ни одного паттерна")
     seen = list(used or [])
-    if intent.kind is SlideKind.big_number and not any(_number_slot(p) for p in ds.patterns):
+    if intent.kind is SlideKind.big_number and not any(_big_number_slot(p, ds) for p in ds.patterns):
         # В шаблоне нет слайда с крупной цифрой: число уходит в заголовок раздела, а не в мелкую плашку.
         intent = intent.model_copy(update={"kind": SlideKind.section})
     suitable = [p for p in ds.patterns if fits(intent, p, ds)]

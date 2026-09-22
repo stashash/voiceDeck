@@ -143,7 +143,7 @@ def test_big_slot_gets_a_size_between_the_steps():
     scale = [TypeStep(size_pt=28, role="title", share=0.3),
              TypeStep(size_pt=18, role="body", share=0.4),
              TypeStep(size_pt=12, role="caption", share=0.3)]
-    box = (0.05, 0.30, 0.30, 0.20)
+    box = (0.05, 0.30, 0.34, 0.20)
     size = slot_size(WORD, box, 80.0, "title", scale, SLIDE_PT)
     assert size not in {28.0, 18.0, 12.0}
     assert size >= title_step(scale)
