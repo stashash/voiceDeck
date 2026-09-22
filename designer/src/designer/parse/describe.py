@@ -6,6 +6,9 @@
 """
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
 from designer.contracts import DesignSystem, Pattern, SlideKind
@@ -73,5 +76,8 @@ def _describe_one(pattern: Pattern, png: bytes | None, skill: Skill, client: Llm
 def describe_patterns(ds: DesignSystem, pngs: dict[str, bytes], client: LlmClient) -> DesignSystem:
     """Дописать паттернам назначение и уточнить тип по картинкам слайдов; ключ pngs это Pattern.id."""
     skill = load_skill(SKILL)
-    described = [_describe_one(p, pngs.get(p.id), skill, client) for p in ds.patterns]
+    # Полсотни образцов по одному это полторы минуты; сервер модели держит несколько слотов.
+    workers = max(1, int(os.environ.get("DESIGNER_LLM_PARALLEL", "4") or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        described = list(pool.map(lambda p: _describe_one(p, pngs.get(p.id), skill, client), ds.patterns))
     return ds.model_copy(update={"patterns": described})

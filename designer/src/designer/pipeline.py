@@ -44,6 +44,7 @@ from designer.layout.scene import build_scene
 from designer.llm.client import LlmClient
 from designer.llm.run import RunRecorder
 from designer.llm.skills import load_skill
+from designer.parse.describe import describe_patterns
 from designer.parse.package import build_package, load_package
 from designer.plan.planner import make_plan
 from designer.plan.writer import fill_slots, speech_to_slide
@@ -104,6 +105,7 @@ def import_template(pptx_bytes: bytes, filename: str) -> DesignSystem:
 
         staging_dir = tmp_root / "package"
         design_system = build_package(pptx_path, staging_dir)
+        design_system = _describe(design_system, pptx_path, staging_dir)
 
         dest = store.design_system_dir(design_system.id)
         if dest.exists():
@@ -113,6 +115,30 @@ def import_template(pptx_bytes: bytes, filename: str) -> DesignSystem:
 
 
 # ---------- генерация колоды ----------
+
+def _describe(ds: DesignSystem, pptx_path: Path, package_dir: Path) -> DesignSystem:
+    """Модель досказывает по картинке образца, для чего слайд и держится ли он на фото.
+
+    Геометрия не видит плашку под фото, вшитую в фон макета: без описания такой паттерн
+    берётся под текст и на слайде остаётся пустой белый квадрат. Сбой модели или движка
+    картинок импорт не роняет: паттерны остаются такими, какими их дал разбор.
+    DESIGNER_DESCRIBE=0 выключает шаг.
+    """
+    if os.environ.get("DESIGNER_DESCRIBE", "1") == "0" or not ds.patterns:
+        return ds
+    try:
+        client = LlmClient.from_env()
+        session = convert.get_session()
+        by_slide = {p.source_slide - 1: p.id for p in ds.patterns}
+        with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
+            pngs = dict(zip(by_slide.values(), pool.map(lambda i: session.png(pptx_path, i, 640), by_slide)))
+        described = describe_patterns(ds, pngs, client)
+    except Exception as error:  # noqa: BLE001 - шаг необязательный, причина уходит в журнал
+        print(f"описание паттернов пропущено: {error}", flush=True)
+        return ds
+    (package_dir / "manifest.json").write_text(described.model_dump_json(indent=2), encoding="utf-8")
+    return described
+
 
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
