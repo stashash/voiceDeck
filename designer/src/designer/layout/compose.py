@@ -149,14 +149,15 @@ def _hint_slots(pattern: Pattern) -> dict[str, int]:
 
 def _take(
     free: list[Slot], roles: tuple[str, ...], biggest: bool = False, avoid: Box | None = None,
-    text: str = "",
+    text: str = "", phrase: bool = False,
 ) -> Slot | None:
     """Забрать свободный слот одной из ролей: первый по порядку чтения или самый крупный.
 
     avoid это рамка, отданная диаграмме или таблице: слот из неё берут, только если другого нет.
     text это то, что ляжет в слот: подпись месяца «Апр» из образца диаграммы фразу не держит.
+    phrase значит, что слот нужен под фразу, даже если модель прислала «4,5».
     """
-    room = min(len(text), HINT_CHARS)
+    room = HINT_CHARS if phrase else min(len(text), HINT_CHARS)
     matches = [slot for slot in free if slot.role in roles and slot.max_chars >= room]
     if avoid is not None:
         matches = [slot for slot in matches if not _inside(slot.box, avoid)] or matches
@@ -577,10 +578,10 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     if intent.key_message:
         message = intent.key_message
         slot = (
-            _take(free, ("subtitle",), avoid=region, text=message)
-            or _take(free, ("body",), biggest=True, avoid=region, text=message)
-            or _take(free, ("heading",), biggest=True, avoid=region, text=message)
-            or _take(free, ("caption",), biggest=True, avoid=region, text=message)
+            _take(free, ("subtitle",), avoid=region, phrase=True)
+            or _take(free, ("body",), biggest=True, avoid=region, phrase=True)
+            or _take(free, ("heading",), biggest=True, avoid=region, phrase=True)
+            or _take(free, ("caption",), biggest=True, avoid=region, phrase=True)
         )
         if slot is not None:
             texts[slot.id] = message
