@@ -458,3 +458,13 @@ def test_chart_frame_goes_around_the_layout_picture():
     ds.layouts = [LayoutInfo(name="макет", master_index=0, pictures=[(0.0, 0.0, 0.39, 1.0)])]
     spec = compose(_intent(kind=SlideKind.chart, items=[], key_message="", chart=chart), pattern, ds)
     assert spec.viz_box is not None and spec.viz_box[0] >= 0.39 - 1e-9
+
+
+def test_qr_hint_does_not_take_the_key_message():
+    qr = _slot(9, "body", (0.7, 0.1, 0.2, 0.35), 24).model_copy(update={"sample_text": "QR-code"})
+    pattern = _cards(extra_slots=[qr])
+    pattern.groups = []
+    pattern.slots = [slot for slot in pattern.slots if slot.id != "s2"]
+    spec = compose(_intent(kind=SlideKind.cta, items=[]), pattern, _ds())
+    assert spec.slot_text["s9"] == ""
+    assert 9 in spec.remove_shape_ids

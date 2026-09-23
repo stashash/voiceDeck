@@ -78,6 +78,12 @@ HINT_CHARS = 20
 HINT_AREA = 0.02
 """Доля слайда, до которой плашка с подсказкой это значок под картинку, а не блок содержания."""
 
+_IMAGE_HINTS = {
+    "qr", "qr-code", "qr code", "qr-код", "qr код", "иллюстрация", "фото", "фотография",
+    "изображение", "картинка", "логотип", "logo", "image", "photo", "picture",
+}
+"""Слова подсказки образца, на месте которых шаблон ждёт картинку."""
+
 
 def _inside(box: Box, frame: Box) -> bool:
     return geo.covered(box, frame) >= INSIDE
@@ -118,9 +124,26 @@ def _hint_plate(pattern: Pattern, slot: Slot) -> int | None:
     return min(plates, key=lambda shape: (geo.area(shape.box), shape.shape_id)).shape_id
 
 
+def _image_word(text: str) -> bool:
+    """Подсказка образца, что здесь встанет картинка: «QR-code», «Иллюстрация», «Фото»."""
+    return " ".join(text.lower().split()) in _IMAGE_HINTS
+
+
 def _hint_slots(pattern: Pattern) -> dict[str, int]:
-    """Слоты-подсказки паттерна и фигуры, на которых они стоят."""
+    """Слоты-подсказки паттерна и фигуры, на которых они стоят.
+
+    Подсказка словом («QR-code» на белой плашке) бывает крупнее значка: плашкой тогда
+    считается сама фигура слота, и фраза плана в неё не кладётся.
+    """
     found = {slot.id: _hint_plate(pattern, slot) for slot in pattern.slots}
+    for slot in pattern.slots:
+        if found[slot.id] is None and _image_word(slot.sample_text):
+            # Рамка-пунктир «Иллюстрация» уходит вместе с подписью, иначе на слайде пустая рамка.
+            plates = [shape for shape in pattern.decor
+                      if not _edge_furniture(shape.box)
+                      and geo.covered(slot.box, shape.box) >= INSIDE
+                      and geo.area(shape.box) <= geo.area(slot.box) * 4]
+            found[slot.id] = min(plates, key=lambda shape: geo.area(shape.box)).shape_id if plates else slot.shape_id
     return {slot_id: plate for slot_id, plate in found.items() if plate is not None}
 
 
