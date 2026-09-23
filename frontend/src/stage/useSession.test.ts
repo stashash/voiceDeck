@@ -20,6 +20,20 @@ const slidesOf=(msgs:ChannelMessage[]):(Slide|null)[]=>msgs.filter((m):m is Extr
 const wait=()=>new Promise(r=>setTimeout(r,10));
 
 describe('SessionEngine',()=>{
+ it('answers a hall window opened mid-talk with the current slide',async()=>{
+  const engine=makeEngine('s-hello');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'confirmed')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>1</section>')});
+  await wait();
+  const hall=listen('s-hello');
+  const ask=new BroadcastChannel(channelName('s-hello'));
+  ask.postMessage({kind:'hello'} satisfies ChannelMessage);
+  // Два перехода через канал: вопрос окна зала и ответ пульта.
+  for(let i=0;i<50&&!slidesOf(hall.messages).length;i++)await wait();
+  expect(slidesOf(hall.messages).at(-1)?.chunk_id).toBe('a');
+  ask.close();hall.close();engine.close();
+ });
+
  it('applies a designer slide with html to state',()=>{
   const engine=makeEngine('s-state');
   engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});

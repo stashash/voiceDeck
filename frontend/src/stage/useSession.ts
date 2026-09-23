@@ -9,7 +9,8 @@ export function channelName(sessionId:string){return `voicedeck-stage-${sessionI
 
 export type ChannelMessage=
  |{kind:'slide';slide:Slide|null}
- |{kind:'subtitle';final:string;partial:string};
+ |{kind:'subtitle';final:string;partial:string}
+ |{kind:'hello'};
 
 export type TransportLike=Pick<Transport,'ready'|'credentials'|'send'|'close'|'audio'>;
 export type CreateTransport=(c:Credentials,cursor:()=>number,event:(e:Event)=>void,status:(s:string)=>void,failure:(s:string)=>void)=>TransportLike;
@@ -28,6 +29,8 @@ export class SessionEngine{
  connect(c:Credentials){
   this.transport?.close();this.channel?.close();
   this.credentials=c;this.channel=new BroadcastChannel(channelName(c.id));
+  // Окно зала, открытое посреди речи, спрашивает текущий слайд: иначе ждёт следующего.
+  this.channel.onmessage=(e:MessageEvent<ChannelMessage>)=>{if(e.data.kind==='hello'){this.broadcastSlide();this.broadcastSubtitle();}};
   this.transport=this.createTransport(c,()=>this.state.seq,e=>this.event(e),s=>{this.connection=s;this.onChange();},m=>{this.error=m;this.onChange();});
   this.onChange();
  }

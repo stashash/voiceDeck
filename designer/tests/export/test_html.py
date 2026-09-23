@@ -87,7 +87,7 @@ def _deck() -> Deck:
 def test_render_deck_has_three_slide_sections(package_dir):
     out = render_deck(_deck(), _design_system(), package_dir)
     doc = lxml_html.fromstring(out)
-    assert len(doc.xpath('//section[@class="slide"]')) == 3
+    assert len(doc.xpath("//section[contains(concat(' ', @class, ' '), ' slide ')]")) == 3
 
 
 def test_slide_text_present_and_script_escaped(package_dir):

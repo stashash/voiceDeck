@@ -118,7 +118,7 @@ def test_generate_deck_produces_files_and_run_manifest(templates):
     assert len(prs.slides) == 5
 
     html_text = (files_dir / "deck.html").read_text(encoding="utf-8")
-    assert html_text.count('class="slide"') == 5
+    assert html_text.count('<section class="slide') == 5
 
     manifest = store.load_run(deck.id)
     assert manifest is not None

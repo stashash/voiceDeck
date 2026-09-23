@@ -114,7 +114,7 @@ def test_deck_images_render_section_per_slide():
     out = render_deck_images(_deck(), _design_system(), [PNG_ONE, PNG_TWO])
     doc = lxml_html.fromstring(out)
 
-    sections = doc.xpath('//section[@class="slide"]')
+    sections = doc.xpath("//section[contains(concat(' ', @class, ' '), ' slide ')]")
     assert len(sections) == 2
     sources = [img.get("src") for img in doc.xpath('//img[@class="slide-image"]')]
     assert sources[0] != sources[1]
@@ -133,3 +133,8 @@ def test_deck_title_goes_to_the_page_title():
     doc = lxml_html.fromstring(out)
 
     assert doc.xpath("//title")[0].text == "Тестовая колода"
+
+
+def test_first_slide_is_visible_without_script():
+    # Сцена живого режима показывает слайд в рамке без скриптов: первый слайд виден разметкой.
+    assert 'class="slide active"' in slide_html(PNG_ONE, _scene(), _design_system())

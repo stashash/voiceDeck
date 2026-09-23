@@ -87,7 +87,7 @@ def _section(index: int, png: bytes, scene: Scene, ds: DesignSystem) -> str:
         if el.type == "text" and el.text
     )
     return (
-        f'<section class="slide" id="slide-{index + 1}" data-index="{index}" '
+        f'<section class="slide{" active" if index == 0 else ""}" id="slide-{index + 1}" data-index="{index}" '
         f'data-theme="{scene.theme}">'
         f'<img class="slide-image" src="{_png_data_uri(png)}" alt="">'
         f'<div class="layer">{layer}</div>'

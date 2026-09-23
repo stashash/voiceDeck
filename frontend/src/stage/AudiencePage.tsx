@@ -29,8 +29,9 @@ export default function AudiencePage({id}:PageProps){
   ch.onmessage=(e:MessageEvent<ChannelMessage>)=>{
    const data=e.data;
    if(data.kind==='slide')setSlide(data.slide);
-   else{setFinal(data.final);setPartial(data.partial);}
+   else if(data.kind==='subtitle'){setFinal(data.final);setPartial(data.partial);}
   };
+  ch.postMessage({kind:'hello'} satisfies ChannelMessage);
   return ()=>ch.close();
  },[id]);
 

@@ -184,7 +184,7 @@ def _render_scene(index: int, scene: Scene, ds: DesignSystem, package_dir: Path,
         _render_element(el, ds, package_dir, colors) for el in sorted(scene.elements, key=lambda e: e.z)
     )
     return (
-        f'<section class="slide" id="slide-{index + 1}" data-index="{index}" '
+        f'<section class="slide{" active" if index == 0 else ""}" id="slide-{index + 1}" data-index="{index}" '
         f'data-theme="{scene.theme}" style="{bg}">{elements}</section>'
     )
 
