@@ -113,3 +113,14 @@ def test_empty_content_slides_are_reported():
     found = _content_violations(plan)
     assert len(found) == 2
     assert "s2" in found[0] and "s3" in found[1]
+
+
+def test_chart_with_numbers_not_in_brief_becomes_a_section():
+    plan_json = _plan_json_with_chart(5)
+    plan_json["slides"][1]["chart"]["series"][0]["values"] = [9, 3]
+    client = _client_returning(plan_json, plan_json)
+    plan = make_plan(BRIEF_WITH_PAIR, "показать эффект пилота", "регистратура", 5, client)
+
+    assert len(client.call_durations_ms) == 2
+    assert plan.slides[1].chart is None
+    assert plan.slides[1].kind.value == "section"

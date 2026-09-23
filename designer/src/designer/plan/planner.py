@@ -18,6 +18,9 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
 
     data = client.complete_json(system=system, user=brief, schema=schema, params=skill.params)
     plan = DeckPlan.model_validate(data)
+    # Числа, которых нет в брифе, убираются кодом безусловно, и до проверки: диаграмма
+    # с придуманным значением («8:30» как 8,5) уходит, и повтор просит её заново.
+    _drop_numbers_missing_from_brief(plan, brief)
 
     violations = _structural_violations(plan, slide_count)
     violations += _visualization_violations(plan, brief)
@@ -26,10 +29,8 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
         data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
         plan = DeckPlan.model_validate(data)
-
-    # Числа, которых нет в брифе, убираются кодом безусловно: повтор не гарантирует,
-    # что модель сама этого не нарушит второй раз.
-    _drop_numbers_missing_from_brief(plan, brief)
+        _drop_numbers_missing_from_brief(plan, brief)
+    _settle_empty(plan)
     # Идентификаторы ставит код: модель возвращает их пустыми или повторяет, а по ним находки аудита привязаны к слайдам.
     for index, slide in enumerate(plan.slides, start=1):
         slide.id = f"s{index}"
@@ -74,10 +75,22 @@ def _content_violations(plan: DeckPlan) -> list[str]:
         elif slide.kind == SlideKind.big_number and not any(item.number for item in slide.items):
             violations.append(f"слайд {slide.id} (big_number): нет пункта с number")
         elif slide.kind == SlideKind.chart and slide.chart is None:
-            violations.append(f"слайд {slide.id} (chart): поле chart пустое")
+            violations.append(f"слайд {slide.id} (chart): поле chart пустое, значения диаграммы только из чисел брифа")
         elif slide.kind == SlideKind.table and slide.table is None:
             violations.append(f"слайд {slide.id} (table): поле table пустое")
     return violations
+
+
+def _settle_empty(plan: DeckPlan) -> None:
+    """Слайд диаграммы или таблицы без данных становится списком или разделом.
+
+    Иначе вёрстка берёт паттерн диаграммы и кладёт ключевую мысль в его карточку дважды.
+    """
+    for slide in plan.slides:
+        empty = ((slide.kind == SlideKind.chart and slide.chart is None)
+                 or (slide.kind == SlideKind.table and slide.table is None))
+        if empty:
+            slide.kind = SlideKind.bullets if len(slide.items) >= 2 else SlideKind.section
 
 
 def _brief_has_comparable_numbers(brief: str) -> bool:
