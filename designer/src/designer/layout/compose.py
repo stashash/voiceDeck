@@ -597,11 +597,15 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         if slot is not None:
             texts[slot.id] = intent.attribution
 
+    # Число, уже стоящее крупно, в подписи пункта не повторяется: «14», перенос, «Количество витрин».
+    shown = {split_number(texts[s.id])[0].strip() for s in pattern.slots
+             if s.role == "number" and texts.get(s.id)}
     for item in rest:
-        slot = _take(free, _ITEM_ROLES, avoid=region, text=_item_text(item))
+        words = _join(*(part for part in (item.heading, item.body) if part.strip() not in shown))
+        slot = _take(free, _ITEM_ROLES, avoid=region, text=words)
         if slot is None:
             break
-        texts[slot.id] = _item_text(item)
+        texts[slot.id] = words
 
     if want is not None:
         spec.chart, spec.table = intent.chart, intent.table

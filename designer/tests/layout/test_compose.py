@@ -479,3 +479,14 @@ def test_caption_does_not_repeat_the_number():
                      items=[Item(number="11:00", heading="11:00", body="время готовности отчёта")])
     spec = compose(intent, pattern, _ds())
     assert spec.slot_text["s6"] == "11:00\nвремя готовности отчёта"
+
+
+def test_item_beside_the_big_number_does_not_repeat_it():
+    pattern = _cards(extra_slots=[_slot(6, "number", (0.05, 0.4, 0.3, 0.25), 72),
+                                  _slot(7, "body", (0.5, 0.4, 0.4, 0.2), 16)])
+    pattern.groups = []
+    intent = _intent(kind=SlideKind.big_number, key_message="",
+                     items=[Item(number="14", heading="14", body="витрин ждут перевода")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s6"] == "14"
+    assert spec.slot_text["s7"] == "витрин ждут перевода"

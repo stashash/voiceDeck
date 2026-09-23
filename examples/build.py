@@ -15,7 +15,9 @@ from pathlib import Path
 
 from PIL import Image
 
-API = os.environ.get("DESIGNER_API", "http://localhost:8090")
+# 127.0.0.1, а не localhost: на Windows имя сначала уходит в IPv6, порт открыт только на IPv4,
+# и каждый запрос теряет около 20 с на неудачной попытке.
+API = os.environ.get("DESIGNER_API", "http://127.0.0.1:8090")
 ROOT = Path(__file__).resolve().parent
 TEMPLATES = ROOT.parent / "docs" / "requirements" / "template"
 

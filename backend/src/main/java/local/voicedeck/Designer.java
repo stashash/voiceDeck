@@ -32,7 +32,8 @@ public final class Designer {
     public JsonObject slide(String designSystemId,String chunkText,List<String> usedPatternIds)throws Exception {
         if(!enabled)throw new IllegalStateException("Designer disabled");
         var body=new JsonObject().put("design_system_id",designSystemId).put("chunk_text",chunkText).put("used_pattern_ids",new JsonArray(usedPatternIds));
-        var req=HttpRequest.newBuilder(URI.create(url+"/live/slide")).timeout(Duration.ofSeconds(8)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        // Слайд из речи на Qwen идёт 4–5 с; когда модель занята сборкой колоды, дольше. 8 с обрывали такие слайды.
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/slide")).timeout(Duration.ofSeconds(15)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
         var res=http.send(req,HttpResponse.BodyHandlers.ofString());
         if(res.statusCode()==204)return null;
         if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
