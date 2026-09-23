@@ -58,6 +58,15 @@ def list_design_system_ids() -> list[str]:
     return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "manifest.json").is_file())
 
 
+def latest_design_system_id() -> str | None:
+    """Последний загруженный шаблон: его берёт живой режим, когда сцена шаблон не выбрала."""
+    root = design_systems_root()
+    packages = [p for p in root.iterdir() if p.is_dir() and (p / "manifest.json").is_file()]
+    if not packages:
+        return None
+    return max(packages, key=lambda p: (p / "manifest.json").stat().st_mtime).name
+
+
 def design_system_asset_path(ds_id: str, relative: str) -> Path | None:
     """Путь к файлу пакета (assets/..., tokens.css, ...); None — если имя выходит за пределы пакета."""
     return safe_join(design_system_dir(ds_id), relative)

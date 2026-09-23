@@ -236,9 +236,14 @@ def fix_deck_variant(deck_id: str, variant: str, payload: DeckFixRequest) -> Dec
 
 @app.post("/live/slide")
 def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_llm_client)):
-    result = pipeline.live_slide(
-        payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
-    )
+    try:
+        result = pipeline.live_slide(
+            payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
+        )
+    except LookupError as exc:
+        raise HTTPException(409, str(exc))
+    except (store.InvalidId, FileNotFoundError):
+        raise HTTPException(404, "дизайн-система не найдена")
     if result is None:
         return Response(status_code=204)
 

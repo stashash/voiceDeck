@@ -147,3 +147,11 @@ def test_number_and_caption_keep_their_own_sizes(tmp_path):
     assert [r.text for r in runs] == ["8:30", "новое время готовности отчёта"]
     assert runs[0].font.size == Pt(60)
     assert runs[1].font.size == Pt(11)
+
+
+def test_long_text_wraps_in_a_frame_that_did_not(tmp_path):
+    prs, box = _textbox()
+    box.text_frame._txBody.find(qn("a:bodyPr")).set("wrap", "none")
+    set_text(box, "Длительность пилота на двух витринах, шесть недель от старта до решения")
+    shape = _reopen(prs, tmp_path)
+    assert shape.text_frame._txBody.find(qn("a:bodyPr")).get("wrap") == "square"

@@ -420,3 +420,17 @@ def test_live_slide_without_engine_gives_markup_html(templates):
     assert result.png is None
     assert "<!DOCTYPE html>" in result.html
     assert 'class="slide-image"' not in result.html
+
+
+def test_live_slide_without_design_system_takes_the_latest_template(templates):
+    _import_first_template(templates)
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append("model")
+        payload = {"kind": "title", "title": "", "key_message": "", "items": []}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]})
+
+    client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+    assert pipeline.live_slide("", "всем привет, начинаем", [], client=client) is None
+    assert asked  # шаблон нашёлся, до модели дошло

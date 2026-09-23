@@ -457,7 +457,14 @@ class LiveSlide:
 
 def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
                 client: LlmClient | None = None) -> LiveSlide | None:
-    """Фрагмент устной речи -> слайд в стиле дизайн-системы, либо None (слайд не нужен)."""
+    """Фрагмент устной речи -> слайд в стиле дизайн-системы, либо None (слайд не нужен).
+
+    Пустой ds_id значит «дизайн-система по умолчанию»: берётся последний загруженный шаблон.
+    Шаблонов нет совсем — LookupError.
+    """
+    ds_id = ds_id or store.latest_design_system_id() or ""
+    if not ds_id:
+        raise LookupError("шаблон не загружен: загрузите pptx на экране «Шаблон»")
     package_dir = store.design_system_dir(ds_id)
     ds = load_package(package_dir)
 

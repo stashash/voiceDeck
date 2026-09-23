@@ -33,6 +33,10 @@ def set_text(
     if body is None:
         return
     run_props, para_props = _sample_props(body)
+    body_pr = body.find(qn("a:bodyPr"))
+    if wrap and body_pr is not None and body_pr.get("wrap") == "none":
+        # Рамка образца без переноса держала короткую подпись; длинная уходила за край слайда.
+        body_pr.set("wrap", "square")
     if per_line:
         styles = _line_props(body) or [run_props]
         if size_pt is not None:
