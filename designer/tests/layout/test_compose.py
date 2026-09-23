@@ -468,3 +468,14 @@ def test_qr_hint_does_not_take_the_key_message():
     spec = compose(_intent(kind=SlideKind.cta, items=[]), pattern, _ds())
     assert spec.slot_text["s9"] == ""
     assert 9 in spec.remove_shape_ids
+
+
+def test_caption_does_not_repeat_the_number():
+    number = _slot(6, "number", (0.5, 0.2, 0.35, 0.3), 80).model_copy(
+        update={"sample_text": "ххх%\vданные показателя"})
+    pattern = _cards(extra_slots=[number])
+    pattern.groups = []
+    intent = _intent(kind=SlideKind.big_number, key_message="",
+                     items=[Item(number="11:00", heading="11:00", body="время готовности отчёта")])
+    spec = compose(intent, pattern, _ds())
+    assert spec.slot_text["s6"] == "11:00\nвремя готовности отчёта"

@@ -31,7 +31,7 @@ from designer import store
 from designer.audit import fixes as audit_fixes
 from designer.audit.contextual import audit_deck, audit_slide
 from designer.audit.deterministic import run_checks
-from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideSpec
+from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideKind, SlideSpec
 from designer.export import convert, render
 from designer.export.html import render_deck
 from designer.export.html_image import render_deck_images, slide_html
@@ -471,7 +471,9 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
     owns_client = client is None
     client = client or LlmClient.from_env(live=True)
     try:
-        kinds = sorted({pattern.kind for pattern in ds.patterns})
+        # «other» это метка разбора для нераспознанного образца, а не тип содержания:
+        # выбранный моделью, он уводил слайд на схему процесса с пустыми блоками.
+        kinds = sorted({pattern.kind for pattern in ds.patterns} - {SlideKind.other})
         if not kinds:
             return None
         intent = speech_to_slide(chunk_text, kinds, client)

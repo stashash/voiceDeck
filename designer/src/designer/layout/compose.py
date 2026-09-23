@@ -207,9 +207,11 @@ def _captioned_numbers(
         texts[slot.id] = item.number
         placed.append((slot, item))
     for slot, item in placed:
-        caption = _item_text(item)
+        number = split_number(texts[slot.id])[0]
+        # Заголовок пункта, равный самому числу («11:00»), под числом не повторяется.
+        caption = _join(*(part for part in (item.heading, item.body) if part.strip() != number.strip()))
         if number_caption(slot) and caption:
-            texts[slot.id] = f"{split_number(texts[slot.id])[0]}\n{caption}"
+            texts[slot.id] = f"{number}\n{caption}"
             rest = [other for other in rest if other is not item]
     return rest
 
