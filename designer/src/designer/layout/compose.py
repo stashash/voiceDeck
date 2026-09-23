@@ -78,6 +78,10 @@ HINT_CHARS = 20
 HINT_AREA = 0.02
 """Доля слайда, до которой плашка с подсказкой это значок под картинку, а не блок содержания."""
 
+LABEL_CHARS = 8
+"""Вместимость подписи из образца («Апр» под диаграммой Ганта): пункт в неё не кладётся.
+Подпись карточки шага на 15 знаков пункт держит: модель ужмёт его под этот предел."""
+
 _IMAGE_HINTS = {
     "qr", "qr-code", "qr code", "qr-код", "qr код", "иллюстрация", "фото", "фотография",
     "изображение", "картинка", "логотип", "logo", "image", "photo", "picture",
@@ -157,7 +161,7 @@ def _take(
     text это то, что ляжет в слот: подпись месяца «Апр» из образца диаграммы фразу не держит.
     phrase значит, что слот нужен под фразу, даже если модель прислала «4,5».
     """
-    room = HINT_CHARS if phrase else min(len(text), HINT_CHARS)
+    room = HINT_CHARS if phrase else min(len(text), LABEL_CHARS)
     matches = [slot for slot in free if slot.role in roles and slot.max_chars >= room]
     if avoid is not None:
         matches = [slot for slot in matches if not _inside(slot.box, avoid)] or matches

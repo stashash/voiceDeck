@@ -293,3 +293,26 @@ def test_explanation_does_not_go_into_a_label_chip():
     roomy = _cards()
     assert _chip_penalty(chip, items) > 0
     assert _chip_penalty(roomy, items) == 0
+
+
+def test_agenda_numbering_is_not_a_place_for_a_big_number():
+    from designer.layout.match import _big_number_slot
+    numbering = [_slot(101, "number", (0.0, 0.0, 0.12, 0.10), 40, text="01"),
+                 _slot(102, "heading", (0.0, 0.12, 0.24, 0.06), 20)]
+    metric = [_slot(101, "number", (0.0, 0.0, 0.12, 0.10), 40, text="10%"),
+              _slot(102, "heading", (0.0, 0.12, 0.24, 0.06), 20)]
+    agenda = _pattern("p002", SlideKind.agenda, groups=[_group("g1", 3, 5, numbering)])
+    stats = _pattern("p003", SlideKind.cards, groups=[_group("g1", 3, 3, metric)])
+    ds = _ds([agenda, stats])
+    assert not _big_number_slot(agenda, ds)
+    assert _big_number_slot(stats, ds)
+
+
+def test_pattern_with_many_idle_text_places_is_penalised():
+    from designer.layout.match import _idle_slots_penalty
+    boxes = [_slot(10 + i, "body", (0.1 + 0.1 * i, 0.5, 0.08, 0.1), 14) for i in range(6)]
+    diagram = _pattern("p013", SlideKind.steps, slots=[_slot(1, "title", (0.05, 0.08, 0.6, 0.12), 36), *boxes])
+    intent = SlideIntent(id="s1", kind=SlideKind.big_number, title="Осталось 14 витрин",
+                         items=[Item(heading="Остаток", number="14")])
+    assert _idle_slots_penalty(diagram, intent) > 0
+    assert _idle_slots_penalty(_cards(), intent) == 0

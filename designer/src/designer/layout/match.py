@@ -85,6 +85,9 @@ SAMPLE_MIN = 0.05
 SAMPLE_TOTAL = 0.15
 """Доля слайда под мелкими картинками, с которой слайд держится на них целиком."""
 
+IDLE_SLOTS = 4
+"""Сколько мест под текст может остаться пустым, прежде чем образец считается не тем."""
+
 REFLOW_FREE = 2
 """На сколько блоков перекладка ещё дёшева."""
 
@@ -227,7 +230,10 @@ def _big_number_slot(pattern: Pattern, ds: DesignSystem) -> bool:
     steps = [s.size_pt for s in ds.tokens.type_scale if s.size_pt > 0]
     body = [s.size_pt for s in ds.tokens.type_scale if s.role == "body"]
     floor = max([max(steps) if steps else 0.0, 2 * (max(body) if body else 0.0), 32.0])
-    slots = list(pattern.slots) + [slot for g in pattern.groups for slot in g.unit_slots]
+    # Номер пункта повестки «01» набран крупно, но число слайда в него не встаёт: там стоит «1».
+    metrics = [slot for g in pattern.groups for slot in g.unit_slots
+               if slot.sample_text.strip().lstrip("0") not in ("", "1")]
+    slots = list(pattern.slots) + metrics
     return any(slot.role == "number" and (slot.style.size_pt or 0) >= floor for slot in slots)
 
 
@@ -250,6 +256,17 @@ def _empty_units_penalty(pattern: Pattern, intent: SlideIntent) -> float:
     if not intent.items or group is None:
         return 0.0
     return 0.0 if unit_text_slots(group, linked_groups(pattern, group)) else P_EMPTY_UNITS
+
+
+def _idle_slots_penalty(pattern: Pattern, intent: SlideIntent) -> float:
+    """Штраф за образец, где большая часть мест под текст останется пустой.
+
+    Схема процесса Education на восемь блоков под одно число выходила с шестью пустыми
+    блоками и стрелками между ними: слайд выглядит недоделанным.
+    """
+    places = [slot for slot in pattern.slots if slot.role in ("body", "heading", "caption", "label")]
+    pieces = len(intent.items) + (1 if intent.key_message else 0)
+    return P_EMPTY_UNITS if len(places) - pieces >= IDLE_SLOTS else 0.0
 
 
 def _holds_items(pattern: Pattern, intent: SlideIntent) -> bool:
@@ -326,6 +343,7 @@ def score_pattern(
         - _chip_penalty(pattern, intent.items)
         - _number_penalty(pattern, intent, ds)
         - _empty_units_penalty(pattern, intent)
+        - _idle_slots_penalty(pattern, intent)
         - (0.0 if _holds_items(pattern, intent) else P_LOST_ITEMS)
         - _penalty(pattern, used)
     )
