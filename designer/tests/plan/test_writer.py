@@ -192,3 +192,10 @@ def test_speech_to_slide_keeps_digits_for_spoken_numerals():
     intent = speech_to_slide("Отчёт стал готов к восьми тридцати", [SlideKind.big_number], client)
 
     assert "8:30" in intent.title
+
+
+def test_unknown_number_leaves_with_its_preposition_and_unit():
+    from designer.plan.writer import _strip_unknown_numbers
+    allowed = {"9", "2", "12"}
+    assert _strip_unknown_numbers("Инциденты сократились в 4,5 раза при росте затрат на 12%", allowed) == (
+        "Инциденты сократились при росте затрат на 12%")

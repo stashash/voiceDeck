@@ -269,11 +269,18 @@ def _numbers_in_intent(intent: SlideIntent) -> set[str]:
     return numbers
 
 
+_NUMBER_PHRASE = re.compile(
+    r"(?:\b(?:в|на|до|с|к|от|по)\s+)?(\d+(?:[.,]\d+)?)"
+    r"(?:\s*(?:%|раза?\b|процент\w*|час\w*|минут\w*|дн\w*|недел\w*|месяц\w*|раз\b))?",
+    re.IGNORECASE)
+"""Число вместе с предлогом перед ним и единицей после: уходят целиком, иначе во фразе дыра («в раза»)."""
+
+
 def _strip_unknown_numbers(text: str, allowed: set[str]) -> str:
     def _replace(match: re.Match[str]) -> str:
-        return match.group(0) if match.group(0).replace(",", ".") in allowed else ""
+        return match.group(0) if match.group(1).replace(",", ".") in allowed else ""
 
-    cleaned = _NUMBER.sub(_replace, text)
+    cleaned = _NUMBER_PHRASE.sub(_replace, text)
     return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
