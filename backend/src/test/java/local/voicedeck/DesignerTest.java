@@ -86,6 +86,13 @@ class DesignerTest {
         assertNull(d.slide("ds1","Текст",List.of()));
     }
 
+    @Test void status503MeansModelIsLoading(){
+        server.createContext("/live/slide",ex->{ex.sendResponseHeaders(503,-1);ex.close();});
+        server.start();
+        var d=new Designer("http://127.0.0.1:"+port,http);
+        assertThrows(Designer.ModelLoading.class,()->d.slide("ds1","Текст",List.of()));
+    }
+
     @Test void unexpectedStatusThrows(){
         server.createContext("/live/slide",ex->{ex.sendResponseHeaders(500,-1);ex.close();});
         server.start();

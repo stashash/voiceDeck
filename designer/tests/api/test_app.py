@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from designer import store
-from designer.api.app import app, get_llm_client
+from designer.api.app import app, get_live_llm_client, get_llm_client
 from designer.llm.client import LlmClient
 
 PNG = b"\x89PNG\r\n\x1a\nfake"
@@ -33,6 +33,14 @@ def _mock_llm(payload: dict) -> LlmClient:
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]})
 
     return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+
+
+def _loading_llm() -> LlmClient:
+    """Сервер модели, у которого модель грузится: LM Studio отвечает 400 «Failed to load model»."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": 'Failed to load model "qwen". Error: Engine protocol startup was aborted.'})
+
+    return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler), load_wait_s=0)
 
 
 def _upload_first_template(client: TestClient, templates) -> str:
@@ -63,7 +71,7 @@ def test_live_slide_returns_scene_with_model_text(client, templates):
         "key_message": "Скрипты забирают рутину.",
         "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
     }
-    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
     response = client.post("/live/slide", json={
         "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию", "used_pattern_ids": [],
@@ -79,7 +87,7 @@ def test_live_slide_returns_scene_with_model_text(client, templates):
 def test_live_slide_returns_204_for_empty_title(client, templates):
     ds_id = _upload_first_template(client, templates)
     payload = {"kind": "title", "title": "", "key_message": "", "items": []}
-    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
     response = client.post("/live/slide", json={
         "design_system_id": ds_id, "chunk_text": "всем привет", "used_pattern_ids": [],
@@ -247,7 +255,7 @@ def test_live_slide_returns_picture_of_the_slide(client, templates, monkeypatch)
         "key_message": "Скрипты забирают рутину.",
         "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
     }
-    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
     response = client.post("/live/slide", json={
         "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию", "used_pattern_ids": [],
@@ -266,7 +274,7 @@ def test_live_slide_without_engine_has_no_picture(client, templates):
         "key_message": "Скрипты забирают рутину.",
         "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
     }
-    app.dependency_overrides[get_llm_client] = lambda: _mock_llm(payload)
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
     response = client.post("/live/slide", json={
         "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию", "used_pattern_ids": [],
@@ -290,3 +298,12 @@ def test_slide_image_that_was_not_rendered_is_404(client):
     store.init_deck(deck_id, "any-ds")
 
     assert client.get(f"/decks/{deck_id}/a/slides/7.png").status_code == 404
+
+
+def test_live_slide_answers_503_while_the_model_loads(client, templates):
+    _upload_first_template(client, templates)
+    app.dependency_overrides[get_live_llm_client] = lambda: _loading_llm()
+    response = client.post("/live/slide", json={"design_system_id": "", "chunk_text": "Число инцидентов упало с 9 до 2.",
+                                                "used_pattern_ids": []})
+    assert response.status_code == 503
+    assert "загружается" in response.json()["detail"]

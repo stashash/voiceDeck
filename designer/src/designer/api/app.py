@@ -27,7 +27,7 @@ from designer.api.schemas import (
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
-from designer.llm.client import LlmClient
+from designer.llm.client import LlmClient, ModelLoading
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
 
@@ -44,6 +44,11 @@ if _origins:
 def get_llm_client() -> LlmClient:
     """Клиент модели на запрос. Переопределяется в тестах через app.dependency_overrides."""
     return LlmClient.from_env()
+
+
+def get_live_llm_client() -> LlmClient:
+    """Клиент модели живого режима: своя модель из DESIGNER_LIVE_LLM_*, короткое ожидание загрузки."""
+    return LlmClient.from_env(live=True)
 
 
 def _not_found(ds_id_error: bool = False):
@@ -235,7 +240,7 @@ def fix_deck_variant(deck_id: str, variant: str, payload: DeckFixRequest) -> Dec
 # ---------- живой режим ----------
 
 @app.post("/live/slide")
-def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_llm_client)):
+def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_live_llm_client)):
     try:
         result = pipeline.live_slide(
             payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
@@ -244,6 +249,9 @@ def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_llm_cl
         raise HTTPException(409, str(exc))
     except (store.InvalidId, FileNotFoundError):
         raise HTTPException(404, "дизайн-система не найдена")
+    except ModelLoading as exc:
+        print(f"живой слайд: {exc}", flush=True)
+        raise HTTPException(503, "модель загружается в LM Studio: слайды появятся, когда она будет готова")
     if result is None:
         return Response(status_code=204)
 

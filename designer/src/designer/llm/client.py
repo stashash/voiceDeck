@@ -14,20 +14,32 @@ DEFAULT_MODEL = os.environ.get("DESIGNER_LLM_MODEL", "qwen/qwen3.8-27b")
 
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)
 _MAX_ATTEMPTS = 3  # первая попытка плюс два повтора
+_LOADING = re.compile(r"\b(?:un)?load(?:ed|ing)?\b|aborted|cancel+ed", re.I)
+"""Ответ сервера модели о том, что модель выгружена или грузится («Failed to load model»)."""
+_LOAD_POLL_S = 2.0
+LOAD_WAIT_S = 60.0
+"""Сколько колода ждёт, пока сервер модели загрузит модель."""
+LIVE_LOAD_WAIT_S = 6.0
+"""Сколько ждёт слайд из речи: Java-сервис держит запрос 15 с, дальше слайд уже не нужен."""
 
 
 class LlmResponseError(RuntimeError):
     """Сервер не дал валидный JSON по схеме за все попытки."""
 
 
+class ModelLoading(RuntimeError):
+    """Модель не готова: сервер не отвечает, модель выгружена или ещё грузится."""
+
+
 class LlmClient:
     """Клиент чат-эндпоинта OpenAI-совместимого сервера со строгой JSON-схемой ответа."""
 
     def __init__(self, base_url: str, model: str, timeout_s: float = 120.0,
-                 transport: httpx.BaseTransport | None = None):
+                 transport: httpx.BaseTransport | None = None, load_wait_s: float = LOAD_WAIT_S):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_s = timeout_s
+        self.load_wait_s = load_wait_s
         self._client = httpx.Client(timeout=timeout_s, transport=transport)
         self.call_durations_ms: list[int] = []
 
@@ -41,16 +53,18 @@ class LlmClient:
         """
         from designer.settings import SettingsError, load_settings
 
+        wait = LIVE_LOAD_WAIT_S if live else LOAD_WAIT_S
         try:
             settings = load_settings()
         except SettingsError as error:
             print(f"настройки не прочитаны, взяты значения по умолчанию: {error}", flush=True)
-            return cls(DEFAULT_BASE_URL, DEFAULT_MODEL, timeout_s=timeout_s, transport=transport)
+            return cls(DEFAULT_BASE_URL, DEFAULT_MODEL, timeout_s=timeout_s, transport=transport,
+                       load_wait_s=wait)
         url, model = settings.llm_url, settings.llm_model
         if live:
             url = settings.live_llm_url or url
             model = settings.live_llm_model or model
-        return cls(url, model, timeout_s=timeout_s, transport=transport)
+        return cls(url, model, timeout_s=timeout_s, transport=transport, load_wait_s=wait)
 
     def close(self) -> None:
         self._client.close()
@@ -97,8 +111,27 @@ class LlmClient:
         }
 
     def _call(self, payload: dict) -> str:
+        """Запрос к серверу модели. Пока модель грузится, запрос повторяется до load_wait_s.
+
+        LM Studio после простоя выгружает модель и грузит её заново по первому запросу, а загрузка
+        второй модели (эмбеддингов) обрывает первую: сервер отвечает 400 «Failed to load model».
+        """
         started = time.monotonic()
-        response = self._client.post(f"{self.base_url}/chat/completions", json=payload)
+        deadline = started + self.load_wait_s
+        while True:
+            try:
+                response = self._client.post(f"{self.base_url}/chat/completions", json=payload)
+            except httpx.ConnectError as error:
+                if time.monotonic() >= deadline:
+                    raise ModelLoading(f"сервер модели {self.base_url} не отвечает") from error
+                time.sleep(_LOAD_POLL_S)
+                continue
+            if response.status_code >= 400 and _LOADING.search(response.text):
+                if time.monotonic() >= deadline:
+                    raise ModelLoading(f"модель {self.model} не загружена: {response.text[:200]}")
+                time.sleep(_LOAD_POLL_S)
+                continue
+            break
         response.raise_for_status()
         self.call_durations_ms.append(int((time.monotonic() - started) * 1000))
         body = response.json()

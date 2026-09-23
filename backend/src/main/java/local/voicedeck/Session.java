@@ -280,7 +280,7 @@ public final class Session implements AutoCloseable {
                     String pid=s.getString("pattern_id");if(pid!=null){recentPatternIds.addLast(pid);while(recentPatternIds.size()>5)recentPatternIds.removeFirst();}
                     if(s.getValue("title")!=null)lastSlideEnd=c.getLong("t0");
                 }}finally{generating=false;}
-            });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning("Дизайнер недоступен: слайды будут дополнены после восстановления");});}
+            });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
         });
     }
     /** T-S11: depth-score dips inside a chunk become curator candidates. */

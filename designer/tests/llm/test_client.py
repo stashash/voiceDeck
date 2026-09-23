@@ -83,3 +83,31 @@ def test_image_is_sent_as_data_url():
     assert content[0] == {"type": "text", "text": "u"}
     expected_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
     assert content[1] == {"type": "image_url", "image_url": {"url": expected_url}}
+
+
+def test_waits_while_the_model_loads(monkeypatch):
+    monkeypatch.setattr("designer.llm.client._LOAD_POLL_S", 0)
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return httpx.Response(400, json={"error": 'Failed to load model "m". Error: Operation canceled.'})
+        return _ok_response('{"title": "готово"}')
+
+    client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler), load_wait_s=30)
+    schema = {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]}
+    assert client.complete_json("s", "u", schema) == {"title": "готово"}
+    assert calls["n"] == 3
+
+
+def test_model_that_never_loads_is_reported():
+    import pytest
+    from designer.llm.client import ModelLoading
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": 'Failed to load model "m".'})
+
+    client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler), load_wait_s=0)
+    with pytest.raises(ModelLoading):
+        client.complete_json("s", "u", {"type": "object"})

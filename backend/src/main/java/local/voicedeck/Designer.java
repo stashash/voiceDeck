@@ -28,6 +28,8 @@ public final class Designer {
         catch(UnknownHostException e){throw new IllegalArgumentException("Cannot resolve designer host",e);}
     }
     public boolean enabled(){return enabled;}
+    /** designer жив, но модель в LM Studio ещё грузится: слайд появится после загрузки, сервис не сломан. */
+    public static final class ModelLoading extends RuntimeException{ModelLoading(){super("model loading");}}
     /** Ответ 204 -> null («слайд не нужен»). Ответ 200 разбирается в поля события slide. */
     public JsonObject slide(String designSystemId,String chunkText,List<String> usedPatternIds)throws Exception {
         if(!enabled)throw new IllegalStateException("Designer disabled");
@@ -36,6 +38,7 @@ public final class Designer {
         var req=HttpRequest.newBuilder(URI.create(url+"/live/slide")).timeout(Duration.ofSeconds(15)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
         var res=http.send(req,HttpResponse.BodyHandlers.ofString());
         if(res.statusCode()==204)return null;
+        if(res.statusCode()==503)throw new ModelLoading();
         if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
         return toSlide(new JsonObject(res.body()));
     }
