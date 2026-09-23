@@ -1,6 +1,6 @@
 {
- "run_id": "99afbe1b9014453cbf85b834b4cc1ddc",
- "started_at": "2026-09-22T14:50:55.457007+00:00",
+ "run_id": "2be52ad8ed184370b424c4f0b716dbf7",
+ "started_at": "2026-09-23T08:53:35.939068+00:00",
  "model": "qwen/qwen3.8-27b",
  "design_system_id": "shablon-prezentacii-vk-education",
  "skills": [
@@ -16,13 +16,13 @@
   }
  ],
  "timings_ms": {
-  "plan": 40000,
-  "a-fill-slots": 12681,
+  "plan": 45151,
+  "a-fill-slots": 13686,
   "a-audit": 1,
-  "a-export-pptx": 530,
+  "a-export-pptx": 520,
   "a-export-html": 0,
-  "a-convert": 3178,
-  "a-render-slides": 3833,
-  "a-audit-contextual": 67016
+  "a-convert": 3157,
+  "a-render-slides": 4352,
+  "a-audit-contextual": 78440
  }
 }

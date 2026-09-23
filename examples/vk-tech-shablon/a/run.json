@@ -1,6 +1,6 @@
 {
- "run_id": "21c14e98634048ebbb8f326c5d485f4e",
- "started_at": "2026-09-22T14:08:41.673368+00:00",
+ "run_id": "546c526a82664ce7b9c98cd01d9c364d",
+ "started_at": "2026-09-23T08:44:52.506437+00:00",
  "model": "qwen/qwen3.8-27b",
  "design_system_id": "vk-tech-shablon",
  "skills": [
@@ -16,13 +16,13 @@
   }
  ],
  "timings_ms": {
-  "plan": 37290,
-  "a-fill-slots": 11335,
+  "plan": 66108,
+  "a-fill-slots": 11091,
   "a-audit": 1,
-  "a-export-pptx": 572,
+  "a-export-pptx": 589,
   "a-export-html": 0,
-  "a-convert": 2353,
-  "a-render-slides": 6918,
-  "a-audit-contextual": 58217
+  "a-convert": 1888,
+  "a-render-slides": 6828,
+  "a-audit-contextual": 55630
  }
 }

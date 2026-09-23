@@ -1,6 +1,6 @@
 {
- "run_id": "fe9a73c7b6ed494abfc517cfd66ce4a1",
- "started_at": "2026-09-22T14:29:27.982012+00:00",
+ "run_id": "7d8126a0d0e94eb086f16b45f90e08db",
+ "started_at": "2026-09-23T08:49:27.872835+00:00",
  "model": "qwen/qwen3.8-27b",
  "design_system_id": "vk-workspace-klientskaya-konferenciya-shablon-03",
  "skills": [
@@ -16,13 +16,13 @@
   }
  ],
  "timings_ms": {
-  "plan": 39928,
-  "a-fill-slots": 14963,
+  "plan": 33277,
+  "a-fill-slots": 13188,
   "a-audit": 1,
-  "a-export-pptx": 320,
+  "a-export-pptx": 331,
   "a-export-html": 0,
-  "a-convert": 2323,
-  "a-render-slides": 3955,
-  "a-audit-contextual": 57755
+  "a-convert": 1689,
+  "a-render-slides": 3174,
+  "a-audit-contextual": 57155
  }
 }
