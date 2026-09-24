@@ -48,6 +48,7 @@ services:
       DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
       DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}
       DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}}
+      DESIGNER_AGENT_BRIDGE_URL: ${DESIGNER_AGENT_BRIDGE_URL:-http://host.docker.internal:8095}
     volumes: ["designer-data:/app/data"]
     extra_hosts: ["host.docker.internal:host-gateway"]
 volumes:
