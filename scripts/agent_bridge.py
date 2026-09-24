@@ -59,12 +59,14 @@ class Agent:
 def _claude_argv(exe: str, system: str, user: str, model: str | None,
                   image_paths: list[Path], workdir: Path) -> tuple[list[str], Path | None]:
     # Источник: `claude --help` (2.1.270). -p/--print — неинтерактивный вывод и выход;
-    # --system-prompt — системная подсказка отдельным флагом; --permission-mode bypassPermissions —
-    # без вопросов о разрешениях (иначе процесс без терминала зависает на первом же вопросе);
+    # --system-prompt — системная подсказка отдельным флагом; --tools "" отключает все инструменты:
+    # агенту нужен только текстовый ответ, а в запрос попадает чужой текст (бриф, замечания), и
+    # выполнять по нему команды на машине нельзя. Без инструментов вопросов о разрешениях нет,
+    # --permission-mode dontAsk отклоняет всё, что всё же попросит разрешение;
     # --model — только если задан явно. У claude нет документированного способа передать картинку
     # файлом (в --help нет такого флага), поэтому агент помечен images=False и картинки в /complete
     # для него отклоняются раньше, до сборки команды.
-    argv = [exe, "-p", "--system-prompt", system, "--permission-mode", "bypassPermissions"]
+    argv = [exe, "-p", "--tools", "", "--permission-mode", "dontAsk", "--system-prompt", system]
     if model:
         argv += ["--model", model]
     argv.append(user)
@@ -74,12 +76,14 @@ def _claude_argv(exe: str, system: str, user: str, model: str | None,
 def _cursor_agent_argv(exe: str, system: str, user: str, model: str | None,
                         image_paths: list[Path], workdir: Path) -> tuple[list[str], Path | None]:
     # Источник: `cursor-agent --help` (2026.08.11-e8db854). -p/--print — неинтерактивный вывод;
-    # --output-format text — простой текст в stdout; --force — не спрашивать подтверждений
-    # (эквивалент --yolo); --workspace — рабочий каталог агента. Отдельного флага системной
+    # --output-format text — простой текст в stdout; --mode ask — режим вопросов и ответов только
+    # на чтение, --sandbox disabled — песочница на Windows недоступна, защиту даёт режим ask, --trust — не спрашивать о доверии пустому
+    # временному каталогу --workspace. --force (выполнять команды без спроса) не используется:
+    # в запрос попадает чужой текст. Отдельного флага системной
     # подсказки в --help нет, поэтому системный и пользовательский текст соединяются в один
     # промпт. Отдельного флага для картинок в --help тоже нет, поэтому images=False.
     prompt = f"{system}\n\n{user}" if system else user
-    argv = [exe, "--print", "--output-format", "text", "--force", "--workspace", str(workdir)]
+    argv = [exe, "--print", "--output-format", "text", "--mode", "ask", "--sandbox", "disabled", "--trust", "--workspace", str(workdir)]
     if model:
         argv += ["--model", model]
     argv.append(prompt)
@@ -108,13 +112,13 @@ def _codex_argv(exe: str, system: str, user: str, model: str | None,
     # локального --help, а из официальной документации: https://learn.chatgpt.com/docs/developer-commands?surface=cli
     # (открыта 2026-09-24). `codex exec PROMPT` — неинтерактивный запуск; --image/-i PATH[,PATH]
     # — картинки первым сообщением (через запятую); --output-last-message/-o PATH — записать
-    # финальный ответ в файл (используем вместо разбора stdout); --dangerously-bypass-approvals-and-sandbox
-    # — без подтверждений и без песочницы, иначе процесс без терминала зависает на первом
-    # запросе разрешения. Отдельного флага системной подсказки документация не называет,
+    # финальный ответ в файл (используем вместо разбора stdout); --sandbox read-only и
+    # --ask-for-approval never — только чтение и без вопросов; --skip-git-repo-check — запуск во
+    # временном каталоге вне репозитория. Отдельного флага системной подсказки документация не называет,
     # соединяем текст сами.
     prompt = f"{system}\n\n{user}" if system else user
     out_file = workdir / "codex-output.txt"
-    argv = [exe, "exec", "--dangerously-bypass-approvals-and-sandbox", "--output-last-message", str(out_file)]
+    argv = [exe, "exec", "--sandbox", "read-only", "--ask-for-approval", "never", "--skip-git-repo-check", "--output-last-message", str(out_file)]
     if model:
         argv += ["--model", model]
     if image_paths:
@@ -177,7 +181,8 @@ def _run_agent(agent: Agent, exe: str, system: str, user: str, model: str | None
                 images_png_b64: list[str] | None, timeout_s: float) -> tuple[str, float]:
     if images_png_b64 and not agent.images:
         raise AgentError(f"{agent.id} не принимает картинки: в --help этого CLI нет способа их передать")
-    with tempfile.TemporaryDirectory(prefix="agent-bridge-") as raw_dir:
+    # ignore_cleanup_errors: на Windows каталог может держать ещё не умерший потомок CLI.
+    with tempfile.TemporaryDirectory(prefix="agent-bridge-", ignore_cleanup_errors=True) as raw_dir:
         workdir = Path(raw_dir)
         image_paths: list[Path] = []
         for index, b64 in enumerate(images_png_b64 or []):
@@ -195,6 +200,8 @@ def _run_agent(agent: Agent, exe: str, system: str, user: str, model: str | None
             proc.communicate()
             raise AgentError(f"{agent.id}: не ответил за {timeout_s:.0f} с (таймаут)")
         seconds = time.monotonic() - started
+        # OpenCode оставляет после ответа свой сервер: гасим всё дерево, чтобы не копились процессы.
+        _kill_tree(proc)
         if proc.returncode != 0:
             detail = (stderr or stdout or "").strip()[-2000:]
             raise AgentError(f"{agent.id}: код возврата {proc.returncode}: {detail or 'нет вывода'}")

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Square, AlertTriangle, RotateCw, Settings, Boxes } from 'lucide-react';
 import {
-  DeckEvent, DeckStateResponse, absoluteUrl, getDeckState, watchDeckEvents,
+  DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getDeckState, watchDeckEvents,
 } from '../designer/api';
 import { STEP_LABEL, StepView, buildSteps } from '../designer/generation';
 
@@ -107,7 +107,7 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
             </div>}
           </div>
           {doneAll ? <a className="button primary" href={`#/decks/${deckId}/edit/${variant}`}>Открыть и править</a>
-            : !stopped && <button type="button" className="button" onClick={() => setStopped(true)}>
+            : !stopped && <button type="button" className="button" onClick={() => { setStopped(true); cancelDeck(deckId).catch(e => setError(String(e))); }}>
               <Square size={18} strokeWidth={1.5}/>Остановить
             </button>}
         </div>

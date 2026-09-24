@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import base64
+import sys
 import json
 
 import httpx
@@ -592,13 +593,15 @@ def test_rewrite_unknown_finding_is_404(client, templates):
 
 # ---------- поток 1: агенты и настройки (запасное поведение без designer.agents) ----------
 
-def test_agents_list_is_empty_without_bridge_module(client):
+def test_agents_list_is_empty_without_bridge_module(client, monkeypatch):
+    monkeypatch.setitem(sys.modules, "designer.agents", None)
     response = client.get("/agents")
     assert response.status_code == 200
     assert response.json() == {"items": []}
 
 
-def test_agent_check_is_503_without_bridge_module(client):
+def test_agent_check_is_503_without_bridge_module(client, monkeypatch):
+    monkeypatch.setitem(sys.modules, "designer.agents", None)
     response = client.post("/agents/cli:claude/check")
     assert response.status_code == 503
 

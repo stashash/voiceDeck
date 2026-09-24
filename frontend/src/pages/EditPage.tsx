@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, revertVariant, rewriteFinding, setSlidePattern, slidesAction,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction,
 } from '../designer/api';
 
 const ASK_CHIPS = ['Короче', 'Сделай диаграммой', 'Вынести вывод в заголовок'];
@@ -22,6 +22,8 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
   const [notesDraft, setNotesDraft] = useState('');
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => { getDeckState(deckId).then(setState).catch(e => setError(String(e))); }, [deckId]);
@@ -29,6 +31,7 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
   const active = state?.variants[variant];
   const scenes = useMemo(() => active?.scenes ?? [], [active]);
   const scene = scenes[index];
+  const deckTitle = active?.plan?.title ?? state?.plan?.title ?? '';
   const image = active?.slide_images?.[index];
   const findingsBySlide = useMemo(() => {
     const map = new Map<string, Finding[]>();
@@ -38,7 +41,8 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
   const sceneFindings = scene ? findingsBySlide.get(scene.slide_id) ?? [] : [];
   const [patterns, setPatterns] = useState<SlidePatternOption[]>([]);
 
-  useEffect(() => { setNotesDraft(scene?.notes ?? ''); setActiveEl(null); setEditingEl(null); }, [scene?.slide_id]);
+  const planNotes = active?.plan?.slides[index]?.notes ?? '';
+  useEffect(() => { setNotesDraft(planNotes); setActiveEl(null); setEditingEl(null); }, [scene?.slide_id, planNotes]);
   useEffect(() => {
     if (!scene) return;
     getSlidePatterns(deckId, variant, index + 1).then(setPatterns).catch(() => setPatterns([]));
@@ -55,15 +59,20 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
   return <div className="edit-shell">
     <div className="edit-topbar">
       <div className="edit-title-row">
-        <h1 className="edit-title">{state?.plan?.title ?? active?.plan?.title ?? ''}</h1>
-        <button type="button" className="button-icon" aria-label="Переименовать" title="Переименовать"><Pencil size={20} strokeWidth={1.5}/></button>
+        {renaming ? <input className="edit-title-input" aria-label="Название презентации" autoFocus value={titleDraft}
+          onChange={e => setTitleDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') setRenaming(false); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          onBlur={() => { setRenaming(false); const t = titleDraft.trim(); if (t && t !== deckTitle) void guard(() => renameDeck(deckId, t)); }}/>
+          : <h1 className="edit-title">{deckTitle}</h1>}
+        <button type="button" className="button-icon" aria-label="Переименовать" title="Переименовать"
+          onClick={() => { setTitleDraft(deckTitle); setRenaming(true); }}><Pencil size={20} strokeWidth={1.5}/></button>
       </div>
       <div role="group" aria-label="Варианты вёрстки" className="edit-variants">
         {['a', 'b', 'c'].map(v => {
           const has = state?.variants[v]?.status === 'done';
           return <a key={v} className={`edit-variant-tab ${v === variant ? 'active' : ''}`}
             href={`#/decks/${deckId}/edit/${v}`} aria-current={v === variant ? 'page' : undefined}
-            title={has ? '' : 'Проверки смысла у этого варианта не было'}>
+            title={v === 'a' || !has ? undefined : 'Проверки смысла у этого варианта не было'}>
             Вариант {v === 'a' ? 1 : v === 'b' ? 2 : 3}
           </a>;
         })}
@@ -134,7 +143,7 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
         <div className="edit-notes">
           <label htmlFor="notes">Заметки докладчика</label>
           <textarea id="notes" rows={2} value={notesDraft} onChange={e => setNotesDraft(e.target.value)}
-            onBlur={() => { if (notesDraft !== (scene.notes ?? '')) void guard(() => patchNotes(deckId, variant, index + 1, notesDraft)); }}/>
+            onBlur={() => { if (notesDraft !== planNotes) void guard(() => patchNotes(deckId, variant, index + 1, notesDraft)); }}/>
         </div>
       </div>
       <aside className="edit-panel" aria-label={`Слайд ${index + 1}`}>

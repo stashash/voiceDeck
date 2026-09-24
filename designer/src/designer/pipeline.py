@@ -323,6 +323,10 @@ def list_decks() -> list[dict]:
 # ---------- генерация колоды ----------
 
 
+class DeckCancelled(RuntimeError):
+    """Автор остановил генерацию: конвейер выходит между шагами."""
+
+
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
                    client: LlmClient | None = None, variants: list[str] | None = None) -> Deck:
@@ -358,6 +362,8 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
 
         decks: dict[str, Deck] = {}
         for variant_code in variant_codes:
+            if store.deck_cancel_requested(deck_id):
+                raise DeckCancelled("Генерация остановлена")
             deck = _build_and_export_variant(
                 deck_id, ds_id, variant_code, plans[variant_code], chosen_by_a, ds, package_dir,
                 client, recorder, on_event, brief=brief,

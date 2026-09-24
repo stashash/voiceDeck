@@ -29,7 +29,7 @@ export type DesignSystemListItem = {
 };
 
 // ---------- план и сцена ----------
-export type SlideIntent = { id: string; kind: string; title: string; key_message: string };
+export type SlideIntent = { id: string; kind: string; title: string; key_message: string; notes?: string };
 export type DeckPlan = { title: string; purpose: string; audience: string; language: string; slides: SlideIntent[] };
 export type TextStyle = { size_pt?: number | null; bold?: boolean; italic?: boolean; color?: string | null; align?: 'left' | 'center' | 'right' | null };
 export type Element = {
@@ -236,6 +236,16 @@ export function patchNotes(deckId: string, variant: string, n: number, notes: st
   return fetch(url(`/decks/${deckId}/${variant}/notes/${n}`), {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes }),
   }).then(r => asJson<DeckVariantState>(r));
+}
+
+export function cancelDeck(deckId: string): Promise<{ status: string }> {
+  return fetch(url(`/decks/${deckId}/cancel`), { method: 'POST' }).then(r => asJson<{ status: string }>(r));
+}
+
+export function renameDeck(deckId: string, title: string): Promise<{ title: string }> {
+  return fetch(url(`/decks/${deckId}/title`), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
+  }).then(r => asJson<{ title: string }>(r));
 }
 
 export function revertVariant(deckId: string, variant: string): Promise<DeckVariantState> {

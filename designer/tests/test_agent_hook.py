@@ -1,9 +1,11 @@
-"""Тесты agent_hook: запасное поведение, пока designer.agents (поток 2) не существует.
+"""Тесты agent_hook: запасное поведение, когда модуля designer.agents нет.
 
-Задача T-13, поток 1. Прямой импорт designer.agents в этой ветке всегда падает ImportError —
-модуль появится только когда поток 2 положит designer/src/designer/agents.py.
+Модуль есть в сборке, поэтому тесты прячут его через sys.modules: импорт даёт ImportError,
+и agent_hook уходит на запасной путь.
 """
 from __future__ import annotations
+
+import sys
 
 import pytest
 
@@ -14,6 +16,7 @@ from designer.llm.client import LlmClient
 @pytest.fixture(autouse=True)
 def _isolated_store(tmp_path, monkeypatch):
     monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
+    monkeypatch.setitem(sys.modules, "designer.agents", None)
 
 
 def test_client_for_falls_back_to_llm_client_from_env():

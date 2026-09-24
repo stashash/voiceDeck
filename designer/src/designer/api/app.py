@@ -377,6 +377,27 @@ def patch_slide_notes(deck_id: str, variant: str, number: int, payload: SlideNot
     return _variant_state(deck_id, variant)
 
 
+@app.post("/decks/{deck_id}/cancel", status_code=202)
+def post_deck_cancel(deck_id: str) -> dict:
+    try:
+        store.request_deck_cancel(deck_id)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found()
+    return {"status": "cancelling"}
+
+
+@app.patch("/decks/{deck_id}/title")
+def patch_deck_title(deck_id: str, payload: dict) -> dict:
+    title = str(payload.get("title", "")).strip()
+    if not title:
+        raise HTTPException(400, "пустое название")
+    try:
+        store.rename_deck(deck_id, title)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found()
+    return {"title": title}
+
+
 @app.post("/decks/{deck_id}/{variant}/revert", response_model=DeckVariantState)
 def post_revert(deck_id: str, variant: str) -> DeckVariantState:
     try:

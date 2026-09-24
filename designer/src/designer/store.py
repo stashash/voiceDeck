@@ -248,6 +248,30 @@ def mark_deck_failed(deck_id: str, message: str, variant: str = _DEFAULT_VARIANT
     _write_json(deck_variant_state_path(deck_id, variant), state)
 
 
+def request_deck_cancel(deck_id: str) -> None:
+    """Автор нажал «Остановить»: конвейер проверяет флаг между шагами."""
+    path = decks_root() / _check_id(deck_id)
+    if not path.is_dir():
+        raise FileNotFoundError(deck_id)
+    (path / "cancel").write_text("1", encoding="utf-8")
+
+
+def deck_cancel_requested(deck_id: str) -> bool:
+    return (decks_root() / _check_id(deck_id) / "cancel").is_file()
+
+
+def rename_deck(deck_id: str, title: str) -> None:
+    """Название презентации одно на все варианты: пишется в план каждого варианта."""
+    if not (decks_root() / _check_id(deck_id)).is_dir():
+        raise FileNotFoundError(deck_id)
+    for variant in deck_variants(deck_id):
+        path = deck_variant_state_path(deck_id, variant)
+        state = _read_json(path)
+        if state.get("plan"):
+            state["plan"]["title"] = title
+            _write_json(path, state)
+
+
 def load_deck_state(deck_id: str, variant: str = _DEFAULT_VARIANT) -> dict | None:
     path = deck_variant_state_path(deck_id, variant)
     if not path.is_file():
