@@ -31,6 +31,11 @@ if "--version" in args:
     sys.exit(0)
 
 prompt = args[-1] if args else ""
+if not sys.stdin.isatty():
+    # Мост отдаёт запрос через stdin (cmd.exe обрезает многострочный аргумент), как у настоящих CLI.
+    piped = sys.stdin.read()
+    if piped:
+        prompt = piped
 if "SLOW" in prompt:
     time.sleep(5)
 if "FAIL" in prompt:
@@ -240,3 +245,12 @@ def test_complete_reports_non_zero_exit_as_502(bridge):
     response = httpx.post(f"{base_url}/agents/claude/complete", json={"system": "s", "user": "FAIL"}, timeout=35.0)
     assert response.status_code == 502
     assert "код возврата" in response.json()["error"]
+
+
+def test_multiline_prompt_reaches_cli_whole(bridge):
+    # Регрессия 2026-09-24: запрос последним аргументом через .CMD обрезался на первой строке.
+    base_url, _ = bridge
+    response = httpx.post(f"{base_url}/agents/claude/complete",
+                          json={"system": "первая", "user": "вторая строка"}, timeout=35.0)
+    assert response.status_code == 200
+    assert "вторая" in response.json()["text"]

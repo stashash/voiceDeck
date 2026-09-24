@@ -49,10 +49,14 @@ class AgentError(RuntimeError):
 class Agent:
     """Один CLI-агент: как его найти, умеет ли он принимать картинки и как собрать команду запуска."""
 
-    def __init__(self, agent_id: str, name: str, images: bool, build):
+    def __init__(self, agent_id: str, name: str, images: bool, build, stdin_prompt: bool = False):
         self.id = agent_id
         self.name = name
         self.images = images
+        # Запрос идёт через stdin, а не последним аргументом: на Windows CLI из npm запускаются
+        # через .CMD, и cmd.exe обрезает аргумент на первом переводе строки. Проверено 2026-09-24:
+        # cursor-agent и opencode читают запрос из stdin, если его нет в аргументах.
+        self.stdin_prompt = stdin_prompt
         self.build = build  # (exe, system, user, model, image_paths, workdir) -> (argv, output_file|None)
 
 
@@ -128,10 +132,10 @@ def _codex_argv(exe: str, system: str, user: str, model: str | None,
 
 
 AGENTS: tuple[Agent, ...] = (
-    Agent("claude", "Claude Code", images=False, build=_claude_argv),
+    Agent("claude", "Claude Code", images=False, build=_claude_argv, stdin_prompt=True),
     Agent("codex", "Codex", images=True, build=_codex_argv),
-    Agent("cursor-agent", "Cursor Agent", images=False, build=_cursor_agent_argv),
-    Agent("opencode", "OpenCode", images=True, build=_opencode_argv),
+    Agent("cursor-agent", "Cursor Agent", images=False, build=_cursor_agent_argv, stdin_prompt=True),
+    Agent("opencode", "OpenCode", images=True, build=_opencode_argv, stdin_prompt=True),
 )
 _AGENTS_BY_ID = {agent.id: agent for agent in AGENTS}
 
@@ -146,13 +150,14 @@ def _version(exe: str) -> str | None:
     return lines[0].strip() if lines else None
 
 
-def _spawn(argv: list[str], cwd: Path) -> subprocess.Popen:
+def _spawn(argv: list[str], cwd: Path, with_stdin: bool = False) -> subprocess.Popen:
     # PYTHONIOENCODING заставляет дочерний процесс писать UTF-8 в перенаправленный поток, а не
     # кодировку консоли Windows (cp1251/cp866): без него кириллица в ответе агента бьётся.
     # Безвредно для не-Python CLI — переменную читает только интерпретатор Python.
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
-    kwargs: dict = dict(cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    kwargs: dict = dict(cwd=str(cwd), stdin=subprocess.PIPE if with_stdin else subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, encoding="utf-8", errors="replace", env=env)
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -191,10 +196,13 @@ def _run_agent(agent: Agent, exe: str, system: str, user: str, model: str | None
             image_paths.append(path)
 
         argv, out_file = agent.build(exe, system, user, model, image_paths, workdir)
+        prompt_input = None
+        if agent.stdin_prompt:
+            prompt_input = argv.pop()  # сборщик кладёт запрос последним аргументом
         started = time.monotonic()
-        proc = _spawn(argv, workdir)
+        proc = _spawn(argv, workdir, with_stdin=prompt_input is not None)
         try:
-            stdout, stderr = proc.communicate(timeout=timeout_s)
+            stdout, stderr = proc.communicate(input=prompt_input, timeout=timeout_s)
         except subprocess.TimeoutExpired:
             _kill_tree(proc)
             proc.communicate()
