@@ -34,6 +34,8 @@ services:
       DESIGNER_DESIGN_SYSTEM_ID: ${DESIGNER_DESIGN_SYSTEM_ID:-}
       ALLOWED_ORIGIN: http://localhost:${APP_PORT:-8088}
     volumes: ["./models:/models:ro", "./native:/native:ro"]
+    # Эмбеддинги в LM Studio на хосте. Docker Desktop знает это имя сам, Docker Engine на Linux нет.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     depends_on:
       db: {condition: service_healthy}
       designer: {condition: service_started}
