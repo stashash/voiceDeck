@@ -1,0 +1,40 @@
+/* Окно зала живого режима: только слайд и субтитры на весь экран. */
+.audience-page{position:fixed;inset:0;background:#0c1210;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Onest',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.audience-fade{opacity:0;transition:opacity .3s ease;width:min(92vw,1600px);aspect-ratio:16/9;display:flex}
+.audience-fade.visible{opacity:1}
+.audience-frame{width:100%;height:100%;border:0;background:#fff;border-radius:4px}
+.audience-sketch{width:100%;height:100%;background:#fff;border-radius:4px;padding:60px;box-sizing:border-box;color:#253e34;overflow:auto}
+.audience-sketch h1{font-family:Georgia,'Times New Roman',serif;font-size:48px;margin:0 0 30px;font-weight:400}
+.audience-sketch ul{font-size:26px;line-height:1.8;padding-left:30px;margin:0}
+.audience-empty{width:100%;height:100%;display:grid;place-items:center;color:#5a6a60;font-size:20px;background:#141b18;border-radius:4px}
+.audience-subtitle{position:fixed;left:0;right:0;bottom:0;padding:22px 40px;text-align:center;color:#eef2ea;font-size:24px;line-height:1.5;background:linear-gradient(0deg,rgba(0,0,0,.55),transparent)}
+.audience-subtitle .tail{color:#93a58c}
+
+/* Live-режим: пульт спикера. */
+.live-shell{min-height:100vh}
+.live-topbar{display:flex;align-items:center;gap:16px;padding:16px 32px;border-bottom:1px solid var(--border)}
+.live-idle{flex-grow:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px}
+.live-idle-composer{display:flex;flex-direction:column;gap:10px;align-items:center}
+.live-idle-hint{font-size:12px;color:var(--text-muted)}
+.live-text-form{display:flex;gap:8px;width:480px;max-width:90vw}
+.live-text-form input{flex-grow:1;height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:0 12px;font-family:var(--font);font-size:14px}
+.live-main{flex-grow:1;display:grid;grid-template-columns:1.3fr 1fr;gap:20px;padding:24px 32px;min-height:0}
+.live-slide-col{display:flex;flex-direction:column;gap:10px;min-height:0}
+.live-slide-col h3{font-size:16px;font-weight:600;color:var(--text);margin:0}
+.live-slide-box{flex-grow:0;aspect-ratio:16/9;width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;display:flex}
+.live-slide-empty{flex:1;display:grid;place-items:center;color:var(--text-muted);font-size:12px}
+.live-frame{width:100%;height:100%;border:0}
+.live-sketch{flex:1;overflow:auto;padding:20px}
+.live-sketch h4{font-family:Georgia,serif;font-size:20px;margin:0 0 12px;font-weight:400}
+.live-sketch ul{padding-left:16px;font-size:13px;color:var(--text-muted);line-height:1.7;margin:0}
+.live-transcript{border-top:1px solid var(--border);padding:12px 32px;max-height:130px;overflow:auto;font-size:13px;color:var(--text-muted);line-height:1.9}
+.live-transcript p{margin:0}
+.live-transcript time{color:var(--text-faint);margin-right:8px;font-variant-numeric:tabular-nums}
+.live-partial{color:var(--text-muted);font-style:italic}
+.live-partial span{color:var(--accent)}
+.live-controls{display:flex;align-items:center;gap:16px;padding:16px 32px;border-top:1px solid var(--border)}
+.live-keys{margin-left:auto;display:flex;gap:8px;font-size:11px;color:var(--text-muted);align-items:center}
+.live-keys kbd{border:1px solid var(--border);border-radius:4px;padding:2px 6px;font:inherit;background:var(--surface-2);margin-right:4px}
+.live-connection{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted)}
+.live-connection span{width:6px;height:6px;border-radius:50%;background:var(--border);display:inline-block}
+.live-connection span.on{background:var(--success)}

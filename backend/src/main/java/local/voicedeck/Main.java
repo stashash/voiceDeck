@@ -15,13 +15,15 @@ public final class Main {
     private static String hash(String token){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
     public static void main(String[] args)throws Exception {
         boolean live=env("MODE","demo").equals("live");
-        Store store=new Store();store.init();Models models=new Models(live);Llm llm=new Llm();
+        Store store=new Store();store.init();Models models=new Models(live);Llm llm=new Llm();Designer designer=new Designer();
         Vertx vertx=Vertx.vertx();Router router=Router.router(vertx);
         Map<String,Session> sessions=new ConcurrentHashMap<>();
         String allowedOrigin=env("ALLOWED_ORIGIN","http://localhost:8080");
         Set<String> origins=new HashSet<>(List.of(allowedOrigin,allowedOrigin.replace("localhost","127.0.0.1")));
+        // Страницы «Колода», «Шаблон» и «Сцена» ходят из браузера в сервис designer: его адрес разрешён для запросов и картинок слайдов.
+        String designerPublic=env("DESIGNER_PUBLIC_URL","http://localhost:8090");
         router.route().handler(ctx->{
-            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data:; frame-ancestors 'none'");
+            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerPublic+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: "+designerPublic+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
             String origin=ctx.request().getHeader("Origin");
             if(origin!=null&&!origins.contains(origin)){ctx.response().setStatusCode(403).end("Origin not allowed");return;}ctx.next();
         });
@@ -31,7 +33,7 @@ public final class Main {
             try {
                 if(sessions.size()>=8){ctx.response().setStatusCode(429).end("Maximum 8 active sessions");return;}
                 byte[] secret=new byte[32];new SecureRandom().nextBytes(secret);String token=Base64.getUrlEncoder().withoutPadding().encodeToString(secret),id=UUID.randomUUID().toString();
-                String mode=live?"live":"demo";store.create(id,hash(token),mode);Session session=new Session(id,mode,store,models,llm);sessions.put(id,session);
+                String mode=live?"live":"demo";store.create(id,hash(token),mode);Session session=new Session(id,mode,store,models,llm,designer);sessions.put(id,session);
                 ctx.response().putHeader("Cache-Control","no-store");ctx.json(new JsonObject().put("id",id).put("token",token).put("mode",mode));
             }catch(Exception e){ctx.fail(e);}
         },false);
@@ -40,7 +42,7 @@ public final class Main {
             try {
                 JsonObject record=store.session(id);
                 if(record==null||auth==null||!auth.startsWith("Bearer ")||!MessageDigest.isEqual(hash(auth.substring(7)).getBytes(StandardCharsets.UTF_8),record.getString("token_hash").getBytes(StandardCharsets.UTF_8))){ctx.response().setStatusCode(401).end("Unauthorized");return;}
-                Session s=sessions.get(id);if(s==null){s=new Session(id,record.getString("mode"),store,models,llm);Session existing=sessions.putIfAbsent(id,s);if(existing!=null){s.close();s=existing;}}
+                Session s=sessions.get(id);if(s==null){s=new Session(id,record.getString("mode"),store,models,llm,designer);Session existing=sessions.putIfAbsent(id,s);if(existing!=null){s.close();s=existing;}}
                 s.lastAccess=System.currentTimeMillis();ctx.put("session",s);ctx.next();
             }catch(Exception e){ctx.fail(e);}
         };
@@ -69,7 +71,7 @@ public final class Main {
                     if(!message.fieldNames().equals(Set.of("type","session_id","token","from"))||!"auth".equals(message.getString("type")))throw new IllegalArgumentException("Invalid authentication");
                     String id=message.getString("session_id");JsonObject record=store.session(id);
                     if(record==null||!MessageDigest.isEqual(hash(message.getString("token","")).getBytes(StandardCharsets.UTF_8),record.getString("token_hash").getBytes(StandardCharsets.UTF_8)))throw new IllegalArgumentException("Unauthorized");
-                    Session s=sessions.get(id);if(s==null){s=new Session(id,record.getString("mode"),store,models,llm);Session existing=sessions.putIfAbsent(id,s);if(existing!=null){s.close();s=existing;}}return s;
+                    Session s=sessions.get(id);if(s==null){s=new Session(id,record.getString("mode"),store,models,llm,designer);Session existing=sessions.putIfAbsent(id,s);if(existing!=null){s.close();s=existing;}}return s;
                 },false).onSuccess(s->{if(ws.isClosed())return;vertx.cancelTimer(timeout);bound[0]=s;s.attach(ws,message.getLong("from",0L));}).onFailure(e->ws.close((short)1008,"Unauthorized"));
             });
             ws.binaryMessageHandler(b->{if(bound[0]==null||bound[0].socket!=ws){ws.close((short)1008,"Authenticate first");return;}bound[0].acceptAudio(b.getBytes());});

@@ -1,0 +1,28 @@
+{
+ "run_id": "546c526a82664ce7b9c98cd01d9c364d",
+ "started_at": "2026-09-23T08:44:52.506437+00:00",
+ "model": "qwen/qwen3.8-27b",
+ "design_system_id": "vk-tech-shablon",
+ "skills": [
+  {
+   "name": "plan-deck",
+   "version": "3",
+   "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+  },
+  {
+   "name": "fill-slots",
+   "version": "2",
+   "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+  }
+ ],
+ "timings_ms": {
+  "plan": 66108,
+  "a-fill-slots": 11091,
+  "a-audit": 1,
+  "a-export-pptx": 589,
+  "a-export-html": 0,
+  "a-convert": 1888,
+  "a-render-slides": 6828,
+  "a-audit-contextual": 55630
+ }
+}

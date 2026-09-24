@@ -12,7 +12,11 @@ public final class Session implements AutoCloseable {
     final Store store;
     final Models models;
     final Llm llm;
+    final Designer designer;
     final boolean sketch=Main.env("SLIDE_MODE","sketch").equals("sketch");
+    boolean designerMode=Main.env("SLIDE_MODE","sketch").equals("designer");
+    String designSystemId=Main.env("DESIGNER_DESIGN_SYSTEM_ID","");
+    final ArrayDeque<String> recentPatternIds=new ArrayDeque<>();
     final ThreadPoolExecutor state=worker("state",512), audioWorker=worker("audio",1000);
     final ThreadPoolExecutor inference=worker("embedding",64);
     final Map<String,JsonObject> sentences=new LinkedHashMap<>(),chunks=new LinkedHashMap<>(),slides=new LinkedHashMap<>();
@@ -37,14 +41,18 @@ public final class Session implements AutoCloseable {
     final List<String> rollingIds=new ArrayList<>();
     final List<float[]> rollingVecs=new ArrayList<>();
     Audio audio;
-    public Session(String id,String mode,Store store,Models models,Llm llm)throws Exception {
-        this.id=id;this.mode=mode;this.store=store;this.models=models;this.llm=llm;
+    public Session(String id,String mode,Store store,Models models,Llm llm)throws Exception {this(id,mode,store,models,llm,new Designer());}
+    public Session(String id,String mode,Store store,Models models,Llm llm,Designer designer)throws Exception {
+        this.id=id;this.mode=mode;this.store=store;this.models=models;this.llm=llm;this.designer=designer;
         for(JsonObject e:store.events(id,0)){apply(e);seq=e.getLong("seq");}
         // T-S4: restore embeddings from pgvector so semantic() works after restart.
         if(store.durable())try{embeddings.putAll(store.embeddingsOf(id));}catch(Exception ex){System.err.println("Embeddings restore failed for "+id+": "+ex.getMessage());}
         if(!sentences.isEmpty())audioOffset=sentences.values().stream().mapToLong(s->s.getLong("t1")*16).max().orElse(0);
         lastFinalWall=System.currentTimeMillis();
-        for(JsonObject slide:slides.values())if(slide.getValue("title")!=null){JsonObject c=chunks.get(slide.getString("chunk_id"));if(c!=null)lastSlideEnd=Math.max(lastSlideEnd,c.getLong("t0"));}
+        for(JsonObject slide:slides.values()){
+            if(slide.getValue("title")!=null){JsonObject c=chunks.get(slide.getString("chunk_id"));if(c!=null)lastSlideEnd=Math.max(lastSlideEnd,c.getLong("t0"));}
+            String pid=slide.getString("pattern_id");if(pid!=null){recentPatternIds.addLast(pid);if(recentPatternIds.size()>5)recentPatternIds.removeFirst();}
+        }
         if(!pending.isEmpty())submit(()->commit("recovered"));
         clock.scheduleAtFixedRate(()->submit(this::tick),100,100,TimeUnit.MILLISECONDS);
         clock.scheduleAtFixedRate(()->submit(this::curate),20,20,TimeUnit.SECONDS);
@@ -84,7 +92,8 @@ public final class Session implements AutoCloseable {
     void text(JsonObject message){submit(()->{
         lastAccess=System.currentTimeMillis();
         String type=message.getString("type","");
-        if(type.equals("text")&&mode.equals("demo")) {
+        // Текст вместо микрофона: в demo всегда, в live пока не идёт запись (иначе текст сдвинет шкалу звука).
+        if(type.equals("text")&&(mode.equals("demo")||audio==null)) {
             if(!message.fieldNames().equals(Set.of("type","text")))throw new IllegalArgumentException("Unexpected text fields");
             String text=message.getString("text","").strip();
             if(text.isEmpty()||text.length()>16000)throw new IllegalArgumentException("Текст: от 1 до 16000 символов");
@@ -96,8 +105,15 @@ public final class Session implements AutoCloseable {
         if(type.equals("flush")){flush(false);return;}
         if(type.equals("stop")){flush(true);return;}
         if(type.equals("revise")) {revise(message);return;}
+        if(type.equals("design_system")){designSystem(message);return;}
         throw new IllegalArgumentException("Unknown command or incompatible mode");
     });}
+    void designSystem(JsonObject m){
+        if(!m.fieldNames().equals(Set.of("type","id")))throw new IllegalArgumentException("Unexpected design_system fields");
+        String dsId=m.getString("id","").strip();
+        if(dsId.isEmpty())throw new IllegalArgumentException("Design system id required");
+        designSystemId=dsId;
+    }
     void acceptAudio(byte[] bytes){
         if(!mode.equals("live")){warning("Микрофон доступен только в режиме live с установленными моделями");return;}
         final Audio.Packet p;
@@ -333,6 +349,7 @@ public final class Session implements AutoCloseable {
     void generate(){
         if(generating||curating||System.currentTimeMillis()<retryAt)return;
         JsonObject candidate=orderedChunks().stream().filter(c->!slides.containsKey(c.getString("id"))).findFirst().orElse(null);if(candidate==null)return;
+        if(designerMode){generateDesigner(candidate);return;}
         // Store an explicit skipped entry for quota, so old chunks never starve later ones.
         if(!sketch&&!slideEligible.contains(candidate.getString("id"))&&candidate.getLong("t0")<lastSlideEnd+45000&&lastSlideEnd>=0){event("slide",new JsonObject().put("slide",new JsonObject().put("chunk_id",candidate.getString("id")).put("rev",candidate.getInteger("rev")).put("title",null).put("bullets",new JsonArray()).put("notes","").put("source","quota")));return;}
         generating=true;JsonObject c=candidate.copy();
@@ -340,6 +357,21 @@ public final class Session implements AutoCloseable {
             try{var s=sketch||mode.equals("demo")?Llm.extractive(c.getString("text")):llm.slide(c.getString("text"));submit(()->{
                 try{var current=chunks.get(c.getString("id"));if(current!=null&&current.getInteger("rev").equals(c.getInteger("rev"))){s.put("chunk_id",c.getString("id")).put("rev",c.getInteger("rev")).put("t0",c.getLong("t0")).put("t1",c.getLong("t1")).put("source",sketch?"sketch":mode.equals("demo")?"extractive-demo":"local-llm");event("slide",new JsonObject().put("slide",s));if(s.getValue("title")!=null)lastSlideEnd=c.getLong("t0");}}finally{generating=false;}
             });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning("Локальная LLM недоступна: слайды будут дополнены после восстановления");});}
+        });
+    }
+    /** T-14: без квоты «раз в 45 с» — designer сам решает, когда слайд не нужен (204). */
+    void generateDesigner(JsonObject candidate){
+        generating=true;JsonObject c=candidate.copy();List<String> used=new ArrayList<>(recentPatternIds);String dsId=designSystemId;
+        Thread.startVirtualThread(()->{
+            try{var scene=designer.slide(dsId,c.getString("text"),used);submit(()->{
+                try{var current=chunks.get(c.getString("id"));if(current!=null&&current.getInteger("rev").equals(c.getInteger("rev"))){
+                    JsonObject s=scene==null?new JsonObject().put("title",null).put("bullets",new JsonArray()).put("notes",""):scene;
+                    s.put("chunk_id",c.getString("id")).put("rev",c.getInteger("rev")).put("t0",c.getLong("t0")).put("t1",c.getLong("t1")).put("source","designer");
+                    event("slide",new JsonObject().put("slide",s));
+                    String pid=s.getString("pattern_id");if(pid!=null){recentPatternIds.addLast(pid);while(recentPatternIds.size()>5)recentPatternIds.removeFirst();}
+                    if(s.getValue("title")!=null)lastSlideEnd=c.getLong("t0");
+                }}finally{generating=false;}
+            });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
         });
     }
     /** T-S11: depth-score dips inside a chunk become curator candidates. */

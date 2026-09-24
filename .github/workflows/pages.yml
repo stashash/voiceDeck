@@ -37,6 +37,8 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+        env:
+          VITE_BASE: /voiceDeck/
 
       # Tell Pages what URL this artifact will live at. Required for
       # `actions/deploy-pages@v4` to wire up the environment correctly.

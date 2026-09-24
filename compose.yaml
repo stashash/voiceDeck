@@ -1,6 +1,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: voicedeck
       POSTGRES_USER: voicedeck
@@ -12,6 +13,7 @@ services:
       retries: 20
   app:
     build: .
+    restart: unless-stopped
     ports: ["127.0.0.1:${APP_PORT:-8088}:8080"]
     environment:
       DB_URL: jdbc:postgresql://db:5432/voicedeck
@@ -27,9 +29,28 @@ services:
       EMBEDDING_URL: ${EMBEDDING_URL:-http://host.docker.internal:11434/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3-embed}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1024}
+      DESIGNER_URL: http://designer:8090
+      DESIGNER_PUBLIC_URL: ${DESIGNER_PUBLIC_URL:-http://localhost:8090}
+      DESIGNER_DESIGN_SYSTEM_ID: ${DESIGNER_DESIGN_SYSTEM_ID:-}
       ALLOWED_ORIGIN: http://localhost:${APP_PORT:-8088}
     volumes: ["./models:/models:ro", "./native:/native:ro"]
     depends_on:
       db: {condition: service_healthy}
+      designer: {condition: service_started}
+  designer:
+    build: ./designer
+    restart: unless-stopped
+    ports: ["127.0.0.1:8090:8090"]
+    environment:
+      DESIGNER_LLM_URL: ${DESIGNER_LLM_URL:-http://host.docker.internal:1234/v1}
+      DESIGNER_LLM_MODEL: ${DESIGNER_LLM_MODEL:-qwen/qwen3.8-27b}
+      DESIGNER_LLM_PARALLEL: ${DESIGNER_LLM_PARALLEL:-4}
+      DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
+      DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}
+      DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}}
+      DESIGNER_AGENT_BRIDGE_URL: ${DESIGNER_AGENT_BRIDGE_URL:-http://host.docker.internal:8095}
+    volumes: ["designer-data:/app/data"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
 volumes:
   postgres-data:
+  designer-data:

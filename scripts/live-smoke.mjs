@@ -17,6 +17,6 @@ try{
  await until(()=>ready);let seq=0;const input=Buffer.concat([pcm,Buffer.alloc(32000)]),started=Date.now();
  for(let offset=0;offset<input.length;offset+=1024){const packet=Buffer.alloc(1040);packet.writeBigUInt64LE(BigInt(++seq));packet.writeBigUInt64LE(BigInt(offset/2),8);input.copy(packet,16,offset,Math.min(input.length,offset+1024));ws.send(packet);await sleep(Math.max(0,started+seq*32-Date.now()));}
  await until(()=>ack===seq,60000);ws.send(JSON.stringify({type:'stop'}));await until(()=>events.some(e=>e.type==='flushed'));await until(()=>chunks.size>0&&[...chunks].every(([id,rev])=>sketches.get(id)===rev));
- assert.ok(events.some(e=>e.type==='partial'&&e.text.length));assert.ok(events.some(e=>e.type==='final'));assert.ok(events.some(e=>e.type==='chunk'));assert.ok(events.some(e=>e.type==='slide'&&e.slide.source==='sketch'));
+ assert.ok(events.some(e=>e.type==='partial'&&e.text.length));assert.ok(events.some(e=>e.type==='final'));assert.ok(events.some(e=>e.type==='chunk'));assert.ok(events.some(e=>e.type==='slide'&&['sketch','designer'].includes(e.slide.source)));
  console.log('PASS live audio:',JSON.stringify({partials:events.filter(e=>e.type==='partial').length,finals:events.filter(e=>e.type==='final').length,chunks:events.filter(e=>e.type==='chunk').length,sketches:events.filter(e=>e.type==='slide').length,elapsedMs:Date.now()-started,embeddings:health.embeddings}));
 }finally{ws.close();await fetch(base+`/api/sessions/${c.id}/data`,{method:'DELETE',headers:{Authorization:`Bearer ${c.token}`}});}

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Окно для зала</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&amp;family=JetBrains+Mono:wght@400&amp;family=Play:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;background:#0F1115;font-family:'Onest', 'Segoe UI', system-ui, sans-serif;color:#E9EBEF}
+a{color:#E9EBEF;text-decoration:none}a:hover{color:#F0A63C}
+button{font-family:'Onest', 'Segoe UI', system-ui, sans-serif}
+a:focus-visible,button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid #F0A63C;outline-offset:3px}
+</style>
+</helmet>
+<div style="position: relative; width: 1280px; height: 720px; box-sizing: border-box; overflow: hidden; background: #0F1115; color: #E9EBEF; font-family: 'Onest', 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column">
+<img src="/_blob/15ed128cb72c4cf419e0d7329e201949" alt="Слайд на экране зала" style="display: block; width: 1280px; height: 720px">
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":720}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
