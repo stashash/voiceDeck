@@ -45,7 +45,7 @@ from designer.layout.scene import build_scene
 from designer.llm.client import LlmClient
 from designer.llm.run import RunRecorder
 from designer.llm.skills import load_skill
-from designer.parse.describe import describe_patterns
+from designer.parse.describe import SKILL as _DESCRIBE_SKILL, _describe_one, describe_patterns
 from designer.parse.package import build_package, load_package
 from designer.plan.planner import make_plan
 from designer.plan.writer import fill_slots, speech_to_slide
@@ -219,14 +219,24 @@ def run_describe(ds_id: str) -> None:
     try:
         client = _client_for("describe")
         try:
-            pngs: dict[str, bytes] = {}
-            for pattern in ds.patterns:
-                if not pattern.preview:
-                    continue
-                path = package_dir / pattern.preview
-                if path.is_file():
-                    pngs[pattern.id] = path.read_bytes()
-            described = describe_patterns(ds, pngs, client)
+            skill = load_skill(_DESCRIBE_SKILL)
+            described_patterns: list[Pattern] = []
+            total = len(ds.patterns)
+            # Строго по одному образцу (см. parse/describe.py); после каждого ход пишется в манифест,
+            # экран показывает «модель описывает образцы: N из M».
+            for index, pattern in enumerate(ds.patterns):
+                png = None
+                if pattern.preview and (package_dir / pattern.preview).is_file():
+                    png = (package_dir / pattern.preview).read_bytes()
+                described_patterns.append(_describe_one(pattern, png, skill, client))
+                current = load_package(package_dir)
+                progress = current.model_copy(update={
+                    "patterns": described_patterns + list(current.patterns[index + 1:]),
+                    "describe": current.describe.model_copy(update={
+                        "status": "running", "total": total, "done": index + 1, "error": ""}),
+                })
+                _write_manifest(package_dir, progress)
+            described = load_package(package_dir)
         finally:
             client.close()
     except Exception as error:  # noqa: BLE001 - сбой уходит в поле describe.error, не роняет процесс
@@ -241,6 +251,48 @@ def run_describe(ds_id: str) -> None:
         "status": "done", "total": len(described.patterns), "done": len(described.patterns), "error": "",
     })})
     _write_manifest(package_dir, done)
+
+
+def name_from_file(source_file: str) -> str:
+    """Имя системы по умолчанию: имя файла без расширения, «_» и «-» заменены пробелами."""
+    stem = Path(source_file).stem
+    return " ".join(stem.replace("_", " ").replace("-", " ").split()) or stem
+
+
+def upgrade_legacy_packages() -> None:
+    """Пакеты, собранные до версии 2: имя из файла, превью образцов из source.pptx, ход описания.
+
+    Образцы у таких пакетов уже описаны старым импортом, если у них есть назначение.
+    """
+    for ds_id in store.list_design_system_ids():
+        package_dir = store.design_system_dir(ds_id)
+        try:
+            ds = load_package(package_dir)
+        except Exception:  # noqa: BLE001 - битый пакет не мешает остальным
+            continue
+        update: dict = {}
+        if not ds.name:
+            update["name"] = name_from_file(ds.source_file)
+        source_pptx = package_dir / "source.pptx"
+        if source_pptx.is_file() and any(f.embedded_state == "missing" and not f.embedded_file for f in ds.tokens.fonts):
+            # Статус встроенного шрифта появился в версии 2: у старых пакетов он «missing» по умолчанию.
+            from pptx import Presentation
+            from designer.parse.package import _embedded_font_families
+            embedded = _embedded_font_families(Presentation(str(source_pptx)))
+            fonts = [f.model_copy(update={"embedded_state": "extracted" if f.embedded_file
+                                          else "embedded_not_extracted" if f.family in embedded else "missing"})
+                     for f in ds.tokens.fonts]
+            if fonts != ds.tokens.fonts:
+                update["tokens"] = ds.tokens.model_copy(update={"fonts": fonts})
+        if ds.describe.status == "pending" and any(p.purpose for p in ds.patterns):
+            update["describe"] = ds.describe.model_copy(update={
+                "status": "done", "total": len(ds.patterns), "done": len(ds.patterns)})
+        if update:
+            ds = ds.model_copy(update=update)
+            _write_manifest(package_dir, ds)
+        source = package_dir / "source.pptx"
+        if source.is_file() and not any(p.preview for p in ds.patterns):
+            _write_manifest(package_dir, _generate_previews(ds, source, package_dir))
 
 
 # ---------- правка дизайн-системы автором ----------

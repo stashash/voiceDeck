@@ -75,6 +75,13 @@ def _not_found(ds_id_error: bool = False):
 
 # ---------- дизайн-системы ----------
 
+@app.on_event("startup")
+def _upgrade_legacy_design_systems() -> None:
+    # Превью старых пакетов строятся движком конвертации: в фоне, чтобы сервис поднялся сразу.
+    import threading
+    threading.Thread(target=pipeline.upgrade_legacy_packages, daemon=True).start()
+
+
 @app.post("/design-systems", response_model=DesignSystem)
 async def upload_design_system(background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> DesignSystem:
     if not (file.filename or "").lower().endswith(".pptx"):
