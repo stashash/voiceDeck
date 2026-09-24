@@ -15,6 +15,8 @@ public final class Models implements AutoCloseable {
     private final OrtSession frida;
     private final HuggingFaceTokenizer tokenizer;
     private final EmbeddingClient embeddingHttp;
+    /** Сервер эмбеддингов ответил хотя бы раз: до этого /health показывает, что он недоступен. */
+    private volatile boolean embeddingAnswered;
     public final boolean live;
     public final String embeddingBackend;
     public Models(boolean live) throws Exception {
@@ -45,7 +47,13 @@ public final class Models implements AutoCloseable {
         }
         // Fail readiness on missing/incompatible files, including VAD, before accepting a microphone.
         Object vad=newVad();call(vad,"acceptWaveform",new float[512]);call(vad,"release");
-        for(int i=0;i<2;i++){decode(new float[16000],false);decode(new float[16000],true);embed("Проверка готовности распознавания речи.");}
+        for(int i=0;i<2;i++){decode(new float[16000],false);decode(new float[16000],true);}
+        // Эмбеддинги по HTTP живут на хосте (LM Studio): без них сервис стартует, смысловые границы идут
+        // по паузам и дедлайну, пока сервер не ответит. Локальные ONNX-файлы проверяются строго.
+        if("ollama".equals(embeddingBackend)){
+            try{embed("Проверка готовности распознавания речи.");}
+            catch(Exception e){System.err.println("Эмбеддинги недоступны при старте ("+e.getClass().getSimpleName()+"): границы фрагментов по паузам и дедлайну, пока сервер эмбеддингов не ответит");}
+        } else for(int i=0;i<2;i++)embed("Проверка готовности распознавания речи.");
     }
     private static EmbeddingClient defaultEmbeddingClient(){
         String backend=Main.env("EMBEDDING_BACKEND","ollama");
@@ -92,7 +100,9 @@ public final class Models implements AutoCloseable {
         if(text==null||text.isBlank())return null;
         if("ollama".equals(embeddingBackend)){
             if(embeddingHttp==null)return null; // Explicit pause/deadline fallback; never fake semantic embeddings.
-            return embeddingHttp.embed(text);
+            float[] vector=embeddingHttp.embed(text);
+            embeddingAnswered=true;
+            return vector;
         }
         if(frida==null)return null; // Explicit pause/deadline fallback; never fake semantic embeddings.
         boolean mean=config.getString("embeddingPooling","cls").equals("mean");
@@ -129,7 +139,8 @@ public final class Models implements AutoCloseable {
         return embed(text);
     }
     public String embeddingStatus(){
-        if("ollama".equals(embeddingBackend))return embeddingHttp==null?"ollama-disabled":"ollama:"+embeddingHttp.modelName();
+        if("ollama".equals(embeddingBackend))return embeddingHttp==null?"ollama-disabled"
+            :"ollama:"+embeddingHttp.modelName()+(embeddingAnswered?"":":unreachable");
         return frida==null?"pause-only":config.getString("embeddingName","frida");
     }
     // T-S5 chunk size policy, read from models/config.json. Defaults match §2.5 of the segmentation analysis.

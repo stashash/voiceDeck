@@ -1,0 +1,6855 @@
+{
+  "schema_version": "1",
+  "id": "vk-workspace-klientskaya-konferenciya-shablon-03",
+  "source_file": "VK_WorkSpace_Клиентская_конференция_Шаблон_03.pptx",
+  "name": "VK WorkSpace Клиентская конференция Шаблон 03",
+  "created_at": "2026-09-24T21:56:22.247203+00:00",
+  "slide_size_emu": [
+    12192000,
+    6858000
+  ],
+  "tokens": {
+    "colors": [
+      {
+        "hex": "000000",
+        "role": "text",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "FFFFFF",
+        "role": "background",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "0077FF",
+        "role": "text_muted",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "00E9FF",
+        "role": "accent_alt",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "AAFBFF",
+        "role": "other",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "EDF3FC",
+        "role": "other",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "7C8A9A",
+        "role": "other",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "202020",
+        "role": "other",
+        "share": 0.125,
+        "source": "theme"
+      },
+      {
+        "hex": "FFFFFF",
+        "role": "text",
+        "share": 0.3807625973415815,
+        "source": "usage"
+      },
+      {
+        "hex": "0077FF",
+        "role": "accent",
+        "share": 0.1826734180742512,
+        "source": "usage"
+      },
+      {
+        "hex": "808080",
+        "role": "other",
+        "share": 0.11909156740798489,
+        "source": "usage"
+      },
+      {
+        "hex": "E4E7EA",
+        "role": "text_muted",
+        "share": 0.08205352012798958,
+        "source": "usage"
+      },
+      {
+        "hex": "000000",
+        "role": "background",
+        "share": 0.05236663858296317,
+        "source": "usage"
+      },
+      {
+        "hex": "70C3FF",
+        "role": "accent_alt",
+        "share": 0.03646823116799537,
+        "source": "usage"
+      },
+      {
+        "hex": "AFB8C2",
+        "role": "text_muted",
+        "share": 0.03589841505599545,
+        "source": "usage"
+      },
+      {
+        "hex": "CAD0D5",
+        "role": "text_muted",
+        "share": 0.03418896671999566,
+        "source": "usage"
+      },
+      {
+        "hex": "7F7F7F",
+        "role": "other",
+        "share": 0.021653012255997254,
+        "source": "usage"
+      },
+      {
+        "hex": "EB4250",
+        "role": "text_muted",
+        "share": 0.020513380031997396,
+        "source": "usage"
+      },
+      {
+        "hex": "6DBCFF",
+        "role": "text_muted",
+        "share": 0.018256695714371274,
+        "source": "usage"
+      },
+      {
+        "hex": "212121",
+        "role": "surface",
+        "share": 0.01607355751887725,
+        "source": "usage"
+      }
+    ],
+    "fonts": [
+      {
+        "family": "Play",
+        "role": "body",
+        "share": 1.0,
+        "embedded_file": null,
+        "embedded_state": "embedded_not_extracted"
+      }
+    ],
+    "type_scale": [
+      {
+        "size_pt": 36.0,
+        "role": "display",
+        "share": 0.1262135922330097
+      },
+      {
+        "size_pt": 20.0,
+        "role": "title",
+        "share": 0.15048543689320387
+      },
+      {
+        "size_pt": 18.0,
+        "role": "heading",
+        "share": 0.13592233009708737
+      },
+      {
+        "size_pt": 16.0,
+        "role": "body",
+        "share": 0.24757281553398058
+      },
+      {
+        "size_pt": 14.0,
+        "role": "caption",
+        "share": 0.1796116504854369
+      },
+      {
+        "size_pt": 12.0,
+        "role": "caption",
+        "share": 0.16019417475728157
+      }
+    ],
+    "margins": {
+      "left": 0.0351,
+      "top": 0.0619,
+      "right": 0.0352,
+      "bottom": 0.0965
+    },
+    "guides_x": [
+      0.035,
+      0.36,
+      0.68,
+      0.215,
+      0.27,
+      0.44,
+      0.745,
+      0.085
+    ],
+    "guides_y": [
+      0.06,
+      0.32,
+      0.385,
+      0.665,
+      0.28,
+      0.57,
+      0.52,
+      0.53
+    ]
+  },
+  "assets": [
+    {
+      "id": "f85437110e0d",
+      "path": "assets/f85437110e0d.png",
+      "kind": "logo",
+      "width_px": 356,
+      "height_px": 110,
+      "sha1": "f85437110e0d0283ee2606e5db631e9794b119f5",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "d565df1ae9bd",
+      "path": "assets/d565df1ae9bd.png",
+      "kind": "logo",
+      "width_px": 2048,
+      "height_px": 1151,
+      "sha1": "d565df1ae9bdc9bfcc7c360c9a5c30090509256b",
+      "used_on": [
+        0,
+        24
+      ]
+    },
+    {
+      "id": "b310db145d5a",
+      "path": "assets/b310db145d5a.png",
+      "kind": "logo",
+      "width_px": 1270,
+      "height_px": 200,
+      "sha1": "b310db145d5a5542a2cb3f684a925dc4771f2ead",
+      "used_on": [
+        0,
+        12,
+        24
+      ]
+    },
+    {
+      "id": "d04e5e8d446e",
+      "path": "assets/d04e5e8d446e.png",
+      "kind": "logo",
+      "width_px": 157,
+      "height_px": 50,
+      "sha1": "d04e5e8d446eb1d99295e940d08c6e3827790eb8",
+      "used_on": [
+        0,
+        12
+      ]
+    },
+    {
+      "id": "55db98ef0988",
+      "path": "assets/55db98ef0988.png",
+      "kind": "logo",
+      "width_px": 1920,
+      "height_px": 1080,
+      "sha1": "55db98ef0988e34b006b234ff173ff6f2232d921",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "454bd85742f0",
+      "path": "assets/454bd85742f0.png",
+      "kind": "logo",
+      "width_px": 2047,
+      "height_px": 2047,
+      "sha1": "454bd85742f0c50c8e8109734bd73a8b3ebae668",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "43d5e235b0d9",
+      "path": "assets/43d5e235b0d9.png",
+      "kind": "background",
+      "width_px": 1920,
+      "height_px": 1080,
+      "sha1": "43d5e235b0d9b9941e7c3e53eea69a0920a4e34c",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "7e108d53804c",
+      "path": "assets/7e108d53804c.png",
+      "kind": "logo",
+      "width_px": 732,
+      "height_px": 73,
+      "sha1": "7e108d53804cd13bd39d620db15d3621c3ea3202",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "9e50a8d0c5d9",
+      "path": "assets/9e50a8d0c5d9.png",
+      "kind": "logo",
+      "width_px": 277,
+      "height_px": 383,
+      "sha1": "9e50a8d0c5d9a53b62909def5fee7a0ee9b5ca7a",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "aa4e66ee1b4d",
+      "path": "assets/aa4e66ee1b4d.png",
+      "kind": "logo",
+      "width_px": 450,
+      "height_px": 90,
+      "sha1": "aa4e66ee1b4de21efe2adb8d4b861680b9297281",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "ee9c5f29b655",
+      "path": "assets/ee9c5f29b655.png",
+      "kind": "logo",
+      "width_px": 2044,
+      "height_px": 2046,
+      "sha1": "ee9c5f29b655a01b473fb4c6a323cbabe06bafb4",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "826fece9a693",
+      "path": "assets/826fece9a693.png",
+      "kind": "logo",
+      "width_px": 2043,
+      "height_px": 2046,
+      "sha1": "826fece9a693171cf2686b106ffe5b613cd500d5",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "bb7fcba2748e",
+      "path": "assets/bb7fcba2748e.png",
+      "kind": "logo",
+      "width_px": 877,
+      "height_px": 146,
+      "sha1": "bb7fcba2748ebffae7e441fa77bf6ce6d8610ef0",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "93de7cc03e1b",
+      "path": "assets/93de7cc03e1b.png",
+      "kind": "logo",
+      "width_px": 191,
+      "height_px": 536,
+      "sha1": "93de7cc03e1b8de3c6d2fbe6d682d98f93831809",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "14cb1a5f5588",
+      "path": "assets/14cb1a5f5588.png",
+      "kind": "background",
+      "width_px": 2046,
+      "height_px": 1151,
+      "sha1": "14cb1a5f55888e0ccc05d60f719b2168e5162dca",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "09bd32588b88",
+      "path": "assets/09bd32588b88.png",
+      "kind": "logo",
+      "width_px": 2043,
+      "height_px": 2046,
+      "sha1": "09bd32588b88a3325076a0f7782ad9d64310cf75",
+      "used_on": [
+        0
+      ]
+    },
+    {
+      "id": "d7c48c6d19ad",
+      "path": "assets/d7c48c6d19ad.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "d7c48c6d19ad4fa6965bc9c38e402f02f2456fe6",
+      "used_on": [
+        3
+      ]
+    },
+    {
+      "id": "501265ea213f",
+      "path": "assets/501265ea213f.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "501265ea213fada91322f9781877cc516d3b36e5",
+      "used_on": [
+        3
+      ]
+    },
+    {
+      "id": "a359cddc4cea",
+      "path": "assets/a359cddc4cea.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "a359cddc4ceadfed1c22949c54121874948afe49",
+      "used_on": [
+        4,
+        5,
+        6,
+        10
+      ]
+    },
+    {
+      "id": "5c981120f71a",
+      "path": "assets/5c981120f71a.png",
+      "kind": "icon",
+      "width_px": 120,
+      "height_px": 120,
+      "sha1": "5c981120f71a1f109e289ac301bcc92d2e87d098",
+      "used_on": [
+        9
+      ]
+    },
+    {
+      "id": "a87cf5093f7e",
+      "path": "assets/a87cf5093f7e.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "a87cf5093f7e5e8999b74468a35a4b0781e131d9",
+      "used_on": [
+        9
+      ]
+    },
+    {
+      "id": "c49f9087ab91",
+      "path": "assets/c49f9087ab91.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "c49f9087ab91317561335cec42b7a5723f271249",
+      "used_on": [
+        11
+      ]
+    },
+    {
+      "id": "f92539ba982c",
+      "path": "assets/f92539ba982c.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "f92539ba982c534acdb2e78027f9c01350012e1a",
+      "used_on": [
+        12,
+        25
+      ]
+    },
+    {
+      "id": "a5a48ae91c76",
+      "path": "assets/a5a48ae91c76.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "a5a48ae91c768349f9cb0bb6a0950ca8351ad7bb",
+      "used_on": [
+        13
+      ]
+    },
+    {
+      "id": "c68541f2328b",
+      "path": "assets/c68541f2328b.png",
+      "kind": "decor",
+      "width_px": 2047,
+      "height_px": 2047,
+      "sha1": "c68541f2328b35965f94269f321b220e47031b5e",
+      "used_on": [
+        13
+      ]
+    },
+    {
+      "id": "911c3c484d38",
+      "path": "assets/911c3c484d38.png",
+      "kind": "background",
+      "width_px": 600,
+      "height_px": 362,
+      "sha1": "911c3c484d382a2fd7082a5b59fbdf189d870b23",
+      "used_on": [
+        19
+      ]
+    },
+    {
+      "id": "7cab5a2ccd56",
+      "path": "assets/7cab5a2ccd56.png",
+      "kind": "photo",
+      "width_px": 600,
+      "height_px": 562,
+      "sha1": "7cab5a2ccd5698ca4cace84893816a9cb5723dff",
+      "used_on": [
+        20
+      ]
+    },
+    {
+      "id": "ecdae6910252",
+      "path": "assets/ecdae6910252.png",
+      "kind": "photo",
+      "width_px": 600,
+      "height_px": 224,
+      "sha1": "ecdae69102524e48f4e7f6d9c256e558300a295a",
+      "used_on": [
+        21
+      ]
+    },
+    {
+      "id": "4ca996d45a78",
+      "path": "assets/4ca996d45a78.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "4ca996d45a78f3218b0d363fcb4f516947ea3666",
+      "used_on": [
+        22
+      ]
+    },
+    {
+      "id": "93f421249db4",
+      "path": "assets/93f421249db4.png",
+      "kind": "icon",
+      "width_px": 56,
+      "height_px": 56,
+      "sha1": "93f421249db49768f9c7f0aa04d442c52798ccab",
+      "used_on": [
+        23
+      ]
+    },
+    {
+      "id": "1f76a841b076",
+      "path": "assets/1f76a841b076.png",
+      "kind": "decor",
+      "width_px": 2046,
+      "height_px": 1959,
+      "sha1": "1f76a841b076e7c2513803e0ea237667cbd7f395",
+      "used_on": [
+        24
+      ]
+    },
+    {
+      "id": "ef3b3ab95ffe",
+      "path": "assets/ef3b3ab95ffe.png",
+      "kind": "photo",
+      "width_px": 2047,
+      "height_px": 2047,
+      "sha1": "ef3b3ab95ffe97a39a59b721ced3dd1f67eb04f1",
+      "used_on": [
+        25
+      ]
+    }
+  ],
+  "layouts": [
+    {
+      "name": "7_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s75",
+          "role": "title",
+          "shape_id": 75,
+          "box": [
+            0.0352077591863517,
+            0.37128244386118403,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 96,
+          "max_lines": 3,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "9_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s108",
+          "role": "title",
+          "shape_id": 108,
+          "box": [
+            0.03520784120734908,
+            0.2346450860309128,
+            0.3939588254593176,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 60,
+          "max_lines": 3,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": [
+        [
+          0.0000651246719160105,
+          0.6666666666666666,
+          0.4997682906824147,
+          0.33333304170312045
+        ]
+      ]
+    },
+    {
+      "name": "19_Заголовок",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s115",
+          "role": "title",
+          "shape_id": 115,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": [
+        [
+          0.0,
+          0.0,
+          0.3887755085301837,
+          0.9998750364537766
+        ]
+      ]
+    },
+    {
+      "name": "18_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s140",
+          "role": "title",
+          "shape_id": 140,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": [
+        [
+          -8.202099737532809e-8,
+          0.26712948381452317,
+          0.3485602854330709,
+          0.7328705161854768
+        ]
+      ]
+    },
+    {
+      "name": "15_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s171",
+          "role": "title",
+          "shape_id": 171,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": [
+        [
+          0.8556102362204724,
+          0.0,
+          0.14438976377952756,
+          0.35451706036745406
+        ]
+      ]
+    },
+    {
+      "name": "13_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s195",
+          "role": "title",
+          "shape_id": 195,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "8_Заголовок",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s205",
+          "role": "title",
+          "shape_id": 205,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "17_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s229",
+          "role": "title",
+          "shape_id": 229,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "14_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s256",
+          "role": "title",
+          "shape_id": 256,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": [
+        [
+          0.5,
+          0.8521956838728493,
+          0.5,
+          0.14780431612715078
+        ],
+        [
+          0.8912641076115485,
+          0.0,
+          0.10873589238845144,
+          0.5430113735783028
+        ]
+      ]
+    },
+    {
+      "name": "11_Заголовок",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s262",
+          "role": "title",
+          "shape_id": 262,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.9313287401574804,
+            0.11188320209973754
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 47,
+          "max_lines": 1,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": true,
+      "pictures": []
+    },
+    {
+      "name": "17_Заголовок",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s268",
+          "role": "title",
+          "shape_id": 268,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "11_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s292",
+          "role": "title",
+          "shape_id": 292,
+          "box": [
+            0.03520784120734908,
+            0.2346450860309128,
+            0.3939588254593176,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 60,
+          "max_lines": 3,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "16_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s318",
+          "role": "title",
+          "shape_id": 318,
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 54.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 42,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    },
+    {
+      "name": "12_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s350",
+          "role": "title",
+          "shape_id": 350,
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 54.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 42,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": true,
+      "pictures": []
+    },
+    {
+      "name": "10_Титульный слайд",
+      "master_index": 0,
+      "placeholders": [
+        {
+          "id": "s374",
+          "role": "title",
+          "shape_id": 374,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": null
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": ""
+        }
+      ],
+      "full_bleed_picture": false,
+      "pictures": []
+    }
+  ],
+  "patterns": [
+    {
+      "id": "p001",
+      "source_slide": 1,
+      "layout_name": "7_Титульный слайд",
+      "kind": "title",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель видит название презентации и данные о спикере в начале выступления.",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s381",
+          "role": "title",
+          "shape_id": 381,
+          "box": [
+            0.0352077591863517,
+            0.363160542432196,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 48.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 48,
+          "max_lines": 2,
+          "sample_text": "Название\u000bпрезентации"
+        },
+        {
+          "id": "s383",
+          "role": "body",
+          "shape_id": 383,
+          "box": [
+            0.12387294947506562,
+            0.6827368037328667,
+            0.18158169291338583,
+            0.12165106445027705
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "AFB8C2",
+            "align": "left"
+          },
+          "max_chars": 60,
+          "max_lines": 3,
+          "sample_text": "Имя Спикера,\u000bдолжность"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a382",
+          "kind": "image",
+          "box": [
+            0.03520784120734908,
+            0.6827369495479731,
+            0.06842864173228347,
+            0.12165091863517061
+          ],
+          "shape_id": 382,
+          "placeholder": true
+        }
+      ],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p001.png"
+    },
+    {
+      "id": "p002",
+      "source_slide": 2,
+      "layout_name": "9_Титульный слайд",
+      "kind": "steps",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель просматривает список тем, которые будут освещены в ходе презентации.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s388",
+          "role": "title",
+          "shape_id": 388,
+          "box": [
+            0.03520784120734908,
+            0.2346450860309128,
+            0.3939588254593176,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 60,
+          "max_lines": 3,
+          "sample_text": "Оглавление"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 5,
+          "step": [
+            0.0,
+            0.15632185039370078
+          ],
+          "unit_size": [
+            0.4076218832020997,
+            0.08649693788276469
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.5571702755905512,
+                0.1481482939632546,
+                0.4076218832020997,
+                0.08649693788276466
+              ],
+              "shape_ids": [
+                394
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.5571702755905512,
+                0.30906780402449696,
+                0.4076218832020997,
+                0.08649693788276464
+              ],
+              "shape_ids": [
+                395
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5571702755905512,
+                0.4630909886264217,
+                0.4076218832020997,
+                0.08649693788276464
+              ],
+              "shape_ids": [
+                396
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.5571702755905512,
+                0.6194126567512395,
+                0.4076218832020997,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                397
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.5571702755905512,
+                0.7734356955380577,
+                0.4076218832020997,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                398
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s394",
+              "role": "heading",
+              "shape_id": 394,
+              "box": [
+                0.0,
+                0.0,
+                0.40762188320209974,
+                0.08649693788276465
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 37,
+              "max_lines": 1,
+              "sample_text": "Название раздела"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 5,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "column",
+          "cols": 1,
+          "rows": 5,
+          "step": [
+            0.0,
+            0.15430165500145815
+          ],
+          "unit_size": [
+            0.13076919291338585,
+            0.10176640419947508
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.40269430774278214,
+                0.1481482939632546,
+                0.13076919291338585,
+                0.10176640419947505
+              ],
+              "shape_ids": [
+                389
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.40269430774278214,
+                0.30244998541848933,
+                0.13076919291338585,
+                0.10176640419947508
+              ],
+              "shape_ids": [
+                390
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.40269430774278214,
+                0.45675167687372414,
+                0.13076919291338585,
+                0.10176640419947508
+              ],
+              "shape_ids": [
+                391
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.40269430774278214,
+                0.6110533683289588,
+                0.13076919291338585,
+                0.10176640419947502
+              ],
+              "shape_ids": [
+                392
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.40269430774278214,
+                0.7653549139690872,
+                0.13076919291338585,
+                0.10176640419947502
+              ],
+              "shape_ids": [
+                393
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s389",
+              "role": "number",
+              "shape_id": 389,
+              "box": [
+                0.0,
+                0.0,
+                0.13076919291338582,
+                0.10176640419947507
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 40.0,
+                "bold": true,
+                "italic": false,
+                "color": "0077FF",
+                "align": "right"
+              },
+              "max_chars": 6,
+              "max_lines": 1,
+              "sample_text": "01"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 5,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p002.png"
+    },
+    {
+      "id": "p003",
+      "source_slide": 3,
+      "layout_name": "19_Заголовок",
+      "kind": "image_text",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Пользователь видит крупный визуальный элемент слева и краткие пояснения с деталями справа.",
+      "needs_images": true,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s417",
+          "role": "body",
+          "shape_id": 417,
+          "box": [
+            0.035207923228346455,
+            0.06192636337124526,
+            0.1388992782152231,
+            0.08093073782443862
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": true,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "center"
+          },
+          "max_chars": 28,
+          "max_lines": 2,
+          "sample_text": "Кейс"
+        },
+        {
+          "id": "s404",
+          "role": "title",
+          "shape_id": 404,
+          "box": [
+            0.0352077591863517,
+            0.2129336541265675,
+            0.3170243602362205,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 32,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s414",
+          "role": "body",
+          "shape_id": 414,
+          "box": [
+            0.47645283792650917,
+            0.7203127734033246,
+            0.446247375328084,
+            0.1956291921843103
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 14.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 348,
+          "max_lines": 6,
+          "sample_text": "Заметка"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a416",
+          "kind": "icon",
+          "box": [
+            0.9068631069553805,
+            0.8789951881014874,
+            0.02066929133858268,
+            0.03674540682414698
+          ],
+          "shape_id": 416,
+          "placeholder": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 2,
+          "step": [
+            0.0,
+            0.2256046952464275
+          ],
+          "unit_size": [
+            0.3890439632545931,
+            0.09307699037620298
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.5323850885826772,
+                0.2416806649168854,
+                0.3890439632545931,
+                0.09307699037620298
+              ],
+              "shape_ids": [
+                405
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.5323850885826772,
+                0.4672853601633129,
+                0.3890439632545931,
+                0.09307699037620298
+              ],
+              "shape_ids": [
+                406
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s405",
+              "role": "heading",
+              "shape_id": 405,
+              "box": [
+                0.0,
+                0.0,
+                0.3890439632545932,
+                0.09307699037620297
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 88,
+              "max_lines": 2,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "column",
+          "cols": 1,
+          "rows": 2,
+          "step": [
+            0.0,
+            0.22560469524642754
+          ],
+          "unit_size": [
+            0.05235580708661414,
+            0.09307699037620296
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.4634989337270341,
+                0.24354607757363664,
+                0.05235580708661414,
+                0.09307699037620296
+              ],
+              "shape_ids": [
+                408,
+                409
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.4634989337270341,
+                0.4691507728200642,
+                0.05235580708661414,
+                0.09307699037620293
+              ],
+              "shape_ids": [
+                411,
+                412
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a409",
+              "kind": "icon",
+              "box": [
+                0.012890501968503942,
+                0.022916447944006962,
+                0.0265748031496063,
+                0.047244094488188976
+              ],
+              "shape_id": 409,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [
+        413,
+        415
+      ],
+      "decor": [
+        {
+          "shape_id": 413,
+          "box": [
+            0.4634988517060367,
+            0.7051533974919801,
+            0.4774968011811024,
+            0.23322965879265092
+          ],
+          "kind": "shape"
+        },
+        {
+          "shape_id": 415,
+          "box": [
+            0.9029140419947507,
+            0.8719746281714785,
+            0.028567421259842518,
+            0.05078652668416448
+          ],
+          "kind": "shape"
+        }
+      ],
+      "preview": "previews/p003.png"
+    },
+    {
+      "id": "p004",
+      "source_slide": 4,
+      "layout_name": "18_Титульный слайд",
+      "kind": "image_text",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать крупное изображение или визуальный объект рядом с кратким списком ключевых пунктов или характеристик.",
+      "needs_images": true,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s423",
+          "role": "title",
+          "shape_id": 423,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Кейс"
+        },
+        {
+          "id": "s436",
+          "role": "body",
+          "shape_id": 436,
+          "box": [
+            0.4852517224409449,
+            0.21029804607757363,
+            0.47432586942257216,
+            0.07246135899679207
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 24.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "max_chars": 36,
+          "max_lines": 1,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 4,
+          "step": [
+            0.0,
+            0.14176236998153008
+          ],
+          "unit_size": [
+            0.3838582677165354,
+            0.09889749198016917
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.5602612368766404,
+                0.3086042578011082,
+                0.3838582677165354,
+                0.09889749198016912
+              ],
+              "shape_ids": [
+                424
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.5602612368766404,
+                0.448450860309128,
+                0.3838582677165354,
+                0.09889749198016912
+              ],
+              "shape_ids": [
+                427
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5602612368766404,
+                0.5902020997375328,
+                0.3838582677165354,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                430
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.5602612368766404,
+                0.7338913677456984,
+                0.3838582677165354,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                433
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s424",
+              "role": "heading",
+              "shape_id": 424,
+              "box": [
+                0.0,
+                0.0,
+                0.3838582677165354,
+                0.09889749198016914
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 78,
+              "max_lines": 2,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "column",
+          "cols": 1,
+          "rows": 4,
+          "step": [
+            0.0,
+            0.1417623213764946
+          ],
+          "unit_size": [
+            0.05562983923884518,
+            0.09889749198016917
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.4852517224409449,
+                0.3086045494313211,
+                0.05562983923884518,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                425,
+                426
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.4852517224409449,
+                0.4484510061242345,
+                0.05562983923884518,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                428,
+                429
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.4852517224409449,
+                0.5902022455526392,
+                0.05562983923884518,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                431,
+                432
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.4852517224409449,
+                0.733891513560805,
+                0.05562983923884518,
+                0.09889749198016917
+              ],
+              "shape_ids": [
+                434,
+                435
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a426",
+              "kind": "icon",
+              "box": [
+                0.01535990813648297,
+                0.027306503353747458,
+                0.024910022965879266,
+                0.04428448527267425
+              ],
+              "shape_id": 426,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p004.png"
+    },
+    {
+      "id": "p005",
+      "source_slide": 5,
+      "layout_name": "19_Заголовок",
+      "kind": "cards",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель видит три ключевых пункта или преимущества, представленных в виде отдельных карточек с иконками.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s441",
+          "role": "title",
+          "shape_id": 441,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.09140696996208807
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 32,
+          "max_lines": 1,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 3,
+          "step": [
+            0.0,
+            0.26984120734908135
+          ],
+          "unit_size": [
+            0.4853640091863517,
+            0.24871463983668707
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.4415611056430446,
+                0.12541834354039078,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "shape_ids": [
+                442,
+                444,
+                445
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.4415611056430446,
+                0.3952595508894721,
+                0.4853640091863517,
+                0.248714639836687
+              ],
+              "shape_ids": [
+                446,
+                448,
+                449
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.4415611056430446,
+                0.6651007582385535,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "shape_ids": [
+                450,
+                452,
+                453
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s442",
+              "role": "heading",
+              "shape_id": 442,
+              "box": [
+                0.0,
+                0.0,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 294,
+              "max_lines": 6,
+              "sample_text": "Заголовок\nТекст"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a445",
+              "kind": "icon",
+              "box": [
+                0.02170242782152232,
+                0.03757174103237096,
+                0.021875,
+                0.03888888888888889
+              ],
+              "shape_id": 445,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p005.png"
+    },
+    {
+      "id": "p006",
+      "source_slide": 6,
+      "layout_name": "15_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель видит три параллельных блока с иконками и краткими пояснениями, чтобы быстро сравнить ключевые пункты или преимущества.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s459",
+          "role": "title",
+          "shape_id": 459,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.29994233923884517,
+            0.0
+          ],
+          "unit_size": [
+            0.28051181102362205,
+            0.5139985418489355
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03409506233595801,
+                0.24300072907553222,
+                0.28051181102362205,
+                0.5139985418489355
+              ],
+              "shape_ids": [
+                462,
+                463,
+                464
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.33275024606299214,
+                0.24300072907553222,
+                0.28051181102362205,
+                0.5139985418489355
+              ],
+              "shape_ids": [
+                461,
+                465,
+                466
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6339797408136483,
+                0.24300072907553222,
+                0.280511811023622,
+                0.5139985418489355
+              ],
+              "shape_ids": [
+                460,
+                467,
+                468
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s462",
+              "role": "heading",
+              "shape_id": 462,
+              "box": [
+                0.0,
+                0.0,
+                0.28051181102362205,
+                0.5139985418489356
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 275,
+              "max_lines": 11,
+              "sample_text": "Заголовок"
+            },
+            {
+              "id": "s463",
+              "role": "body",
+              "shape_id": 463,
+              "box": [
+                0.014843503937007875,
+                0.23220895304753575,
+                0.25075,
+                0.03671551472732575
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 14.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 33,
+              "max_lines": 1,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a464",
+              "kind": "icon",
+              "box": [
+                0.014843421916010499,
+                0.1781236512102654,
+                0.021875,
+                0.03888888888888889
+              ],
+              "shape_id": 464,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p006.png"
+    },
+    {
+      "id": "p007",
+      "source_slide": 7,
+      "layout_name": "13_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель просматривает шесть кратких описаний или преимуществ, сгруппированных в отдельные блоки.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s474",
+          "role": "title",
+          "shape_id": 474,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 3,
+          "rows": 2,
+          "step": [
+            0.31080665600393703,
+            0.2848606007582385
+          ],
+          "unit_size": [
+            0.29822834645669294,
+            0.2624671916010499
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.035093832020997376,
+                0.2426609798775153,
+                0.29822834645669294,
+                0.2624671916010498
+              ],
+              "shape_ids": [
+                475
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.34593126640419947,
+                0.2426609798775153,
+                0.29822834645669294,
+                0.2624671916010498
+              ],
+              "shape_ids": [
+                476
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6567687007874016,
+                0.2426609798775153,
+                0.29822834645669294,
+                0.2624671916010498
+              ],
+              "shape_ids": [
+                477
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.035093832020997376,
+                0.5275215806357538,
+                0.29822834645669294,
+                0.2624671916010499
+              ],
+              "shape_ids": [
+                478
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.34593126640419947,
+                0.5275215806357538,
+                0.29822834645669294,
+                0.2624671916010499
+              ],
+              "shape_ids": [
+                479
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.6566455872703412,
+                0.5275215806357538,
+                0.29822834645669294,
+                0.2624671916010499
+              ],
+              "shape_ids": [
+                480
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s475",
+              "role": "heading",
+              "shape_id": 475,
+              "box": [
+                0.0,
+                0.0,
+                0.29822834645669294,
+                0.26246719160104987
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 180,
+              "max_lines": 6,
+              "sample_text": "Заголовок\nТекст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 6,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p007.png"
+    },
+    {
+      "id": "p008",
+      "source_slide": 8,
+      "layout_name": "13_Титульный слайд",
+      "kind": "steps",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель видит шесть пронумерованных пунктов с кратким описанием, чтобы быстро охватить ключевые элементы темы.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s486",
+          "role": "title",
+          "shape_id": 486,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 3,
+          "rows": 2,
+          "step": [
+            0.32259128937007875,
+            0.30444444444444446
+          ],
+          "unit_size": [
+            0.28191248359580057,
+            0.1752946923301254
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03585022965879265,
+                0.36214494021580634,
+                0.28191248359580057,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                489,
+                487
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.35843733595800525,
+                0.36214494021580634,
+                0.2819124835958005,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                492,
+                490
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6810328083989501,
+                0.36214494021580634,
+                0.28191248359580057,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                501,
+                499
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.03585022965879265,
+                0.6665893846602507,
+                0.28191248359580057,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                495,
+                493
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.35843733595800525,
+                0.6665893846602507,
+                0.2819124835958005,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                498,
+                496
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.6810328083989501,
+                0.6665893846602507,
+                0.28191248359580057,
+                0.1752946923301254
+              ],
+              "shape_ids": [
+                504,
+                502
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s487",
+              "role": "heading",
+              "shape_id": 487,
+              "box": [
+                0.0,
+                0.0,
+                0.28191043307086616,
+                0.07379206765820939
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 26,
+              "max_lines": 1,
+              "sample_text": "Заголовок"
+            },
+            {
+              "id": "s489",
+              "role": "body",
+              "shape_id": 489,
+              "box": [
+                2.0505249343841236e-6,
+                0.05836162146398366,
+                0.28191043307086616,
+                0.11693307086614173
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "E4E7EA",
+                "align": "left"
+              },
+              "max_chars": 96,
+              "max_lines": 3,
+              "sample_text": "Основной текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 6,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "grid",
+          "cols": 3,
+          "rows": 2,
+          "step": [
+            0.32259128937007875,
+            0.3044444444444444
+          ],
+          "unit_size": [
+            0.05546038385826774,
+            0.09858398950131234
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03584653871391076,
+                0.23217599883347914,
+                0.05546038385826772,
+                0.09858398950131234
+              ],
+              "shape_ids": [
+                488
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.35843364501312336,
+                0.23217599883347914,
+                0.05546038385826774,
+                0.09858398950131234
+              ],
+              "shape_ids": [
+                491
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6810291174540682,
+                0.23217599883347914,
+                0.05546038385826768,
+                0.09858398950131234
+              ],
+              "shape_ids": [
+                500
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.03584653871391076,
+                0.5366204432779236,
+                0.05546038385826772,
+                0.09858398950131231
+              ],
+              "shape_ids": [
+                494
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.35843364501312336,
+                0.5366204432779236,
+                0.05546038385826774,
+                0.09858398950131231
+              ],
+              "shape_ids": [
+                497
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.6810291174540682,
+                0.5366204432779236,
+                0.05546038385826768,
+                0.09858398950131231
+              ],
+              "shape_ids": [
+                503
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s488",
+              "role": "number",
+              "shape_id": 488,
+              "box": [
+                0.0,
+                0.0,
+                0.055460383858267716,
+                0.09858398950131234
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "center"
+              },
+              "max_chars": 12,
+              "max_lines": 2,
+              "sample_text": "01"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 6,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p008.png"
+    },
+    {
+      "id": "p009",
+      "source_slide": 9,
+      "layout_name": "13_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель просматривает сетку из восьми карточек, чтобы быстро ознакомиться с перечнем ключевых пунктов, функций или преимуществ.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s510",
+          "role": "title",
+          "shape_id": 510,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 4,
+          "rows": 2,
+          "step": [
+            0.23584353127734037,
+            0.3030290172061826
+          ],
+          "unit_size": [
+            0.22247121062992126,
+            0.28235651793525807
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509391404199475,
+                0.2176434820647419,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                511,
+                520,
+                521
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.27055897309711285,
+                0.2176434820647419,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                513,
+                523,
+                524
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5066245078740157,
+                0.2176434820647419,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                515,
+                526,
+                527
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7426245078740158,
+                0.2176434820647419,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                517,
+                529,
+                530
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.03509391404199475,
+                0.5206724992709245,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                512,
+                532,
+                533
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.27055897309711285,
+                0.5206724992709245,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                514,
+                535,
+                536
+              ]
+            },
+            {
+              "index": 6,
+              "box": [
+                0.5066245078740157,
+                0.5206724992709245,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                516,
+                538,
+                539
+              ]
+            },
+            {
+              "index": 7,
+              "box": [
+                0.7426245078740158,
+                0.5206724992709245,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "shape_ids": [
+                518,
+                541,
+                542
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s511",
+              "role": "heading",
+              "shape_id": 511,
+              "box": [
+                0.0,
+                0.0,
+                0.22247121062992126,
+                0.28235651793525807
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 175,
+              "max_lines": 7,
+              "sample_text": "Заголовок\nТекст"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a520",
+              "kind": "icon",
+              "box": [
+                0.18025959645669293,
+                0.019237095363079604,
+                0.03125,
+                0.05555555555555555
+              ],
+              "shape_id": 520,
+              "placeholder": false
+            },
+            {
+              "id": "a521",
+              "kind": "icon",
+              "box": [
+                0.18702632874015748,
+                0.0312668416447944,
+                0.017716535433070866,
+                0.031496062992125984
+              ],
+              "shape_id": 521,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 8,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p009.png"
+    },
+    {
+      "id": "p010",
+      "source_slide": 10,
+      "layout_name": "19_Заголовок",
+      "kind": "cards",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Просмотреть три ключевых пункта или преимущества, представленных в виде отдельных блоков с иконками.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s547",
+          "role": "title",
+          "shape_id": 547,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.09140696996208807
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 32,
+          "max_lines": 1,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 3,
+          "step": [
+            0.0,
+            0.26984120734908135
+          ],
+          "unit_size": [
+            0.4853640091863517,
+            0.24871463983668707
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.4415611056430446,
+                0.12541834354039078,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "shape_ids": [
+                548,
+                550,
+                551
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.4415611056430446,
+                0.3952595508894721,
+                0.4853640091863517,
+                0.248714639836687
+              ],
+              "shape_ids": [
+                552,
+                554,
+                555
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.4415611056430446,
+                0.6651007582385535,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "shape_ids": [
+                556,
+                558,
+                559
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s548",
+              "role": "heading",
+              "shape_id": 548,
+              "box": [
+                0.0,
+                0.0,
+                0.4853640091863517,
+                0.24871463983668707
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 294,
+              "max_lines": 6,
+              "sample_text": "Заголовок\nТекст"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a551",
+              "kind": "icon",
+              "box": [
+                0.02170242782152232,
+                0.03757174103237096,
+                0.021875,
+                0.03888888888888889
+              ],
+              "shape_id": 551,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p010.png"
+    },
+    {
+      "id": "p011",
+      "source_slide": 11,
+      "layout_name": "15_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Сравнить три варианта или этапа по списку ключевых пунктов, чтобы выбрать подходящий.",
+      "needs_images": false,
+      "primary_group_id": "g2",
+      "slots": [
+        {
+          "id": "s565",
+          "role": "title",
+          "shape_id": 565,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 3,
+          "rows": 4,
+          "step": [
+            0.32276788057742783,
+            0.11131496062992126
+          ],
+          "unit_size": [
+            0.2768786089238845,
+            0.09973753280839898
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509399606299213,
+                0.3231612715077282,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                566,
+                567,
+                569
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.35786187664041996,
+                0.3231612715077282,
+                0.27687860892388444,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                580,
+                581,
+                583
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6806297572178478,
+                0.3231612715077282,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                594,
+                595,
+                597
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.03509399606299213,
+                0.43447623213764947,
+                0.2768786089238845,
+                0.09973753280839898
+              ],
+              "shape_ids": [
+                570,
+                571,
+                572
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.35786187664041996,
+                0.43447623213764947,
+                0.27687860892388444,
+                0.09973753280839898
+              ],
+              "shape_ids": [
+                584,
+                585,
+                586
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.6806297572178478,
+                0.43447623213764947,
+                0.2768786089238845,
+                0.09973753280839898
+              ],
+              "shape_ids": [
+                598,
+                599,
+                600
+              ]
+            },
+            {
+              "index": 6,
+              "box": [
+                0.03509399606299213,
+                0.5457911927675707,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                573,
+                574,
+                575
+              ]
+            },
+            {
+              "index": 7,
+              "box": [
+                0.35786187664041996,
+                0.5457911927675707,
+                0.27687860892388444,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                587,
+                588,
+                589
+              ]
+            },
+            {
+              "index": 8,
+              "box": [
+                0.6806297572178478,
+                0.5457911927675707,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                601,
+                602,
+                603
+              ]
+            },
+            {
+              "index": 9,
+              "box": [
+                0.03509399606299213,
+                0.657106153397492,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                576,
+                577,
+                578
+              ]
+            },
+            {
+              "index": 10,
+              "box": [
+                0.35786187664041996,
+                0.657106153397492,
+                0.27687860892388444,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                590,
+                591,
+                592
+              ]
+            },
+            {
+              "index": 11,
+              "box": [
+                0.6806297572178478,
+                0.657106153397492,
+                0.2768786089238845,
+                0.09973753280839892
+              ],
+              "shape_ids": [
+                604,
+                605,
+                606
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s566",
+              "role": "heading",
+              "shape_id": 566,
+              "box": [
+                0.0,
+                0.0,
+                0.2768786089238845,
+                0.09973753280839895
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 13.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 117,
+              "max_lines": 3,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a569",
+              "kind": "icon",
+              "box": [
+                0.01824770341207349,
+                0.03412058909303001,
+                0.017716535433070866,
+                0.031496062992125984
+              ],
+              "shape_id": 569,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 12,
+          "linked_group_ids": []
+        },
+        {
+          "id": "g2",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.3227678805774278,
+            0.0
+          ],
+          "unit_size": [
+            0.27687869094488193,
+            0.06510644502770488
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509391404199475,
+                0.23217599883347914,
+                0.2768786909448819,
+                0.06510644502770488
+              ],
+              "shape_ids": [
+                568,
+                579
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.3578617946194226,
+                0.23217599883347914,
+                0.2768786909448818,
+                0.06510644502770488
+              ],
+              "shape_ids": [
+                582,
+                593
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6806296751968504,
+                0.23217599883347914,
+                0.27687869094488193,
+                0.06510644502770488
+              ],
+              "shape_ids": [
+                596,
+                607
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s568",
+              "role": "heading",
+              "shape_id": 568,
+              "box": [
+                0.0,
+                0.0,
+                0.2519749835958005,
+                0.05815427238261884
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "6DBCFF",
+                "align": "left"
+              },
+              "max_chars": 23,
+              "max_lines": 1,
+              "sample_text": "Заголовок"
+            },
+            {
+              "id": "s579",
+              "role": "body",
+              "shape_id": 579,
+              "box": [
+                0.19790813648293964,
+                0.008503062117235366,
+                0.07897055446194226,
+                0.05660338291046953
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 14.0,
+                "bold": false,
+                "italic": false,
+                "color": "000000",
+                "align": "center"
+              },
+              "max_chars": 10,
+              "max_lines": 1,
+              "sample_text": "Дата"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p011.png"
+    },
+    {
+      "id": "p012",
+      "source_slide": 12,
+      "layout_name": "13_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Просмотреть набор коротких описаний или характеристик, сгруппированных в отдельные блоки.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s613",
+          "role": "title",
+          "shape_id": 613,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a620",
+          "kind": "image",
+          "box": [
+            0.03270365813648294,
+            0.8982962962962963,
+            0.15235244422572178,
+            0.042675853018372706
+          ],
+          "shape_id": 620,
+          "placeholder": false
+        },
+        {
+          "id": "a621",
+          "kind": "icon",
+          "box": [
+            0.9098996062992126,
+            0.9096357538641003,
+            0.05663689304461942,
+            0.031496062992125984
+          ],
+          "shape_id": 621,
+          "placeholder": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 4,
+          "rows": 2,
+          "step": [
+            0.23645513451443567,
+            0.14949489647127445
+          ],
+          "unit_size": [
+            0.23054068241469816,
+            0.13949956255468066
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509391404199475,
+                0.5,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                625
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.2715490485564305,
+                0.5,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                626
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5080041830708661,
+                0.5,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                627
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7444593175853018,
+                0.5,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                628
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.03509391404199475,
+                0.6494948964712745,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                629
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.2715490485564305,
+                0.6494948964712745,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                630
+              ]
+            },
+            {
+              "index": 6,
+              "box": [
+                0.5080041830708661,
+                0.6494948964712745,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                631
+              ]
+            },
+            {
+              "index": 7,
+              "box": [
+                0.7444593175853018,
+                0.6494948964712745,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "shape_ids": [
+                632
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s625",
+              "role": "heading",
+              "shape_id": 625,
+              "box": [
+                0.0,
+                0.0,
+                0.23054068241469816,
+                0.13949956255468066
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 12.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 175,
+              "max_lines": 5,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 12,
+          "linked_group_ids": []
+        },
+        {
+          "id": "g2",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23409090660542434,
+            0.0
+          ],
+          "unit_size": [
+            0.1592809219160105,
+            0.06924526100904055
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0850372375328084,
+                0.2899422572178478,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                616
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.3225372375328084,
+                0.2899422572178478,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                622
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5498099573490813,
+                0.2899422572178478,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                623
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7873099573490814,
+                0.2899422572178478,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                624
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s616",
+              "role": "heading",
+              "shape_id": 616,
+              "box": [
+                0.0,
+                0.0,
+                0.1592809219160105,
+                0.06924526100904053
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 12.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 48,
+              "max_lines": 2,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g3"
+          ]
+        },
+        {
+          "id": "g3",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23409090660542434,
+            0.0
+          ],
+          "unit_size": [
+            0.03909432414698166,
+            0.06924526100904055
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509391404199475,
+                0.28994211140274134,
+                0.03909432414698163,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                618,
+                619
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.27259391404199473,
+                0.28994211140274134,
+                0.03909432414698161,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                634,
+                635
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.49986663385826774,
+                0.28994211140274134,
+                0.03909432414698161,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                637,
+                638
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7373666338582677,
+                0.28994211140274134,
+                0.03909432414698166,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                640,
+                641
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a619",
+              "kind": "icon",
+              "box": [
+                0.01068889435695538,
+                0.018874599008457282,
+                0.017716535433070866,
+                0.031496062992125984
+              ],
+              "shape_id": 619,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g4",
+          "direction": "column",
+          "cols": 1,
+          "rows": 2,
+          "step": [
+            0.0,
+            0.2122551764362788
+          ],
+          "unit_size": [
+            0.38209350393700786,
+            0.05915995917177022
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509399606299213,
+                0.21933362496354622,
+                0.38209350393700786,
+                0.05915995917177022
+              ],
+              "shape_ids": [
+                614
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.03509399606299213,
+                0.43158880139982503,
+                0.38209350393700786,
+                0.05915995917177019
+              ],
+              "shape_ids": [
+                615
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s614",
+              "role": "heading",
+              "shape_id": 614,
+              "box": [
+                0.0,
+                0.0,
+                0.38209350393700786,
+                0.05915995917177019
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 35,
+              "max_lines": 1,
+              "sample_text": "Заголовок"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p012.png"
+    },
+    {
+      "id": "p013",
+      "source_slide": 13,
+      "layout_name": "8_Заголовок",
+      "kind": "other",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Слайд демонстрирует структуру решения проблемы, перечисляя ключевые цели и конкретные шаги или компоненты решения.",
+      "needs_images": true,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s647",
+          "role": "title",
+          "shape_id": 647,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.09812233887430738
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 32,
+          "max_lines": 1,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a666",
+          "kind": "image",
+          "box": [
+            0.6459329888451444,
+            0.0,
+            0.354067093175853,
+            0.5212439486730825
+          ],
+          "shape_id": 666,
+          "placeholder": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.2238461559492563,
+            0.0
+          ],
+          "unit_size": [
+            0.21027518044619425,
+            0.18626100904053666
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03434022309711286,
+                0.5690721784776903,
+                0.2102751804461942,
+                0.18626100904053666
+              ],
+              "shape_ids": [
+                648
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.25818643372703415,
+                0.5690721784776903,
+                0.21027518044619425,
+                0.18626100904053666
+              ],
+              "shape_ids": [
+                655
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.48203248031496065,
+                0.5690721784776903,
+                0.21027518044619425,
+                0.18626100904053666
+              ],
+              "shape_ids": [
+                656
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7058786909448819,
+                0.5690721784776903,
+                0.2102751804461942,
+                0.18626100904053666
+              ],
+              "shape_ids": [
+                657
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s648",
+              "role": "heading",
+              "shape_id": 648,
+              "box": [
+                0.0,
+                0.0,
+                0.21027518044619423,
+                0.1862610090405366
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 12.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 192,
+              "max_lines": 6,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": []
+        },
+        {
+          "id": "g2",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.22442306430446193,
+            0.0
+          ],
+          "unit_size": [
+            0.14946620734908134,
+            0.08449518810148732
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.09514919619422572,
+                0.3185962379702537,
+                0.14946620734908134,
+                0.08449518810148732
+              ],
+              "shape_ids": [
+                649
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.3189953248031496,
+                0.3185962379702537,
+                0.14946620734908134,
+                0.08449518810148732
+              ],
+              "shape_ids": [
+                658
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5439953248031496,
+                0.3185962379702537,
+                0.14946620734908134,
+                0.08449518810148732
+              ],
+              "shape_ids": [
+                662
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s649",
+              "role": "heading",
+              "shape_id": 649,
+              "box": [
+                0.0,
+                0.0,
+                0.14946620734908136,
+                0.08449518810148732
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 14.0,
+                "bold": false,
+                "italic": false,
+                "color": "FDFEFE",
+                "align": "left"
+              },
+              "max_chars": 38,
+              "max_lines": 2,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g3"
+          ]
+        },
+        {
+          "id": "g3",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.22442306430446193,
+            0.0
+          ],
+          "unit_size": [
+            0.047528625328083995,
+            0.08449533391659375
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03434014107611549,
+                0.3185960921551473,
+                0.04752862532808399,
+                0.08449533391659375
+              ],
+              "shape_ids": [
+                652,
+                653
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.2581862696850394,
+                0.3185960921551473,
+                0.047528625328083995,
+                0.08449533391659375
+              ],
+              "shape_ids": [
+                660,
+                661
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.48318626968503936,
+                0.3185960921551473,
+                0.04752862532808394,
+                0.08449533391659375
+              ],
+              "shape_ids": [
+                664,
+                665
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a653",
+              "kind": "icon",
+              "box": [
+                0.009708919567391991,
+                0.0179732892727672,
+                0.02811078619330001,
+                0.04997473101031113
+              ],
+              "shape_id": 653,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 5,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g4",
+          "direction": "column",
+          "cols": 1,
+          "rows": 2,
+          "step": [
+            0.0,
+            0.2665898221055701
+          ],
+          "unit_size": [
+            0.31512180118110233,
+            0.06095960921551474
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0352077591863517,
+                0.23560600758238553,
+                0.31512180118110233,
+                0.06095960921551474
+              ],
+              "shape_ids": [
+                650
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.0352077591863517,
+                0.5021958296879556,
+                0.31512180118110233,
+                0.06095960921551469
+              ],
+              "shape_ids": [
+                654
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s650",
+              "role": "heading",
+              "shape_id": 650,
+              "box": [
+                0.0,
+                0.0,
+                0.31512180118110233,
+                0.06095960921551473
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "6DBCFF",
+                "align": "left"
+              },
+              "max_chars": 32,
+              "max_lines": 1,
+              "sample_text": "Цели:"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 2,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p013.png"
+    },
+    {
+      "id": "p014",
+      "source_slide": 14,
+      "layout_name": "17_Титульный слайд",
+      "kind": "table",
+      "kind_confidence": 0.95,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Зритель сравнивает два набора характеристик или данных, представленных в виде строк.",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s672",
+          "role": "title",
+          "shape_id": 672,
+          "box": [
+            0.035093832020997376,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a673",
+          "kind": "table",
+          "box": [
+            0.0,
+            0.20480096237970255,
+            0.24606299212598426,
+            0.4374453193350831
+          ],
+          "shape_id": 673,
+          "placeholder": false
+        }
+      ],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p014.png"
+    },
+    {
+      "id": "p015",
+      "source_slide": 15,
+      "layout_name": "17_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Просмотреть три ключевых пункта или характеристики, представленных в виде отдельных блоков с кратким описанием.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s680",
+          "role": "title",
+          "shape_id": 680,
+          "box": [
+            0.035093832020997376,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s685",
+          "role": "body",
+          "shape_id": 685,
+          "box": [
+            0.035093832020997376,
+            0.7192815689705453,
+            0.1464551345144357,
+            0.05774278215223097
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 14.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 19,
+          "max_lines": 1,
+          "sample_text": "Примечание"
+        },
+        {
+          "id": "s684",
+          "role": "body",
+          "shape_id": 684,
+          "box": [
+            0.03470333005249344,
+            0.8069063867016623,
+            0.5385232939632546,
+            0.057660834062408864
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 14.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 71,
+          "max_lines": 1,
+          "sample_text": "Текст"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.3108374343832021,
+            0.0
+          ],
+          "unit_size": [
+            0.29822834645669294,
+            0.2948390201224847
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.035093832020997376,
+                0.2678721201516477,
+                0.29822834645669294,
+                0.2948390201224847
+              ],
+              "shape_ids": [
+                681
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.34593126640419947,
+                0.2678721201516477,
+                0.29822834645669294,
+                0.2948390201224847
+              ],
+              "shape_ids": [
+                682
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6567687007874016,
+                0.2678721201516477,
+                0.29822834645669294,
+                0.2948390201224847
+              ],
+              "shape_ids": [
+                683
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s681",
+              "role": "heading",
+              "shape_id": 681,
+              "box": [
+                0.0,
+                0.0,
+                0.29822834645669294,
+                0.2948390201224847
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 210,
+              "max_lines": 7,
+              "sample_text": "Заголовок\nТекст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [
+        679
+      ],
+      "decor": [
+        {
+          "shape_id": 679,
+          "box": [
+            0.0,
+            0.6923696412948381,
+            1.0,
+            0.3076305045202683
+          ],
+          "kind": "shape"
+        }
+      ],
+      "preview": "previews/p015.png"
+    },
+    {
+      "id": "p016",
+      "source_slide": 16,
+      "layout_name": "15_Титульный слайд",
+      "kind": "cards",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Просмотреть три параллельных блока информации, представленных в виде карточек с заголовками и краткими списками.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s703",
+          "role": "title",
+          "shape_id": 703,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s702",
+          "role": "body",
+          "shape_id": 702,
+          "box": [
+            0.03537795275590551,
+            0.18127850685331,
+            0.7955879265091863,
+            0.0939400699912511
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "CAD0D5",
+            "align": "left"
+          },
+          "max_chars": 182,
+          "max_lines": 2,
+          "sample_text": "Текст описания"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 3,
+          "rows": 1,
+          "step": [
+            0.30344828576115485,
+            0.0
+          ],
+          "unit_size": [
+            0.2950716863517061,
+            0.5021811023622047
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509399606299213,
+                0.28744969378827645,
+                0.2817544291338583,
+                0.5021811023622047
+              ],
+              "shape_ids": [
+                691,
+                694,
+                693,
+                692
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.3385423228346457,
+                0.28744969378827645,
+                0.2817544291338583,
+                0.5021811023622047
+              ],
+              "shape_ids": [
+                695,
+                698,
+                697,
+                696
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6419905675853018,
+                0.28744969378827645,
+                0.2950716863517061,
+                0.5021811023622047
+              ],
+              "shape_ids": [
+                699,
+                701,
+                700
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s693",
+              "role": "heading",
+              "shape_id": 693,
+              "box": [
+                0.01331717519685039,
+                0.0307926509186352,
+                0.2566846292650919,
+                0.044878536016331294
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "212121",
+                "align": "left"
+              },
+              "max_chars": 23,
+              "max_lines": 1,
+              "sample_text": "Заголовок"
+            },
+            {
+              "id": "s694",
+              "role": "body",
+              "shape_id": 694,
+              "box": [
+                0.01331717519685039,
+                0.12693759113444153,
+                0.2566846292650919,
+                0.1256596675415573
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 12.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 156,
+              "max_lines": 4,
+              "sample_text": "Текст\nТекст\nТекст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p016.png"
+    },
+    {
+      "id": "p017",
+      "source_slide": 17,
+      "layout_name": "14_Титульный слайд",
+      "kind": "big_number",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать аудитории два ключевых количественных показателя с кратким пояснением.",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s709",
+          "role": "title",
+          "shape_id": 709,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s712",
+          "role": "body",
+          "shape_id": 712,
+          "box": [
+            0.03537795275590551,
+            0.18127850685331,
+            0.29773892716535433,
+            0.0939400699912511
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "CAD0D5",
+            "align": "left"
+          },
+          "max_chars": 68,
+          "max_lines": 2,
+          "sample_text": "Текст описания"
+        },
+        {
+          "id": "s710",
+          "role": "number",
+          "shape_id": 710,
+          "box": [
+            0.5181108923884514,
+            0.18127850685331,
+            0.35315321522309706,
+            0.2789228638086906
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 80.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "max_chars": 8,
+          "max_lines": 1,
+          "sample_text": "ххх%\u000bданные показателя"
+        },
+        {
+          "id": "s711",
+          "role": "number",
+          "shape_id": 711,
+          "box": [
+            0.5181108923884514,
+            0.5246752697579469,
+            0.35315321522309706,
+            0.3776240886555847
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 80.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "max_chars": 16,
+          "max_lines": 2,
+          "sample_text": "ххх%\u000bданные показателя"
+        }
+      ],
+      "areas": [],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p017.png"
+    },
+    {
+      "id": "p018",
+      "source_slide": 18,
+      "layout_name": "14_Титульный слайд",
+      "kind": "big_number",
+      "kind_confidence": 0.2,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать ключевую метрику или статистику с кратким пояснением и визуальным акцентом.",
+      "needs_images": true,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s718",
+          "role": "title",
+          "shape_id": 718,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s720",
+          "role": "number",
+          "shape_id": 720,
+          "box": [
+            0.0352077591863517,
+            0.258564887722368,
+            0.31820136154855644,
+            0.461689705453485
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 54.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "max_chars": 30,
+          "max_lines": 3,
+          "sample_text": "x% \u000bданные\u000bпоказателя\nтекст"
+        },
+        {
+          "id": "s719",
+          "role": "body",
+          "shape_id": 719,
+          "box": [
+            0.38846153215223095,
+            0.258564887722368,
+            0.4899475885826772,
+            0.5515361621463983
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "center"
+          },
+          "max_chars": 650,
+          "max_lines": 13,
+          "sample_text": "Иллюстрация"
+        }
+      ],
+      "areas": [],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p018.png"
+    },
+    {
+      "id": "p019",
+      "source_slide": 19,
+      "layout_name": "11_Заголовок",
+      "kind": "chart",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать распределение целого на части с помощью диаграммы и поясняющих метрик.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s726",
+          "role": "title",
+          "shape_id": 726,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.9313287401574804,
+            0.11188320209973754
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 47,
+          "max_lines": 1,
+          "sample_text": "Графики"
+        },
+        {
+          "id": "s734",
+          "role": "number",
+          "shape_id": 734,
+          "box": [
+            0.036023047900262464,
+            0.3671230679498396,
+            0.23382357283464567,
+            0.07045508894721493
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 54.0,
+            "bold": true,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 7,
+          "max_lines": 1,
+          "sample_text": "ХХ"
+        },
+        {
+          "id": "s729",
+          "role": "number",
+          "shape_id": 729,
+          "box": [
+            0.5691166338582677,
+            0.408916447944007,
+            0.23382357283464567,
+            0.07045508894721493
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 60.0,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "center"
+          },
+          "max_chars": 7,
+          "max_lines": 1,
+          "sample_text": "ХХ"
+        },
+        {
+          "id": "s730",
+          "role": "number",
+          "shape_id": 730,
+          "box": [
+            0.4527801017060367,
+            0.4631049868766404,
+            0.11041207349081365,
+            0.07045508894721493
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 32.0,
+            "bold": false,
+            "italic": false,
+            "color": "000000",
+            "align": "center"
+          },
+          "max_chars": 6,
+          "max_lines": 1,
+          "sample_text": "ХХ%"
+        },
+        {
+          "id": "s728",
+          "role": "body",
+          "shape_id": 728,
+          "box": [
+            0.6115875164041995,
+            0.5251211723534558,
+            0.1643228346456693,
+            0.07983406240886556
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "center"
+          },
+          "max_chars": 15,
+          "max_lines": 1,
+          "sample_text": "Заголовок"
+        },
+        {
+          "id": "s732",
+          "role": "number",
+          "shape_id": 732,
+          "box": [
+            0.036023047900262464,
+            0.6883286672499271,
+            0.23382357283464567,
+            0.07045508894721493
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 54.0,
+            "bold": true,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 7,
+          "max_lines": 1,
+          "sample_text": "ХХ"
+        },
+        {
+          "id": "s731",
+          "role": "number",
+          "shape_id": 731,
+          "box": [
+            0.6535192749343832,
+            0.7876792067658209,
+            0.11041207349081365,
+            0.07045508894721493
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 28.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "center"
+          },
+          "max_chars": 7,
+          "max_lines": 1,
+          "sample_text": "ХХ%"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a727",
+          "kind": "image",
+          "box": [
+            0.1281788057742782,
+            0.004052055993000875,
+            0.962681594488189,
+            1.032786672499271
+          ],
+          "shape_id": 727,
+          "placeholder": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 2,
+          "step": [
+            0.0,
+            0.32120559930008746
+          ],
+          "unit_size": [
+            0.1516774934383202,
+            0.07400233304170312
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0352077591863517,
+                0.2519574219889181,
+                0.1516774934383202,
+                0.07400233304170312
+              ],
+              "shape_ids": [
+                735
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.0352077591863517,
+                0.5731630212890055,
+                0.1516774934383202,
+                0.07400233304170312
+              ],
+              "shape_ids": [
+                733
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s735",
+              "role": "heading",
+              "shape_id": 735,
+              "box": [
+                0.0,
+                0.0,
+                0.1516774934383202,
+                0.07400233304170312
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "center"
+              },
+              "max_chars": 34,
+              "max_lines": 2,
+              "sample_text": "Заголовок"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 2,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p019.png"
+    },
+    {
+      "id": "p020",
+      "source_slide": 20,
+      "layout_name": "11_Заголовок",
+      "kind": "chart",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать количественные данные или доли в наглядной форме с помощью диаграмм.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s741",
+          "role": "title",
+          "shape_id": 741,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.9313287401574804,
+            0.11188320209973754
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 47,
+          "max_lines": 1,
+          "sample_text": "Графики"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 2,
+          "rows": 1,
+          "step": [
+            0.46741076115485564,
+            0.0
+          ],
+          "unit_size": [
+            0.44905306758530183,
+            0.7482798191892679
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0,
+                0.12586001749781278,
+                0.44905306758530183,
+                0.7482798191892679
+              ],
+              "shape_ids": [
+                742
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.46741076115485564,
+                0.12586001749781278,
+                0.4490530675853018,
+                0.7482798191892679
+              ],
+              "shape_ids": [
+                743
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a742",
+              "kind": "image",
+              "box": [
+                0.0,
+                0.0,
+                0.44905306758530183,
+                0.748279819189268
+              ],
+              "shape_id": 742,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 2,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p020.png"
+    },
+    {
+      "id": "p021",
+      "source_slide": 21,
+      "layout_name": "11_Заголовок",
+      "kind": "chart",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "зритель сравнивает числовые показатели по нескольким категориям и сериям данных",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s749",
+          "role": "title",
+          "shape_id": 749,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.9313287401574804,
+            0.11188320209973754
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 47,
+          "max_lines": 1,
+          "sample_text": "Графики"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a750",
+          "kind": "image",
+          "box": [
+            0.0,
+            0.20866491688538932,
+            1.0,
+            0.6660759696704579
+          ],
+          "shape_id": 750,
+          "placeholder": false
+        }
+      ],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p021.png"
+    },
+    {
+      "id": "p022",
+      "source_slide": 22,
+      "layout_name": "17_Заголовок",
+      "kind": "bullets",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Слайд предназначен для перечисления ключевых проблем или вызовов, с которыми сталкивается аудитория, с кратким пояснением каждого пункта.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s768",
+          "role": "title",
+          "shape_id": 768,
+          "box": [
+            0.0352077591863517,
+            0.3393569553805774,
+            0.36903125,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 36,
+          "max_lines": 2,
+          "sample_text": "Проблемы /\u000bВызовы"
+        },
+        {
+          "id": "s769",
+          "role": "body",
+          "shape_id": 769,
+          "box": [
+            0.03537795275590551,
+            0.5145589093030037,
+            0.3688610564304462,
+            0.0939400699912511
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "max_chars": 84,
+          "max_lines": 2,
+          "sample_text": "Текст описания"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 4,
+          "step": [
+            0.0,
+            0.2012655779138719
+          ],
+          "unit_size": [
+            0.361193815616798,
+            0.1372645086030913
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.5380000820209974,
+                0.1424485272674249,
+                0.361193815616798,
+                0.1372645086030913
+              ],
+              "shape_ids": [
+                756
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.5380000820209974,
+                0.33938072324292795,
+                0.361193815616798,
+                0.1372645086030913
+              ],
+              "shape_ids": [
+                758
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5380000820209974,
+                0.5398667249927093,
+                0.361193815616798,
+                0.13726450860309125
+              ],
+              "shape_ids": [
+                760
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.5380000820209974,
+                0.7462452610090405,
+                0.361193815616798,
+                0.13726450860309125
+              ],
+              "shape_ids": [
+                762
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s756",
+              "role": "heading",
+              "shape_id": 756,
+              "box": [
+                0.0,
+                0.0,
+                0.3611938156167979,
+                0.13726450860309128
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "EB4250",
+                "align": "left"
+              },
+              "max_chars": 123,
+              "max_lines": 3,
+              "sample_text": "Заголовок\nОписание"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "column",
+          "cols": 1,
+          "rows": 4,
+          "step": [
+            0.0,
+            0.20126557791387187
+          ],
+          "unit_size": [
+            0.051405019685039355,
+            0.09138670166229224
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.472401656824147,
+                0.14242475940507437,
+                0.051405019685039355,
+                0.09138670166229221
+              ],
+              "shape_ids": [
+                757,
+                764
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.472401656824147,
+                0.3393569553805774,
+                0.051405019685039355,
+                0.09138670166229224
+              ],
+              "shape_ids": [
+                759,
+                765
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.472401656824147,
+                0.5398429571303587,
+                0.051405019685039355,
+                0.09138670166229224
+              ],
+              "shape_ids": [
+                761,
+                766
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.472401656824147,
+                0.74622149314669,
+                0.051405019685039355,
+                0.09138670166229224
+              ],
+              "shape_ids": [
+                763,
+                767
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a764",
+              "kind": "icon",
+              "box": [
+                0.014765009842519716,
+                0.02624890638670166,
+                0.021875,
+                0.03888888888888889
+              ],
+              "shape_id": 764,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p022.png"
+    },
+    {
+      "id": "p023",
+      "source_slide": 23,
+      "layout_name": "17_Заголовок",
+      "kind": "cards",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать список из шести проблем или вызовов, где каждый пункт сопровождается кратким описанием.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s775",
+          "role": "title",
+          "shape_id": 775,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Проблемы / Вызовы"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "grid",
+          "cols": 3,
+          "rows": 2,
+          "step": [
+            0.315749343832021,
+            0.20141790609507143
+          ],
+          "unit_size": [
+            0.29723425196850395,
+            0.17910192475940506
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509399606299213,
+                0.32089807524059494,
+                0.29723425196850395,
+                0.17910192475940506
+              ],
+              "shape_ids": [
+                776,
+                782,
+                788
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.35084333989501315,
+                0.32089807524059494,
+                0.29723425196850395,
+                0.17910192475940506
+              ],
+              "shape_ids": [
+                777,
+                783,
+                791
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.6665926837270342,
+                0.32089807524059494,
+                0.29723425196850395,
+                0.17910192475940506
+              ],
+              "shape_ids": [
+                778,
+                784,
+                792
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.03509399606299213,
+                0.5223159813356664,
+                0.29723425196850395,
+                0.179101924759405
+              ],
+              "shape_ids": [
+                779,
+                785,
+                789
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.35084333989501315,
+                0.5223159813356664,
+                0.29723425196850395,
+                0.179101924759405
+              ],
+              "shape_ids": [
+                780,
+                786,
+                790
+              ]
+            },
+            {
+              "index": 5,
+              "box": [
+                0.6665926837270342,
+                0.5223159813356664,
+                0.29723425196850395,
+                0.179101924759405
+              ],
+              "shape_ids": [
+                781,
+                787,
+                793
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s776",
+              "role": "heading",
+              "shape_id": 776,
+              "box": [
+                0.0,
+                0.0,
+                0.29723425196850395,
+                0.17910192475940506
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 170,
+              "max_lines": 5,
+              "sample_text": "Заголовок\nОписание"
+            }
+          ],
+          "unit_areas": [
+            {
+              "id": "a788",
+              "kind": "icon",
+              "box": [
+                0.030486466535433063,
+                0.07380285797608632,
+                0.017716535433070866,
+                0.031496062992125984
+              ],
+              "shape_id": 788,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 6,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p023.png"
+    },
+    {
+      "id": "p024",
+      "source_slide": 24,
+      "layout_name": "11_Титульный слайд",
+      "kind": "cta",
+      "kind_confidence": 0.65,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "зритель получает конкретное действие, которое нужно выполнить, и визуальный элемент для быстрого перехода",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s803",
+          "role": "body",
+          "shape_id": 803,
+          "box": [
+            0.6375,
+            0.21851312335958006,
+            0.28586925853018375,
+            0.5082120151647711
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 24.0,
+            "bold": true,
+            "italic": false,
+            "color": "000000",
+            "align": "center"
+          },
+          "max_chars": 189,
+          "max_lines": 9,
+          "sample_text": "QR-code"
+        },
+        {
+          "id": "s802",
+          "role": "title",
+          "shape_id": 802,
+          "box": [
+            0.03520784120734908,
+            0.2346450860309128,
+            0.3939588254593176,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 66.0,
+            "bold": true,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 11,
+          "max_lines": 1,
+          "sample_text": "Call to action"
+        },
+        {
+          "id": "s804",
+          "role": "body",
+          "shape_id": 804,
+          "box": [
+            0.03520784120734908,
+            0.5741558763487897,
+            0.21696423884514435,
+            0.10952376786235055
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "000000",
+            "align": "center"
+          },
+          "max_chars": 75,
+          "max_lines": 3,
+          "sample_text": "Ссылка"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a806",
+          "kind": "image",
+          "box": [
+            0.5141185203412073,
+            0.38937503645377664,
+            0.3374285597112861,
+            0.5743228346456692
+          ],
+          "shape_id": 806,
+          "placeholder": false
+        },
+        {
+          "id": "a799",
+          "kind": "image",
+          "box": [
+            0.0000651246719160105,
+            0.7936920384951881,
+            0.4997682906824147,
+            0.2063079615048119
+          ],
+          "shape_id": 799,
+          "placeholder": false
+        },
+        {
+          "id": "a805",
+          "kind": "image",
+          "box": [
+            0.03270365813648294,
+            0.8982962962962963,
+            0.15235244422572178,
+            0.042675853018372706
+          ],
+          "shape_id": 805,
+          "placeholder": false
+        }
+      ],
+      "groups": [],
+      "decor_shape_ids": [
+        800,
+        801
+      ],
+      "decor": [
+        {
+          "shape_id": 800,
+          "box": [
+            8.202099737532809e-8,
+            0.859523913677457,
+            0.3680554461942257,
+            0.14047608632254302
+          ],
+          "kind": "shape"
+        },
+        {
+          "shape_id": 801,
+          "box": [
+            0.3680555282152231,
+            0.7653549139690872,
+            0.1319444717847769,
+            0.16198862642169728
+          ],
+          "kind": "shape"
+        }
+      ],
+      "preview": "previews/p024.png"
+    },
+    {
+      "id": "p025",
+      "source_slide": 25,
+      "layout_name": "8_Заголовок",
+      "kind": "image_text",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать краткий список пунктов или характеристик рядом с крупной иллюстрацией для наглядности.",
+      "needs_images": true,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s812",
+          "role": "title",
+          "shape_id": 812,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Заголовок"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a833",
+          "kind": "image",
+          "box": [
+            0.4398537565616798,
+            0.04732735491396909,
+            0.5625,
+            1.0
+          ],
+          "shape_id": 833,
+          "placeholder": false
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "column",
+          "cols": 1,
+          "rows": 5,
+          "step": [
+            0.0,
+            0.10519480898221056
+          ],
+          "unit_size": [
+            0.1592809219160105,
+            0.06924526100904055
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0850372375328084,
+                0.19755336832895887,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                813
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.0850372375328084,
+                0.30144954797317003,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                817
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.0850372375328084,
+                0.40707728200641585,
+                0.1592809219160105,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                821
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.0850372375328084,
+                0.5127048702245552,
+                0.1592809219160105,
+                0.06924526100904049
+              ],
+              "shape_ids": [
+                825
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.0850372375328084,
+                0.6183326042578011,
+                0.1592809219160105,
+                0.06924526100904049
+              ],
+              "shape_ids": [
+                829
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s813",
+              "role": "heading",
+              "shape_id": 813,
+              "box": [
+                0.0,
+                0.0,
+                0.1592809219160105,
+                0.06924526100904053
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 18,
+              "max_lines": 1,
+              "sample_text": "Текст"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 8,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "column",
+          "cols": 1,
+          "rows": 5,
+          "step": [
+            0.0,
+            0.10519480898221056
+          ],
+          "unit_size": [
+            0.03909432414698163,
+            0.06924526100904055
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03509391404199475,
+                0.19755322251385243,
+                0.03909432414698163,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                815,
+                816
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.03509391404199475,
+                0.3014494021580636,
+                0.03909432414698163,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                819,
+                820
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.03509391404199475,
+                0.4070771361913094,
+                0.03909432414698163,
+                0.06924526100904055
+              ],
+              "shape_ids": [
+                823,
+                824
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.03509391404199475,
+                0.5127047244094488,
+                0.03909432414698163,
+                0.06924526100904049
+              ],
+              "shape_ids": [
+                827,
+                828
+              ]
+            },
+            {
+              "index": 4,
+              "box": [
+                0.03509391404199475,
+                0.6183324584426947,
+                0.03909432414698163,
+                0.06924526100904049
+              ],
+              "shape_ids": [
+                831,
+                832
+              ]
+            }
+          ],
+          "unit_slots": [],
+          "unit_areas": [
+            {
+              "id": "a816",
+              "kind": "icon",
+              "box": [
+                0.01068889435695538,
+                0.018874599008457282,
+                0.017716535433070866,
+                0.031496062992125984
+              ],
+              "shape_id": 816,
+              "placeholder": false
+            }
+          ],
+          "min_units": 1,
+          "max_units": 8,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p025.png"
+    },
+    {
+      "id": "p026",
+      "source_slide": 26,
+      "layout_name": "8_Заголовок",
+      "kind": "timeline",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать хронологию событий или этапов проекта, где для каждого пункта указана дата и краткое описание.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s839",
+          "role": "title",
+          "shape_id": 839,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Таймлайн"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23705358705161853,
+            0.0
+          ],
+          "unit_size": [
+            0.21696423884514437,
+            0.08649693788276469
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0352077591863517,
+                0.5322354913969087,
+                0.21696423884514432,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                840
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.27226131889763777,
+                0.5322354913969087,
+                0.21696423884514432,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                841
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5093149606299212,
+                0.5322354913969087,
+                0.21696423884514437,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                842
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7463685203412074,
+                0.5322354913969087,
+                0.21696423884514437,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                843
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s840",
+              "role": "heading",
+              "shape_id": 840,
+              "box": [
+                0.0,
+                0.0,
+                0.21696423884514435,
+                0.08649693788276465
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 20,
+              "max_lines": 1,
+              "sample_text": "Описание"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23350678040244968,
+            0.0
+          ],
+          "unit_size": [
+            0.14596095800524933,
+            0.0801427529892097
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.07675935039370078,
+                0.3792206182560513,
+                0.14596095800524933,
+                0.0801427529892097
+              ],
+              "shape_ids": [
+                849
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.30765616797900264,
+                0.3792206182560513,
+                0.14596095800524933,
+                0.0801427529892097
+              ],
+              "shape_ids": [
+                850
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5448166010498687,
+                0.3792206182560513,
+                0.14596095800524933,
+                0.0801427529892097
+              ],
+              "shape_ids": [
+                851
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7772796916010498,
+                0.3792206182560513,
+                0.14596095800524933,
+                0.0801427529892097
+              ],
+              "shape_ids": [
+                852
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s849",
+              "role": "heading",
+              "shape_id": 849,
+              "box": [
+                0.0,
+                0.0,
+                0.14596095800524933,
+                0.08014275298920968
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 18.0,
+                "bold": false,
+                "italic": false,
+                "color": "000000",
+                "align": "center"
+              },
+              "max_chars": 28,
+              "max_lines": 2,
+              "sample_text": "Дата"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [
+        844,
+        845,
+        846,
+        847,
+        848
+      ],
+      "decor": [
+        {
+          "shape_id": 844,
+          "box": [
+            0.0,
+            0.49601501895596384,
+            1.0,
+            0.0
+          ],
+          "kind": "line"
+        },
+        {
+          "shape_id": 845,
+          "box": [
+            0.13763984580052493,
+            0.4869687955672208,
+            0.012099983595800525,
+            0.021511081948089823
+          ],
+          "kind": "shape"
+        },
+        {
+          "shape_id": 846,
+          "box": [
+            0.37458669619422574,
+            0.4869687955672208,
+            0.012099983595800525,
+            0.021511081948089823
+          ],
+          "kind": "shape"
+        },
+        {
+          "shape_id": 847,
+          "box": [
+            0.612197342519685,
+            0.4869687955672208,
+            0.012099983595800525,
+            0.021511081948089823
+          ],
+          "kind": "shape"
+        },
+        {
+          "shape_id": 848,
+          "box": [
+            0.8504717027559056,
+            0.4869687955672208,
+            0.012099983595800525,
+            0.021511081948089823
+          ],
+          "kind": "shape"
+        }
+      ],
+      "preview": "previews/p026.png"
+    },
+    {
+      "id": "p027",
+      "source_slide": 27,
+      "layout_name": "8_Заголовок",
+      "kind": "steps",
+      "kind_confidence": 0.8,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Показать последовательность событий или этапов развития проекта в хронологическом порядке.",
+      "needs_images": false,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s858",
+          "role": "title",
+          "shape_id": 858,
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 64,
+          "max_lines": 2,
+          "sample_text": "Таймлайн"
+        }
+      ],
+      "areas": [],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23701301399825023,
+            0.0
+          ],
+          "unit_size": [
+            0.14498695866141736,
+            0.13072295129775446
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.03520784120734908,
+                0.40751370662000586,
+                0.14498695866141734,
+                0.13072295129775446
+              ],
+              "shape_ids": [
+                863
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.2718961614173228,
+                0.40751370662000586,
+                0.14498695866141736,
+                0.13072295129775446
+              ],
+              "shape_ids": [
+                864
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5085844816272966,
+                0.40751370662000586,
+                0.1449869586614173,
+                0.13072295129775446
+              ],
+              "shape_ids": [
+                865
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7462468832020998,
+                0.40751370662000586,
+                0.1449869586614173,
+                0.13072295129775446
+              ],
+              "shape_ids": [
+                866
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s863",
+              "role": "number",
+              "shape_id": 863,
+              "box": [
+                0.0,
+                0.0,
+                0.14498695866141734,
+                0.13072295129775444
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 66.0,
+                "bold": true,
+                "italic": false,
+                "color": "0077FF",
+                "align": "left"
+              },
+              "max_chars": 4,
+              "max_lines": 1,
+              "sample_text": "01"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g2"
+          ]
+        },
+        {
+          "id": "g2",
+          "direction": "row",
+          "cols": 4,
+          "rows": 1,
+          "step": [
+            0.23705358705161853,
+            0.0
+          ],
+          "unit_size": [
+            0.21696423884514437,
+            0.08649693788276469
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.0352077591863517,
+                0.5685991542723826,
+                0.21696423884514432,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                859
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.27226131889763777,
+                0.5685991542723826,
+                0.21696423884514432,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                860
+              ]
+            },
+            {
+              "index": 2,
+              "box": [
+                0.5093149606299212,
+                0.5685991542723826,
+                0.21696423884514437,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                861
+              ]
+            },
+            {
+              "index": 3,
+              "box": [
+                0.7463685203412074,
+                0.5685991542723826,
+                0.21696423884514437,
+                0.08649693788276469
+              ],
+              "shape_ids": [
+                862
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s859",
+              "role": "heading",
+              "shape_id": 859,
+              "box": [
+                0.0,
+                0.0,
+                0.21696423884514435,
+                0.08649693788276465
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 20.0,
+                "bold": false,
+                "italic": false,
+                "color": "FFFFFF",
+                "align": "left"
+              },
+              "max_chars": 20,
+              "max_lines": 1,
+              "sample_text": "Описание"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 4,
+          "linked_group_ids": [
+            "g1"
+          ]
+        }
+      ],
+      "decor_shape_ids": [
+        867,
+        868,
+        869
+      ],
+      "decor": [
+        {
+          "shape_id": 867,
+          "box": [
+            0.1801947998687664,
+            0.47287518226888303,
+            0.07197342519685039,
+            0.0
+          ],
+          "kind": "line"
+        },
+        {
+          "shape_id": 868,
+          "box": [
+            0.4168831200787402,
+            0.47287518226888303,
+            0.07197719816272966,
+            0.0
+          ],
+          "kind": "line"
+        },
+        {
+          "shape_id": 869,
+          "box": [
+            0.6555195209973753,
+            0.47287518226888303,
+            0.07197719816272966,
+            0.0
+          ],
+          "kind": "line"
+        }
+      ],
+      "preview": "previews/p027.png"
+    },
+    {
+      "id": "p028",
+      "source_slide": 28,
+      "layout_name": "16_Титульный слайд",
+      "kind": "section",
+      "kind_confidence": 0.5,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Сигнал для аудитории, что начинается блок ответов на вопросы.",
+      "needs_images": false,
+      "primary_group_id": null,
+      "slots": [
+        {
+          "id": "s874",
+          "role": "title",
+          "shape_id": 874,
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.39747424540682413,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 144.0,
+            "bold": true,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 8,
+          "max_lines": 1,
+          "sample_text": "Q&A"
+        }
+      ],
+      "areas": [],
+      "groups": [],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p028.png"
+    },
+    {
+      "id": "p029",
+      "source_slide": 29,
+      "layout_name": "12_Титульный слайд",
+      "kind": "thanks",
+      "kind_confidence": 0.6,
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "purpose": "Завершить выступление, поблагодарить аудиторию и предоставить контакты спикеров для связи.",
+      "needs_images": true,
+      "primary_group_id": "g1",
+      "slots": [
+        {
+          "id": "s885",
+          "role": "body",
+          "shape_id": 885,
+          "box": [
+            0.7613468667979003,
+            0.09236132983377078,
+            0.20518963254593175,
+            0.36478156897054537
+          ],
+          "style": {
+            "family": "Play",
+            "size_pt": 24.0,
+            "bold": true,
+            "italic": false,
+            "color": "000000",
+            "align": "center"
+          },
+          "max_chars": 90,
+          "max_lines": 6,
+          "sample_text": "QR-code"
+        },
+        {
+          "id": "s880",
+          "role": "title",
+          "shape_id": 880,
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "style": {
+            "family": null,
+            "size_pt": 54.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "max_chars": 42,
+          "max_lines": 2,
+          "sample_text": "Спасибо \u000bза внимание"
+        }
+      ],
+      "areas": [
+        {
+          "id": "a881",
+          "kind": "image",
+          "box": [
+            0.03520784120734908,
+            0.6660698454359871,
+            0.06842864173228347,
+            0.12165091863517061
+          ],
+          "shape_id": 881,
+          "placeholder": true
+        },
+        {
+          "id": "a883",
+          "kind": "image",
+          "box": [
+            0.2869936023622047,
+            0.6660698454359871,
+            0.06842864173228347,
+            0.12165091863517061
+          ],
+          "shape_id": 883,
+          "placeholder": true
+        }
+      ],
+      "groups": [
+        {
+          "id": "g1",
+          "direction": "row",
+          "cols": 2,
+          "rows": 1,
+          "step": [
+            0.2517857611548556,
+            0.0
+          ],
+          "unit_size": [
+            0.18158169291338583,
+            0.12165106445027707
+          ],
+          "units": [
+            {
+              "index": 0,
+              "box": [
+                0.12387294947506562,
+                0.6660696996208807,
+                0.18158169291338583,
+                0.12165106445027707
+              ],
+              "shape_ids": [
+                882
+              ]
+            },
+            {
+              "index": 1,
+              "box": [
+                0.37565871062992123,
+                0.6660696996208807,
+                0.18158169291338583,
+                0.12165106445027707
+              ],
+              "shape_ids": [
+                884
+              ]
+            }
+          ],
+          "unit_slots": [
+            {
+              "id": "s882",
+              "role": "heading",
+              "shape_id": 882,
+              "box": [
+                0.0,
+                0.0,
+                0.18158169291338583,
+                0.12165106445027705
+              ],
+              "style": {
+                "family": "Play",
+                "size_pt": 16.0,
+                "bold": false,
+                "italic": false,
+                "color": "AFB8C2",
+                "align": "left"
+              },
+              "max_chars": 60,
+              "max_lines": 3,
+              "sample_text": "Имя Спикера,\u000bдолжность"
+            }
+          ],
+          "unit_areas": [],
+          "min_units": 1,
+          "max_units": 3,
+          "linked_group_ids": []
+        }
+      ],
+      "decor_shape_ids": [],
+      "decor": [],
+      "preview": "previews/p029.png"
+    }
+  ],
+  "pattern_overrides": {},
+  "removal_confirmed": false,
+  "describe": {
+    "status": "done",
+    "done": 29,
+    "total": 29,
+    "error": ""
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "run_id": "c0e0752bafd842b8b41d931d0a83234f",
+  "started_at": "2026-09-24T22:04:17.295573+00:00",
+  "model": "qwen/qwen3.8-27b",
+  "design_system_id": "shablon-prezentacii-vk-education",
+  "skills": [
+    {
+      "name": "plan-deck",
+      "version": "3",
+      "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+    },
+    {
+      "name": "fill-slots",
+      "version": "2",
+      "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+    }
+  ],
+  "timings_ms": {
+    "plan": 37908,
+    "a-fill-slots": 10765,
+    "a-audit": 1,
+    "a-export-pptx": 734,
+    "a-export-html": 7,
+    "a-convert": 2487,
+    "a-render-slides": 3400,
+    "a-audit-contextual": 62226,
+    "b-fill-slots": 11183,
+    "b-audit": 1,
+    "b-export-pptx": 730,
+    "b-export-html": 5,
+    "b-convert": 2537,
+    "b-render-slides": 3501
+  },
+  "axis": "плотнее: соседние слайды с одной мыслью сведены в один, карточек на слайде больше"
+}

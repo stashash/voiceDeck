@@ -16,3 +16,5 @@ designer/out/
 # Примеры колод: pptx и html тяжёлые, пересобираются examples/build.py
 examples/**/deck.pptx
 examples/**/deck.html
+# Готовые презентации для репозитория лежат в demo/ (examples/export_demo.py), здесь только листы слайдов
+examples/**/deck.pdf

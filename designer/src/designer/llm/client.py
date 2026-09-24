@@ -12,6 +12,12 @@ import httpx
 DEFAULT_BASE_URL = os.environ.get("DESIGNER_LLM_URL", "http://127.0.0.1:1234/v1")
 DEFAULT_MODEL = os.environ.get("DESIGNER_LLM_MODEL", "qwen/qwen3.8-27b")
 
+
+def auth_headers() -> dict[str, str]:
+    """Ключ OpenAI-совместимого API (DESIGNER_LLM_API_KEY): LM Studio он не нужен, внешнему провайдеру нужен."""
+    key = os.environ.get("DESIGNER_LLM_API_KEY", "").strip()
+    return {"Authorization": f"Bearer {key}"} if key else {}
+
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)
 _MAX_ATTEMPTS = 3  # первая попытка плюс два повтора
 _LOADING = re.compile(r"\b(?:un)?load(?:ed|ing)?\b|aborted|cancel+ed", re.I)
@@ -40,7 +46,7 @@ class LlmClient:
         self.model = model
         self.timeout_s = timeout_s
         self.load_wait_s = load_wait_s
-        self._client = httpx.Client(timeout=timeout_s, transport=transport)
+        self._client = httpx.Client(timeout=timeout_s, transport=transport, headers=auth_headers())
         self.call_durations_ms: list[int] = []
 
     @classmethod

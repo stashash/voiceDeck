@@ -46,12 +46,15 @@ services:
     environment:
       DESIGNER_LLM_URL: ${DESIGNER_LLM_URL:-http://host.docker.internal:1234/v1}
       DESIGNER_LLM_MODEL: ${DESIGNER_LLM_MODEL:-qwen/qwen3.8-27b}
+      DESIGNER_LLM_API_KEY: ${DESIGNER_LLM_API_KEY:-}
       DESIGNER_LLM_PARALLEL: ${DESIGNER_LLM_PARALLEL:-4}
       DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
       DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}
       DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}}
       DESIGNER_AGENT_BRIDGE_URL: ${DESIGNER_AGENT_BRIDGE_URL:-http://host.docker.internal:8095}
-    volumes: ["designer-data:/app/data"]
+      # Готовые дизайн-системы и презентации: копируются в хранилище при первом старте
+      DESIGNER_DEMO_DIR: /app/demo
+    volumes: ["designer-data:/app/data", "./demo:/app/demo:ro"]
     extra_hosts: ["host.docker.internal:host-gateway"]
 volumes:
   postgres-data:

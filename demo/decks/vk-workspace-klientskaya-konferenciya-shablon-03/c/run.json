@@ -1,0 +1,41 @@
+{
+  "run_id": "6d136ab9c0d84a519f7004ae3c6c549e",
+  "started_at": "2026-09-24T21:57:22.692184+00:00",
+  "model": "qwen/qwen3.8-27b",
+  "design_system_id": "vk-workspace-klientskaya-konferenciya-shablon-03",
+  "skills": [
+    {
+      "name": "plan-deck",
+      "version": "3",
+      "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+    },
+    {
+      "name": "fill-slots",
+      "version": "2",
+      "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+    }
+  ],
+  "timings_ms": {
+    "plan": 75178,
+    "a-fill-slots": 16057,
+    "a-audit": 1,
+    "a-export-pptx": 502,
+    "a-export-html": 21,
+    "a-convert": 2379,
+    "a-render-slides": 6397,
+    "a-audit-contextual": 73785,
+    "b-fill-slots": 16506,
+    "b-audit": 1,
+    "b-export-pptx": 475,
+    "b-export-html": 18,
+    "b-convert": 2404,
+    "b-render-slides": 6453,
+    "c-fill-slots": 17976,
+    "c-audit": 2,
+    "c-export-pptx": 467,
+    "c-export-html": 11,
+    "c-convert": 2997,
+    "c-render-slides": 10066
+  },
+  "axis": "данные вперёд: числа становятся крупной цифрой, диаграммой или таблицей раньше текста"
+}

@@ -42,7 +42,7 @@ from designer.api.schemas import (
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
-from designer.llm.client import LlmClient, ModelLoading
+from designer.llm.client import LlmClient, ModelLoading, auth_headers
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
 
@@ -77,6 +77,8 @@ def _not_found(ds_id_error: bool = False):
 
 @app.on_event("startup")
 def _upgrade_legacy_design_systems() -> None:
+    # Готовые данные из репозитория кладутся до приёма запросов: список систем не видит их наполовину.
+    store.seed_demo()
     # Превью старых пакетов строятся движком конвертации: в фоне, чтобы сервис поднялся сразу.
     import threading
     threading.Thread(target=pipeline.upgrade_legacy_packages, daemon=True).start()
@@ -480,7 +482,7 @@ def health(client: LlmClient = Depends(get_llm_client)) -> HealthResponse:
 
 def _model_available(base_url: str) -> bool:
     try:
-        with httpx.Client(timeout=3.0) as probe:
+        with httpx.Client(timeout=3.0, headers=auth_headers()) as probe:
             response = probe.get(f"{base_url}/models")
         return response.status_code < 500
     except httpx.HTTPError:

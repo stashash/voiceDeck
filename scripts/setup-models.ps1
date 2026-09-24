@@ -31,4 +31,4 @@ $config = Join-Path $taskRoot 'models/config.json'
 if (-not (Test-Path -LiteralPath $config)) { Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/live-models.json') -Destination $config }
 $envFile = Join-Path $taskRoot '.env'
 if (-not (Test-Path -LiteralPath $envFile)) { Copy-Item -LiteralPath (Join-Path $taskRoot '.env.example') -Destination $envFile }
-Write-Host 'Models verified, .env is ready. Next: pwsh scripts/start-models.ps1, then docker compose up --build -d (docs/wiki/zapusk.md).'
+Write-Host 'Speech recognition models verified.'

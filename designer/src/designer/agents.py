@@ -11,7 +11,7 @@ from pathlib import Path
 import httpx
 
 from designer.llm.bridge import BRIDGE_URL_ENV, DEFAULT_BRIDGE_URL, BridgeClient
-from designer.llm.client import LlmClient, LlmResponseError, ModelLoading
+from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
 from designer.settings import load_settings
 from designer.store import data_dir
 
@@ -42,7 +42,7 @@ def _bridge_error_message(response: httpx.Response) -> str:
 
 def _local_models(llm_url: str) -> list[str]:
     try:
-        response = httpx.Client(timeout=5.0).get(f"{llm_url.rstrip('/')}/models")
+        response = httpx.Client(timeout=5.0, headers=auth_headers()).get(f"{llm_url.rstrip('/')}/models")
         response.raise_for_status()
     except httpx.HTTPError:
         return []

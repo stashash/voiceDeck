@@ -1,0 +1,41 @@
+{
+  "run_id": "8eb8d529706b46db8671529e5ba383d1",
+  "started_at": "2026-09-24T21:51:59.890851+00:00",
+  "model": "qwen/qwen3.8-27b",
+  "design_system_id": "vk-tech-shablon",
+  "skills": [
+    {
+      "name": "plan-deck",
+      "version": "3",
+      "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+    },
+    {
+      "name": "fill-slots",
+      "version": "2",
+      "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+    }
+  ],
+  "timings_ms": {
+    "plan": 35784,
+    "a-fill-slots": 12071,
+    "a-audit": 2,
+    "a-export-pptx": 797,
+    "a-export-html": 22,
+    "a-convert": 3337,
+    "a-render-slides": 10259,
+    "a-audit-contextual": 61424,
+    "b-fill-slots": 13780,
+    "b-audit": 1,
+    "b-export-pptx": 779,
+    "b-export-html": 19,
+    "b-convert": 3239,
+    "b-render-slides": 10263,
+    "c-fill-slots": 14198,
+    "c-audit": 1,
+    "c-export-pptx": 846,
+    "c-export-html": 27,
+    "c-convert": 2937,
+    "c-render-slides": 8126
+  },
+  "axis": "данные вперёд: числа становятся крупной цифрой, диаграммой или таблицей раньше текста"
+}

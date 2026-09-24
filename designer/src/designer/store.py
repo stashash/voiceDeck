@@ -42,6 +42,37 @@ def data_dir() -> Path:
     return Path(os.environ.get(DATA_DIR_ENV, _DEFAULT_DATA_DIR))
 
 
+# ---------- готовые данные ----------
+
+DEMO_DIR_ENV = "DESIGNER_DEMO_DIR"
+_DEMO_MARK = ".demo-seeded"
+
+
+def seed_demo() -> list[str]:
+    """Готовые дизайн-системы и презентации из репозитория (каталог demo/) при первом старте.
+
+    Копирует только то, чего в хранилище нет. Метка в каталоге данных ставится после первого
+    раза: систему или презентацию, которую человек удалил, следующий старт не возвращает.
+    """
+    raw = os.environ.get(DEMO_DIR_ENV, "")
+    source = Path(raw) if raw else None
+    mark = data_dir() / _DEMO_MARK
+    if source is None or not source.is_dir() or mark.is_file():
+        return []
+    copied: list[str] = []
+    for kind, target_root in (("design-systems", design_systems_root()), ("decks", decks_root())):
+        source_root = source / kind
+        if not source_root.is_dir():
+            continue
+        for item in sorted(source_root.iterdir()):
+            if not item.is_dir() or not _ID_RE.match(item.name) or (target_root / item.name).exists():
+                continue
+            shutil.copytree(item, target_root / item.name)
+            copied.append(f"{kind}/{item.name}")
+    mark.write_text("\n".join(copied) + "\n", encoding="utf-8")
+    return copied
+
+
 # ---------- дизайн-системы ----------
 
 def design_systems_root() -> Path:

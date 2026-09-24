@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Перевод ночных отчётов на потоковую загрузку</title>
+<style>
+
+
+:root {
+--color-text: #000000;
+--color-background: #EBF3F9;
+--color-text-muted: #0077FF;
+--color-surface: #FFFFFF;
+--color-accent-alt: #FF3885;
+--color-other: #7CEDF8;
+--color-accent: #0077FF;
+--font-body: 'Play', sans-serif;
+--font-other: 'Arial', sans-serif;
+--font-mono: 'Consolas', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; background: #1a1a1a; }
+#deck { height: 100%; display: flex; align-items: center; justify-content: center; }
+.slide {
+  position: relative;
+  width: min(100vw, 1.777778 * 100vh);
+  aspect-ratio: 1.777778;
+  container-type: inline-size;
+  overflow: hidden;
+  background: var(--color-background, #ffffff);
+  display: none;
+}
+.slide.active { display: block; }
+.el { position: absolute; overflow: hidden; }
+.el.text {
+  white-space: pre-wrap;
+  font-family: var(--font-body, sans-serif);
+  color: var(--color-text, #111111);
+}
+.el.image, .el.icon { object-fit: contain; width: 100%; height: 100%; }
+.el.table { border-collapse: collapse; font-size: 1.6cqw; }
+.el.table th, .el.table td { border: 1px solid var(--color-text-muted, #999999); padding: 0.3em 0.5em; }
+.el.chart svg { width: 100%; height: 100%; }
+.chart-label, .chart-legend, .chart-title, .chart-unit {
+  font-size: 12px;
+  fill: var(--color-text, #111111);
+  font-family: sans-serif;
+}
+@media print {
+  html, body { background: #ffffff; }
+  #deck { display: block; }
+  .slide {
+    display: block !important;
+    width: 100vw;
+    height: 100vh;
+    page-break-after: always;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { size: landscape; margin: 0; }
+}
+
+</style>
+</head>
+<body>
+<main id="deck">
+<section class="slide active" id="slide-1" data-index="0" data-theme="dark" style="background-color:#0077FF;"><div class="el text el-body" style="left:5.4036%;top:68.9414%;width:41.1142%;height:8.0781%;z-index:0;font-size:1.2500cqw;text-align:left;">Предлагается перевести оставшиеся витрины на потоковую архитектуру для ускорения доступности данных.</div><div class="el text el-title" style="left:5.1039%;top:37.8828%;width:61.8063%;height:24.2344%;z-index:1;font-size:3.7500cqw;text-align:left;">Перевод оставшихся витрин на потоковую архитектуру ускорит доступность данных</div></section><section class="slide" id="slide-2" data-index="1" data-theme="light" style="background-color:#FFFFFF;"><div class="el shape" style="left:23.8579%;top:2.9680%;width:52.9110%;height:94.0639%;z-index:0;background:#EBF3F9;"></div><div class="el shape" style="left:34.1146%;top:21.5741%;width:31.9792%;height:56.8519%;z-index:1;background:#FFFFFF;"></div><div class="el text el-title" style="left:35.3413%;top:38.2388%;width:29.3173%;height:23.5224%;z-index:2;font-size:2.0833cqw;text-align:center;">Обсудим текущую ситуацию, результаты пилота и предложения по масштабированию</div><div class="el shape" style="left:36.9904%;top:30.8333%;width:1.4118%;height:2.5099%;z-index:3;background:#FFFFFF;"></div><div class="el shape" style="left:36.9904%;top:66.7593%;width:1.4118%;height:2.5099%;z-index:4;background:#FFFFFF;"></div><div class="el shape" style="left:61.6779%;top:30.8333%;width:1.4118%;height:2.5099%;z-index:5;background:#FFFFFF;"></div><div class="el shape" style="left:61.6779%;top:66.7593%;width:1.4118%;height:2.5099%;z-index:6;background:#FFFFFF;"></div><div class="el text el-heading" style="left:13.3113%;top:24.3624%;width:20.4647%;height:15.4519%;z-index:9;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:right;">Текущее состояние: как сейчас работают ночные отчёты</div><div class="el text el-heading" style="left:66.5365%;top:24.3624%;width:20.4647%;height:15.4519%;z-index:9;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:right;">Результаты пилота: ключевые метрики после перехода двух витрин</div><div class="el text el-heading" style="left:13.3113%;top:63.0661%;width:20.4647%;height:15.4519%;z-index:9;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:right;">План масштабирования: сроки и объемы перевода остальных витрин</div><div class="el text el-heading" style="left:66.5365%;top:63.0661%;width:20.4647%;height:15.4519%;z-index:9;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:right;">Решение руководства: что требуется от директоров направлений</div></section><section class="slide" id="slide-3" data-index="2" data-theme="light" style="background-color:#FFFFFF;"><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:0;font-size:2.0833cqw;text-align:left;">Задержка данных до 11 утра снижает оперативность утренних решений</div><div class="el text el-heading" style="left:5.4036%;top:47.7320%;width:14.1258%;height:17.9883%;z-index:6;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Ночная пакетная загрузка данных</div><div class="el text el-heading" style="left:25.4350%;top:47.7320%;width:14.1258%;height:17.9883%;z-index:6;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Готовность отчёта к 11:00</div><div class="el text el-heading" style="left:45.4663%;top:47.7320%;width:14.1258%;height:17.9883%;z-index:6;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Регулярные инциденты с задержкой</div><div class="el text el-body" style="left:66.5365%;top:47.7320%;width:23.6220%;height:21.3615%;z-index:8;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Отчёт по продажам доступен только к 11 утра, что тормозит утренние совещания.</div></section><section class="slide" id="slide-4" data-index="3" data-theme="light" style="background-color:#FFFFFF;"><div class="el shape" style="left:5.4036%;top:26.1602%;width:50.2813%;height:64.2565%;z-index:0;background:#FFFFFF;"></div><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:1;font-size:3.7500cqw;text-align:left;">Отчёт будет готов на 2.5 часа раньше</div><div class="el text el-body" style="left:66.5365%;top:46.7228%;width:33.4635%;height:11.0155%;z-index:5;font-size:1.6667cqw;text-align:left;">Новое время готовности</div><div class="el text el-number" style="left:8.3847%;top:39.9665%;width:44.4335%;height:35.5435%;z-index:7;font-size:15.2083cqw;font-family:'Play', sans-serif;font-weight:700;color:#0077FF;text-align:left;">8:30</div><div class="el text el-body" style="left:9.3078%;top:76.0164%;width:44.4334%;height:12.4003%;z-index:8;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">После перехода на потоковую загрузку отчёт по продажам будет доступен к 8:30.</div></section><section class="slide" id="slide-5" data-index="4" data-theme="light" style="background-color:#FFFFFF;"><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:0;font-size:2.0833cqw;text-align:left;">Число инцидентов с опозданием снизилось в 4.5 раза</div><div class="el shape" style="left:91.8691%;top:78.1675%;width:1.1063%;height:1.9667%;z-index:9;background:#E1E1E1;"></div><div class="el text el-body" style="left:13.2483%;top:81.7563%;width:4.2919%;height:5.0012%;z-index:10;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:center;">Сбои</div><div class="el chart" style="left:5.1100%;top:21.4866%;width:91.3900%;height:60.2697%;z-index:34;"><svg viewBox="0 0 600 360" class="chart chart-column" preserveAspectRatio="xMidYMid meet" role="img"><text x="580.0" y="16" class="chart-unit" text-anchor="end">шт.</text><rect class="chart-bar" x="89.8" y="20.0" width="157.7" height="290.0" fill="#0077FF"/><rect class="chart-bar" x="354.8" y="245.6" width="157.7" height="64.4" fill="#0077FF"/><text x="182.5" y="326.0" class="chart-label" text-anchor="middle">До пилота</text><text x="447.5" y="326.0" class="chart-label" text-anchor="middle">После пилота</text></svg></div></section><section class="slide" id="slide-6" data-index="5" data-theme="light" style="background-color:#FFFFFF;"><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:0;font-size:2.0833cqw;text-align:left;">Переход двух витрин на потоковую загрузку обеспечил измеримый рост скорости и стабильности работы систем</div><table class="el table" style="left:5.1100%;top:21.4866%;width:91.3900%;height:68.9334%;z-index:2;"><thead><tr><th>Показатель</th><th>Было</th><th>Стало</th></tr></thead><tbody><tr><td>Время готовности отчёта</td><td>11:00</td><td>8:30</td></tr><tr><td>Инциденты с опозданием</td><td>9 в месяц</td><td>2 в месяц</td></tr><tr><td>Затраты на инфраструктуру</td><td>Базовый уровень</td><td>+12 %</td></tr></tbody></table></section><section class="slide" id="slide-7" data-index="6" data-theme="light" style="background-color:#FFFFFF;"><div class="el shape" style="left:5.4036%;top:26.1602%;width:50.2813%;height:64.2565%;z-index:0;background:#FFFFFF;"></div><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:1;font-size:2.0833cqw;text-align:left;">Перевод двух витрин на новую архитектуру занял 6 недель</div><div class="el text el-body" style="left:66.5365%;top:46.7228%;width:33.4635%;height:11.0155%;z-index:5;font-size:1.6667cqw;text-align:left;">Длительность пилота</div><div class="el text el-number" style="left:8.3847%;top:39.9665%;width:44.4335%;height:35.5435%;z-index:7;font-size:7.6042cqw;font-family:'Play', sans-serif;font-weight:700;color:#0077FF;text-align:left;">6 недель</div><div class="el text el-body" style="left:9.3078%;top:76.0164%;width:44.4334%;height:12.4003%;z-index:8;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Время, необходимое для перевода двух витрин на новую архитектуру, составило 6 недель.</div></section><section class="slide" id="slide-8" data-index="7" data-theme="light" style="background-color:#FFFFFF;"><div class="el shape" style="left:5.4036%;top:26.1602%;width:50.2813%;height:64.2565%;z-index:0;background:#FFFFFF;"></div><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:1;font-size:2.0833cqw;text-align:left;">Переход на потоковую загрузку увеличил бюджет на инфраструктуру на 12 %</div><div class="el text el-body" style="left:66.5365%;top:46.7228%;width:33.4635%;height:11.0155%;z-index:5;font-size:1.6667cqw;text-align:left;">Рост затрат на инфраструктуру</div><div class="el text el-number" style="left:8.3847%;top:39.9665%;width:44.4335%;height:35.5435%;z-index:7;font-size:15.2083cqw;font-family:'Play', sans-serif;font-weight:700;color:#0077FF;text-align:left;">12 %</div><div class="el text el-body" style="left:9.3078%;top:76.0164%;width:44.4334%;height:12.4003%;z-index:8;font-size:1.6667cqw;font-family:'Play', sans-serif;color:#000000;text-align:left;">Переход на потоковую загрузку потребовал увеличения бюджета на инфраструктуру на 12 %.</div></section><section class="slide" id="slide-9" data-index="8" data-theme="light" style="background-color:#FFFFFF;"><div class="el text el-title" style="left:5.5556%;top:10.0926%;width:89.0408%;height:9.3940%;z-index:1;font-size:2.0833cqw;text-align:left;">Поэтапное масштабирование перевода 14 витрин завершится до конца текущего квартала</div><div class="el text el-number" style="left:5.4619%;top:46.0465%;width:7.1319%;height:12.6789%;z-index:5;font-size:3.7500cqw;font-family:'Play', sans-serif;color:#000000;text-align:center;">1</div><div class="el text el-number" style="left:28.7801%;top:46.0465%;width:7.1319%;height:12.6789%;z-index:5;font-size:3.7500cqw;font-family:'Play', sans-serif;color:#000000;text-align:center;">2</div><div class="el text el-number" style="left:52.0983%;top:46.0465%;width:7.1319%;height:12.6789%;z-index:5;font-size:3.7500cqw;font-family:'Play', sans-serif;color:#000000;text-align:center;">3</div><div class="el text el-number" style="left:75.4164%;top:46.0465%;width:7.1319%;height:12.6789%;z-index:5;font-size:3.7500cqw;font-family:'Play', sans-serif;color:#000000;text-align:center;">4</div><div class="el text el-heading" style="left:5.1450%;top:61.9718%;width:20.9155%;height:8.6969%;z-index:6;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:left;">Аудит готовности 14 витрин</div><div class="el text el-heading" style="left:28.4632%;top:61.9718%;width:20.9155%;height:8.6969%;z-index:6;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:left;">Перенос групп на потоковую загрузку</div><div class="el text el-heading" style="left:51.7814%;top:61.9718%;width:20.9155%;height:8.6969%;z-index:6;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:left;">Контроль метрик стабильности и сроков</div><div class="el text el-heading" style="left:75.0995%;top:61.9718%;width:20.9155%;height:8.6969%;z-index:6;font-size:1.6667cqw;font-family:'Arial', sans-serif;color:#000000;text-align:left;">Финализация перевода всех витрин</div></section><section class="slide" id="slide-10" data-index="9" data-theme="light" style="background-color:#FFFFFF;"><div class="el text el-heading" style="left:27.5521%;top:8.4485%;width:61.6870%;height:66.3341%;z-index:0;font-size:4.1667cqw;color:#000000;text-align:left;">Для начала масштабирования требуется одобрение перевода остальных 14 витрин до конца квартала</div><div class="el text el-heading" style="left:27.5521%;top:83.6808%;width:67.2615%;height:6.7359%;z-index:1;font-size:2.0833cqw;text-align:left;">Для начала масштабирования требуется одобрение перевода остальных 14 витрин до конца квартала.</div></section><section class="slide" id="slide-11" data-index="10" data-theme="light" style="background-color:#EBF3F9;"><div class="el text el-body" style="left:5.4036%;top:70.9662%;width:42.0809%;height:8.0781%;z-index:0;font-size:1.4583cqw;text-align:left;">Просим директоров направлений поддержать инициативу и утвердить план масштабирования.</div><div class="el text el-title" style="left:5.1038%;top:42.6059%;width:42.3807%;height:24.2344%;z-index:1;font-size:2.0833cqw;text-align:left;">Директорам направлений необходимо поддержать инициативу и утвердить план масштабирования для одобрения перевода 14 витрин до конца квартала</div></section>
+</main>
+<script>
+(function () {
+  var slides = document.querySelectorAll('.slide');
+  var total = slides.length;
+  function indexFromHash() {
+    var n = parseInt((location.hash || '').replace('#', ''), 10);
+    if (isNaN(n) || n < 1 || n > total) { return 0; }
+    return n - 1;
+  }
+  function show(i) {
+    i = Math.max(0, Math.min(total - 1, i));
+    for (var k = 0; k < total; k++) {
+      slides[k].classList.toggle('active', k === i);
+    }
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  document.addEventListener('keydown', function (e) {
+    var i = indexFromHash();
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      show(i + 1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      show(i - 1);
+    } else if (e.key === 'f' || e.key === 'F') {
+      var deck = document.getElementById('deck');
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (deck.requestFullscreen) {
+        deck.requestFullscreen();
+      }
+    }
+  });
+  window.addEventListener('hashchange', function () { show(indexFromHash()); });
+  show(indexFromHash());
+})();
+</script>
+</body>
+</html>
