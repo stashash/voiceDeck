@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Square, AlertTriangle, RotateCw, Settings, Boxes } from 'lucide-react';
 import {
-  DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getDeckState, watchDeckEvents,
+  DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getAgentAssignments, getDeckState, getRunManifest, watchDeckEvents,
 } from '../designer/api';
 import { STEP_LABEL, StepView, buildSteps } from '../designer/generation';
+import { modelDisplayName } from '../designer/agentName';
 
 const VARIANTS = ['a', 'b', 'c'];
 
@@ -13,7 +14,7 @@ function seconds(ms: number | null): string {
   return s < 1 ? '<1 с' : `${Math.round(s)} с`;
 }
 
-function StepRow({ step }: { step: StepView }) {
+function StepRow({ step, planTitles }: { step: StepView; planTitles?: string[] }) {
   const title = step.id === 'plan' && step.total ? `План из ${step.total} слайдов`
     : step.id === 'layout' && step.total !== undefined ? `Вёрстка: готово ${step.doneCount ?? 0} из ${step.total}`
     : STEP_LABEL[step.id];
@@ -31,6 +32,9 @@ function StepRow({ step }: { step: StepView }) {
         aria-valuemin={0} aria-valuemax={step.total} aria-valuenow={step.doneCount ?? 0} aria-label="Готово слайдов">
         <div className="gen-progress-bar" style={{ width: `${((step.doneCount ?? 0) / step.total) * 100}%` }}/>
       </div> : null}
+      {step.id === 'plan' && planTitles?.length ? <ol className="gen-plan-list">
+        {planTitles.map((title, i) => <li key={i}>{i + 1}. {title}</li>)}
+      </ol> : null}
     </div>
   </li>;
 }
@@ -41,6 +45,12 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
   const [variant, setVariant] = useState('a');
   const [stopped, setStopped] = useState(false);
   const [error, setError] = useState('');
+  // Кто генерирует: модель из run.json; пока его нет (идёт первый вариант), назначение «Презентации».
+  const [agentName, setAgentName] = useState('');
+  useEffect(() => {
+    getRunManifest(deckId).then(run => setAgentName(modelDisplayName(run.model))).catch(() =>
+      getAgentAssignments().then(a => setAgentName(modelDisplayName(a.deck))).catch(() => setAgentName('')));
+  }, [deckId, state?.variants.a?.status]);
 
   useEffect(() => {
     setState(null); setEvents([]); setStopped(false); setError('');
@@ -78,9 +88,9 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
       <aside className="gen-aside" aria-label="Ход работы">
         <div>
           <span className="gen-request-label">Запрос</span>
-          <p className="gen-request-text">{plan?.purpose || state?.plan?.purpose || ''}</p>
+          <p className="gen-request-text">{state?.brief || plan?.purpose || ''}</p>
         </div>
-        <div className="gen-agent"><Boxes size={16} strokeWidth={1.5}/>Агент генерации</div>
+        {agentName && <div className="gen-agent"><Boxes size={16} strokeWidth={1.5}/>{agentName}</div>}
         <div className="gen-sep"/>
         {failure ? <div className="gen-error-box" role="alert">
           <span className="gen-step-title strong" style={{ display: 'block', marginBottom: 4 }}>План не составлен</span>
@@ -92,10 +102,7 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
             <a className="button" href="#/settings"><Settings size={18} strokeWidth={1.5}/>Агенты и модели</a>
           </div>
         </div> : <ol className="gen-steps" aria-label="Ход работы">
-          {steps.map(s => <StepRow key={s.id} step={s}/>)}
-          {plan?.slides.length ? <ol className="gen-plan-list">
-            {plan.slides.map((s, i) => <li key={s.id}>{i + 1}. {s.title}</li>)}
-          </ol> : null}
+          {steps.map(s => <StepRow key={s.id} step={s} planTitles={plan?.slides.map(x => x.title)}/>)}
         </ol>}
       </aside>
       <div className="gen-main">

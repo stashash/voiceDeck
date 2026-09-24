@@ -33,3 +33,12 @@ export function agentDisplayName(a: Pick<AgentInfo, 'kind' | 'name' | 'model' | 
 export function agentOptionSub(a: Pick<AgentInfo, 'kind' | 'detail' | 'found'>): string {
   return a.kind === 'local' ? `LM Studio${a.found ? ', загружена' : ''}` : a.detail;
 }
+
+const CLI_NAMES: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', 'cursor-agent': 'Cursor Agent', opencode: 'OpenCode' };
+
+/** Имя по id агента или модели из run.json: «cli:cursor-agent» → «Cursor Agent», «qwen/qwen3.8-27b» → «Qwen3.8 27B в LM Studio». */
+export function modelDisplayName(id: string): string {
+  const raw = id.replace(/^local:/, '');
+  if (raw.startsWith('cli:')) return CLI_NAMES[raw.slice(4)] ?? raw.slice(4);
+  return `${humanizeModelId(raw)} в LM Studio`;
+}

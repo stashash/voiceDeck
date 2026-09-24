@@ -232,7 +232,7 @@ def get_deck(deck_id: str) -> DeckStateResponse:
     return DeckStateResponse(
         status=primary.status, design_system_id=primary.design_system_id, plan=primary.plan,
         specs=primary.specs, scenes=primary.scenes, findings=primary.findings, error=primary.error,
-        slide_images=primary.slide_images, variants=variant_states,
+        slide_images=primary.slide_images, brief=primary.brief, variants=variant_states,
     )
 
 

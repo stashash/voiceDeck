@@ -326,3 +326,8 @@ p{margin:0}
 .assignment-row label{font-size:14px}
 .assignment-row select{width:320px;height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:0 10px;font-family:var(--font);font-size:14px}
 .assignment-row span:first-child{color:var(--text-muted)}
+
+.live-select{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:6px;border:1px solid var(--border);color:var(--text)}
+.live-select select{background:transparent;border:0;color:var(--text);font-family:var(--font);font-size:13px;outline:none;cursor:pointer}
+.live-select select option{background:var(--surface);color:var(--text)}
+.visually-hidden{position:absolute;left:-9999px}

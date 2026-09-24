@@ -32,6 +32,7 @@ class DeckVariantState(BaseModel):
     error: str | None = None
     slide_images: list[str] = Field(default_factory=list,
                                      description="адреса картинок слайдов по порядку; пусто, если движка нет")
+    brief: str = Field(default="", description="бриф автора, с которого собрана колода")
 
 
 class DeckStateResponse(BaseModel):
@@ -44,6 +45,7 @@ class DeckStateResponse(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     error: str | None = None
     slide_images: list[str] = Field(default_factory=list)
+    brief: str = ""
     variants: dict[str, DeckVariantState] = Field(default_factory=dict)
 
 

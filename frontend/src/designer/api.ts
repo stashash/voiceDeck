@@ -61,7 +61,7 @@ export type DeckVariantState = {
   error: string | null;
   slide_images?: string[];
 };
-export type DeckStateResponse = DeckVariantState & { variants: Record<string, DeckVariantState> };
+export type DeckStateResponse = DeckVariantState & { brief?: string; variants: Record<string, DeckVariantState> };
 
 export type SkillRef = { name: string; version: string; sha256: string };
 export type RunManifest = {

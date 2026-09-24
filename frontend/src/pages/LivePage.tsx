@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Mic, Square, MonitorPlay, ArrowRight, Boxes, Undo2 } from 'lucide-react';
 import type { Slide } from '../store';
 import { useSession } from '../stage/useSession';
-import { AgentInfo, DesignSystemListItem, getAgentAssignments, listAgents, listDesignSystemItems } from '../designer/api';
+import { AgentAssignments, AgentInfo, DesignSystemListItem, getAgentAssignments, listAgents, listDesignSystemItems, setAgentAssignments } from '../designer/api';
 import { agentDisplayName } from '../designer/agentName';
 import '../stage/stage.css';
 
@@ -17,16 +17,16 @@ export default function LivePage() {
   const s = useSession();
   const [draft, setDraft] = useState('');
   const [designSystems, setDesignSystems] = useState<DesignSystemListItem[]>([]);
-  const [agentName, setAgentName] = useState('');
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [assign, setAssign] = useState<AgentAssignments | null>(null);
 
   useEffect(() => {
     listDesignSystemItems().then(items => {
       setDesignSystems(items);
       if (items.length && !s.designSystemId) s.selectDesignSystem(items[0].id);
     }).catch(() => {});
-    Promise.all([listAgents(), getAgentAssignments()]).then(([agents, a]) => {
-      const found = agents.find((x: AgentInfo) => x.id === a.live);
-      if (found) setAgentName(agentDisplayName(found));
+    Promise.all([listAgents(), getAgentAssignments()]).then(([list, a]) => {
+      setAgents(list.filter(x => x.found)); setAssign(a);
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -47,16 +47,31 @@ export default function LivePage() {
     window.open(`${location.pathname}${location.search}#/audience/${s.sessionId}`, '_blank');
   }
 
-  const dsName = designSystems.find(d => d.id === s.designSystemId)?.name ?? s.designSystemId;
+  function chooseLiveAgent(id: string) {
+    if (!assign) return;
+    const next = { ...assign, live: id };
+    setAssign(next);
+    setAgentAssignments(next).catch(() => {});
+  }
   const started = !!s.sessionId;
   const sentences = Object.values(s.state.sentences).sort((a, b) => a.t0 - b.t0);
   const duration = sentences.at(-1)?.t1 ?? 0;
 
   return <div className="live-shell">
     <div className="live-topbar">
-      <div className="live-connection"><span className={s.connection === 'Подключено' ? 'on' : ''}/>{s.connection}</div>
-      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{dsName || 'Дизайн-система не выбрана'}</span>
-      <span style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', gap: 6, alignItems: 'center' }}><Boxes size={16} strokeWidth={1.5}/>{agentName || 'Агент не назначен'}</span>
+      <label className="live-select">
+        <span className="visually-hidden">Дизайн-система</span>
+        <select value={s.designSystemId ?? ''} disabled={started} onChange={e => s.selectDesignSystem(e.target.value)}>
+          {designSystems.map(d => <option key={d.id} value={d.id}>{d.name || d.source_file}</option>)}
+        </select>
+      </label>
+      <label className="live-select">
+        <Boxes size={16} strokeWidth={1.5} aria-hidden="true"/>
+        <span className="visually-hidden">Агент</span>
+        <select value={assign?.live ?? ''} onChange={e => chooseLiveAgent(e.target.value)}>
+          {agents.map(a => <option key={a.id} value={a.id}>{agentDisplayName(a)}</option>)}
+        </select>
+      </label>
       {started && s.recording && <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--text)' }}>Запись {time(duration)}</span>}
       <button type="button" className="button" style={{ marginLeft: started ? 0 : 'auto' }} title="Открыть окно зала" disabled={!s.sessionId} onClick={openHall}>
         <MonitorPlay size={16} strokeWidth={1.5}/>Окно для зала

@@ -4,6 +4,7 @@ import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
   getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction,
 } from '../designer/api';
+import { kindLabel } from '../designer/labels';
 
 const ASK_CHIPS = ['Короче', 'Сделай диаграммой', 'Вынести вывод в заголовок'];
 const FORMATS: { ext: string; label: string }[] = [
@@ -160,10 +161,10 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
           <div className="panel-section-head"><h3>Образец</h3></div>
           <div className="pattern-grid">
             {patterns.map(p => <button key={p.pattern_id} type="button" className={`pattern-item ${p.current ? 'active' : ''}`}
-              aria-pressed={p.current} aria-label={`Образец: ${p.kind}`} disabled={busy}
+              aria-pressed={p.current} aria-label={`Образец: ${kindLabel(p.kind)}`} disabled={busy}
               onClick={() => !p.current && guard(() => setSlidePattern(deckId, variant, index + 1, p.pattern_id))}>
               {p.preview ? <img src={absoluteUrl(p.preview)} alt=""/> : <div style={{ width: 148, height: 83, background: 'var(--surface-2)', borderRadius: 6 }}/>}
-              <span>{p.current ? `Текущий: ${p.kind}` : p.kind}</span>
+              <span>{p.current ? `Текущий: ${kindLabel(p.kind).toLowerCase()}` : kindLabel(p.kind)}</span>
             </button>)}
           </div>
         </div>

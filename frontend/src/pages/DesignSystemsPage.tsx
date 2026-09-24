@@ -2,17 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Upload, Presentation, MonitorPlay, RotateCw, MoreHorizontal, ChevronDown, Info, AlertTriangle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
 import {
   DesignSystem, DesignSystemListItem, Pattern,
-  absoluteUrl, deleteDesignSystem, describeDesignSystem, getManifest, listDesignSystemItems,
+  absoluteUrl, deleteDesignSystem, describeDesignSystem, getAgentAssignments, getManifest, listAgents, listDesignSystemItems,
   patchDesignSystem, patternPreviewUrl, uploadDesignSystem,
 } from '../designer/api';
+import { agentDisplayName } from '../designer/agentName';
+import { KIND_LABEL } from '../designer/labels';
 
 // Словарь типов образцов и подписей ролей — docs/design/canvas/gen.py (KIND, ROLE_RU, STEP_RU, FROLE).
-const KIND: Record<string, string> = {
-  title: 'Титульный', steps: 'Шаги', image_text: 'Картинка и текст', cards: 'Карточки', other: 'Другое',
-  table: 'Таблица', big_number: 'Большое число', chart: 'Диаграмма', bullets: 'Список', cta: 'Призыв',
-  timeline: 'Хронология', section: 'Раздел', thanks: 'Финальный', team: 'Команда', code: 'Код',
-  quote: 'Цитата', compare: 'Сравнение', agenda: 'Содержание',
-};
+const KIND = KIND_LABEL;
 const ROLE_LABEL: Record<string, string> = {
   background: 'Фон', surface: 'Подложка', text: 'Текст', text_muted: 'Второстепенный текст',
   accent: 'Акцент', accent_alt: 'Второй акцент',
@@ -88,7 +85,9 @@ function NewSystem({ onUploaded }: { onUploaded: (id: string) => void }) {
     <h1>Новая дизайн-система</h1>
     {error && <div className="ds-upload-error" role="alert">
       <AlertTriangle size={20} strokeWidth={1.5} color="var(--danger)"/>
-      <span><b>«{badName}» {error.includes('не pptx') ? 'не pptx.' : 'не открылся.'}</b> {error}</span>
+      <span><b>«{badName}» {error.includes('не pptx') ? 'не pptx.' : 'не открылся.'}</b> {error.includes('не pptx')
+        ? 'Выберите презентацию PowerPoint с расширением .pptx.'
+        : 'Файл повреждён или сохранён не до конца. Сохраните его в PowerPoint заново и загрузите ещё раз.'}</span>
     </div>}
     <div className={`ds-dropzone ${drag ? 'drag' : ''}`}
       onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
@@ -143,6 +142,14 @@ function SampleDrawer({ ds, id, patterns, onClose, onNav, onToggle }: {
 
 function Detail({ id }: { id: string }) {
   const [ds, setDs] = useState<DesignSystem | null>(null);
+  // Имя агента, который описывает образцы: его называет полоса сбоя описания.
+  const [describeAgent, setDescribeAgent] = useState('');
+  useEffect(() => {
+    Promise.all([getAgentAssignments(), listAgents()]).then(([assign, agents]) => {
+      const a = agents.find(x => x.id === assign.describe);
+      setDescribeAgent(a ? agentDisplayName(a) : '');
+    }).catch(() => setDescribeAgent(''));
+  }, []);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [sampleId, setSampleId] = useState<string | null>(null);
@@ -165,9 +172,15 @@ function Detail({ id }: { id: string }) {
 
   const running = ds.describe?.status === 'running';
   const failed = ds.describe?.status === 'failed';
-  const colorByRole = new Map(ds.tokens.colors.map(c => [c.role, c] as const));
-  const mainColors = ROLE_ORDER.map(role => colorByRole.get(role)).filter((c): c is NonNullable<typeof c> => !!c);
-  const restColors = ds.tokens.colors.filter(c => !mainColors.includes(c));
+  // docs/model.md: цвет роли — наибольшая доля в замере слайдов (usage), тема только если в замере роли нет.
+  const pickRole = (role: string) => {
+    const of = (source: string) => ds.tokens.colors.filter(c => c.role === role && c.source === source);
+    const pool = of('usage').length ? of('usage') : of('theme');
+    return pool.reduce<typeof pool[number] | undefined>((best, c) => (!best || c.share > best.share ? c : best), undefined);
+  };
+  const mainColors = ROLE_ORDER.map(pickRole).filter((c): c is NonNullable<typeof c> => !!c);
+  const mainHex = new Set(mainColors.map(c => c.hex));
+  const restColors = ds.tokens.colors.filter((c, i, all) => !mainHex.has(c.hex) && all.findIndex(o => o.hex === c.hex) === i);
   const removedCount = ds.patterns.filter(p => !inUse(ds, p)).length;
   const usedCount = ds.patterns.length - removedCount;
   const showRemovedBanner = removedCount > 0 && !ds.removal_confirmed && !running && !failed;
@@ -238,7 +251,7 @@ function Detail({ id }: { id: string }) {
     </div>}
     {failed && <div className="ds-error-strip" role="alert">
       <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}><AlertTriangle size={20} strokeWidth={1.5} color="var(--danger)"/>
-        <span><b style={{ fontWeight: 600 }}>{ds.name || ds.source_file} не ответила, образцы без описания.</b> Палитра, шрифт, кегли и поля готовы.
+        <span><b style={{ fontWeight: 600 }}>{describeAgent ? `${describeAgent} не ответила` : 'Модель не ответила'}, образцы без описания.</b> Палитра, шрифт, кегли и поля готовы.
           Какие образцы держатся на фото, не проверено, поэтому все пока в вёрстке. <a href="#/settings">Агенты и модели</a></span></span>
       <button type="button" className="button" onClick={() => describeDesignSystem(id).then(setDs)}><RotateCw size={18} strokeWidth={1.5}/>Описать заново</button>
     </div>}
@@ -287,9 +300,10 @@ function Detail({ id }: { id: string }) {
         <div className="card">
           <h2 className="ds-section-title-row" style={{ minHeight: 'auto' }}>Кегли, пт</h2>
           <div className="ds-scale-rows">
-            {ds.tokens.type_scale.map((s, i) => <div key={i} className="ds-scale-row">
+            {ds.tokens.type_scale.map((s, i, all) => <div key={i} className="ds-scale-row">
               <span className="ds-scale-size">{s.size_pt}</span>
-              <span className="ds-scale-role">{STEP_LABEL[s.role] ?? s.role}</span>
+              <span className="ds-scale-role">{s.role === 'caption' && all.slice(0, i).some(o => o.role === 'caption')
+                ? 'Мелкая подпись' : STEP_LABEL[s.role] ?? s.role}</span>
               <span className="ds-scale-sample" style={{ fontSize: Math.min(s.size_pt, 30) }}>Итоги года</span>
             </div>)}
           </div>

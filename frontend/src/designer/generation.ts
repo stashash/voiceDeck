@@ -8,7 +8,7 @@ export type StepStatus = 'pending' | 'current' | 'done' | 'error';
 export interface StepView {
   id: StepId;
   status: StepStatus;
-  /** Мгновение первого и последнего события шага, мс с начала прогона (для «33 с»). */
+  /** Начало и конец шага в мс (at событий приходит в секундах): конец — первое событие следующего шага. */
   startAt: number | null;
   endAt: number | null;
   /** Для «Вёрстка»: готово X из N. */
@@ -53,6 +53,13 @@ export function buildSteps(
   }
   const variantDone = forActive.some(e => e.step === 'done') || variantStatus?.[activeVariant] === 'done';
 
+  const sorted = [...events].sort((x, y) => x.at - y.at);
+  // Конец шага: первое событие после его последнего, которое к этому шагу этого варианта не относится.
+  const endOf = (id: StepId, lastAt: number): number | null => {
+    const next = sorted.find(e => e.at > lastAt
+      && !(stepIdFor(e.step) === id && (e.variant === activeVariant || e.variant === null)));
+    return next ? next.at : null;
+  };
   const mainSteps: StepId[] = ['plan', 'layout', 'audit', 'files', 'meaning'];
   const views: StepView[] = mainSteps.map((id, i) => {
     const evs = byStep.get(id) ?? [];
@@ -65,8 +72,8 @@ export function buildSteps(
     const doneCount = id === 'layout' ? (done ? total : slidesDone) : undefined;
     return {
       id, status,
-      startAt: evs.length ? evs[0].at : null,
-      endAt: done && evs.length ? evs[evs.length - 1].at : null,
+      startAt: evs.length ? evs[0].at * 1000 : null,
+      endAt: done && evs.length ? ((endOf(id, evs[evs.length - 1].at) ?? evs[evs.length - 1].at) * 1000) : null,
       doneCount, total,
     };
   });
