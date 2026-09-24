@@ -140,7 +140,7 @@ function SampleDrawer({ ds, id, patterns, onClose, onNav, onToggle }: {
   </>;
 }
 
-function Detail({ id }: { id: string }) {
+function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
   const [ds, setDs] = useState<DesignSystem | null>(null);
   // Имя агента, который описывает образцы: его называет полоса сбоя описания.
   const [describeAgent, setDescribeAgent] = useState('');
@@ -161,6 +161,8 @@ function Detail({ id }: { id: string }) {
 
   const load = useCallback(() => { getManifest(id).then(setDs).catch(e => setError(String(e))); }, [id]);
   useEffect(() => { setDs(null); setSampleId(null); setMoreColors(false); load(); }, [id, load]);
+  // Список слева показывает имя и «идёт разбор»: перечитывается, когда они меняются здесь.
+  useEffect(() => { if (ds) onChanged?.(); }, [ds?.describe?.status, ds?.name]);
   useEffect(() => {
     if (!ds || ds.describe?.status !== 'running') return;
     const t = setInterval(load, 2000);
@@ -370,7 +372,8 @@ function Detail({ id }: { id: string }) {
 
 export default function DesignSystemsPage({ id }: { id?: string }) {
   const [items, setItems] = useState<DesignSystemListItem[]>([]);
-  useEffect(() => { listDesignSystemItems().then(setItems).catch(() => {}); }, [id]);
+  const reloadItems = useCallback(() => { listDesignSystemItems().then(setItems).catch(() => {}); }, []);
+  useEffect(() => { reloadItems(); }, [id, reloadItems]);
 
   const effectiveId = useMemo(() => id && id !== 'new' ? id : undefined, [id]);
 
@@ -387,6 +390,6 @@ export default function DesignSystemsPage({ id }: { id?: string }) {
 
   return <div className="ds-layout">
     <Sidebar items={items} activeId={targetId}/>
-    <Detail key={targetId} id={targetId}/>
+    <Detail key={targetId} id={targetId} onChanged={reloadItems}/>
   </div>;
 }
