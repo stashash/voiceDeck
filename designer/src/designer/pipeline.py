@@ -19,6 +19,7 @@ run_contextual_audit по запросу человека, apply_fixes чини�
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -114,7 +115,7 @@ def import_template(pptx_bytes: bytes, filename: str) -> DesignSystem:
     """
     with tempfile.TemporaryDirectory(prefix="designer-import-") as tmp:
         tmp_root = Path(tmp)
-        pptx_path = tmp_root / "upload" / (Path(filename).name or "template.pptx")
+        pptx_path = tmp_root / "upload" / (Path(repair_filename(filename)).name or "template.pptx")
         pptx_path.parent.mkdir(parents=True, exist_ok=True)
         pptx_path.write_bytes(pptx_bytes)
 
@@ -253,6 +254,20 @@ def run_describe(ds_id: str) -> None:
     _write_manifest(package_dir, done)
 
 
+def repair_filename(name: str) -> str:
+    """Кириллица, которую клиент прислал в cp1251, а сервер прочёл как latin-1: «øàáëîí» -> «шаблон».
+
+    Признак порчи: три буквы верхней половины latin-1 подряд. В европейских именах («Café»,
+    «Présentation») такие буквы стоят поодиночке, их не трогаем.
+    """
+    if not re.search("[\u00c0-\u00ff]{3,}", name):
+        return name
+    try:
+        return name.encode("latin-1").decode("cp1251")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+
+
 def name_from_file(source_file: str) -> str:
     """Имя системы по умолчанию: имя файла без расширения, «_» и «-» заменены пробелами."""
     stem = Path(source_file).stem
@@ -273,6 +288,11 @@ def upgrade_legacy_packages() -> None:
         update: dict = {}
         if not ds.name:
             update["name"] = name_from_file(ds.source_file)
+        repaired = repair_filename(ds.source_file)
+        if repaired != ds.source_file:
+            update["source_file"] = repaired
+            if (update.get("name") or ds.name) == name_from_file(ds.source_file):
+                update["name"] = name_from_file(repaired)
         source_pptx = package_dir / "source.pptx"
         if source_pptx.is_file() and any(f.embedded_state == "missing" and not f.embedded_file for f in ds.tokens.fonts):
             # Статус встроенного шрифта появился в версии 2: у старых пакетов он «missing» по умолчанию.

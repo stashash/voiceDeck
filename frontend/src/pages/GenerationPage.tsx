@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { plural } from '../designer/labels';
 import { Check, Square, AlertTriangle, RotateCw, Settings, Boxes } from 'lucide-react';
 import {
   DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getAgentAssignments, getDeckState, getRunManifest, watchDeckEvents,
@@ -15,7 +16,7 @@ function seconds(ms: number | null): string {
 }
 
 function StepRow({ step, planTitles }: { step: StepView; planTitles?: string[] }) {
-  const title = step.id === 'plan' && step.total ? `План из ${step.total} слайдов`
+  const title = step.id === 'plan' && step.total ? `План: ${plural(step.total, 'слайд', 'слайда', 'слайдов')}`
     : step.id === 'layout' && step.total !== undefined ? `Вёрстка: готово ${step.doneCount ?? 0} из ${step.total}`
     : STEP_LABEL[step.id];
   return <li className="gen-step" aria-current={step.status === 'current' ? 'step' : undefined}>

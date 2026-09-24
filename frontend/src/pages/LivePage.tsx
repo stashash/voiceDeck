@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { hashParam } from '../router';
 import { Mic, Square, MonitorPlay, ArrowRight, Boxes, Undo2 } from 'lucide-react';
 import type { Slide } from '../store';
 import { useSession } from '../stage/useSession';
@@ -23,7 +24,7 @@ export default function LivePage() {
   useEffect(() => {
     listDesignSystemItems().then(items => {
       setDesignSystems(items);
-      if (items.length && !s.designSystemId) s.selectDesignSystem(items[0].id);
+      if (items.length && !s.designSystemId) { const asked = hashParam('ds'); s.selectDesignSystem(asked && items.some(i => i.id === asked) ? asked : items[0].id); }
     }).catch(() => {});
     Promise.all([listAgents(), getAgentAssignments()]).then(([list, a]) => {
       setAgents(list.filter(x => x.found)); setAssign(a);

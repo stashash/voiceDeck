@@ -13,6 +13,11 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 export type PageProps = { id?: string };
 
+// Параметр после «?» в адресе: #/?ds=<id> открывает главную с выбранной дизайн-системой.
+export function hashParam(name: string): string | null {
+  return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get(name);
+}
+
 function useHash() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => {
@@ -25,7 +30,7 @@ function useHash() {
 
 export function Router() {
   const hash = useHash();
-  const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const parts = hash.replace(/^#\/?/, '').split('?')[0].split('/').filter(Boolean);
   const [root, a, b, c] = parts;
 
   // Окно зала: только слайд и субтитры, без шапки разделов.

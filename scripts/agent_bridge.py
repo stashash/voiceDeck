@@ -212,6 +212,8 @@ def _run_agent(agent: Agent, exe: str, system: str, user: str, model: str | None
         _kill_tree(proc)
         if proc.returncode != 0:
             detail = (stderr or stdout or "").strip()[-2000:]
+            if "not logged in" in detail.lower():
+                raise AgentError(f"{agent.name}: не выполнен вход. Запустите его в терминале и войдите в аккаунт")
             raise AgentError(f"{agent.id}: код возврата {proc.returncode}: {detail or 'нет вывода'}")
 
         text = ""

@@ -619,3 +619,11 @@ def test_slide_image_event_emitted_right_after_compose(templates, monkeypatch):
     audit_pos = next(i for i, e in enumerate(events) if e.step == "audit")
     first_image_pos = next(i for i, e in enumerate(events) if e.step == "slide-image")
     assert first_image_pos < audit_pos
+
+
+def test_repair_filename_restores_cp1251_read_as_latin1():
+    broken = "VK Tech шаблон.pptx".encode("cp1251").decode("latin-1")
+    assert pipeline.repair_filename(broken) == "VK Tech шаблон.pptx"
+    assert pipeline.repair_filename("VK Tech шаблон.pptx") == "VK Tech шаблон.pptx"
+    assert pipeline.repair_filename("Café deck.pptx") == "Café deck.pptx"
+    assert pipeline.repair_filename("Présentation générale.pptx") == "Présentation générale.pptx"

@@ -44,8 +44,8 @@ Java-тесты идут внутри сборки образа: `docker compose
 
 | Что проверяет | Команда | Режим в `.env` |
 |---|---|---|
-| живой режим от звука до слайда | `node scripts/live-smoke.mjs <запись.wav>` | `MODE=live` |
+| Live-режим от звука до слайда | `node scripts/live-smoke.mjs <запись.wav>` | `MODE=live` |
 | текстовый ввод, фрагменты, повтор после обрыва | `node scripts/smoke.mjs` | `MODE=demo` |
-| колода по брифу на всех шаблонах | `python examples/build.py examples/brief.txt` | любой |
+| презентация по брифу на всех pptx из примеров | `python examples/build.py examples/brief.txt` | любой |
 
-Запись речи для первой строки делает `pwsh scripts/speech-sample.ps1`, подробнее на странице [живой режим](zhivoy-rezhim.md#из-записи-без-браузера).
+Запись речи для первой строки делает `pwsh scripts/speech-sample.ps1`, подробнее на странице [Live-режим](zhivoy-rezhim.md#из-записи-без-браузера).

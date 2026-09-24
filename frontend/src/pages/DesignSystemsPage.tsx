@@ -6,7 +6,7 @@ import {
   patchDesignSystem, patternPreviewUrl, uploadDesignSystem,
 } from '../designer/api';
 import { agentDisplayName } from '../designer/agentName';
-import { KIND_LABEL } from '../designer/labels';
+import { KIND_LABEL, plural } from '../designer/labels';
 
 // Словарь типов образцов и подписей ролей — docs/design/canvas/gen.py (KIND, ROLE_RU, STEP_RU, FROLE).
 const KIND = KIND_LABEL;
@@ -61,7 +61,7 @@ function Sidebar({ items, activeId }: { items: DesignSystemListItem[]; activeId?
           <span className="ds-side-name">{d.name}</span>
           {d.describe_status === 'running'
             ? <span className="ds-side-meta parsing"><span className="dot"/>идёт разбор</span>
-            : <span className="ds-side-meta">{d.patterns} образцов</span>}
+            : <span className="ds-side-meta">{plural(d.patterns, 'образец', 'образца', 'образцов')}</span>}
         </span>
       </a>)}
     </div>
@@ -221,10 +221,10 @@ function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
         </div>
       </div>
       <div className="ds-header-actions" style={{ opacity: running ? .45 : 1 }}>
-        <a className="button primary" href="#/" title={running ? 'Станет доступно, когда модель опишет образцы' : 'Собрать презентацию по брифу на этой системе'}>
+        <a className="button primary" href={`#/?ds=${encodeURIComponent(id)}`} title={running ? 'Станет доступно, когда модель опишет образцы' : 'Собрать презентацию по брифу на этой системе'}>
           <Presentation size={18} strokeWidth={1.5}/>Создать презентацию
         </a>
-        <a className="button" href="#/live" title={running ? 'Станет доступно, когда модель опишет образцы' : 'Слайды из речи на этой системе'}>
+        <a className="button" href={`#/live?ds=${encodeURIComponent(id)}`} title={running ? 'Станет доступно, когда модель опишет образцы' : 'Слайды из речи на этой системе'}>
           <MonitorPlay size={18} strokeWidth={1.5}/>Выступить
         </a>
         <div style={{ position: 'relative' }}>
@@ -253,7 +253,7 @@ function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
     </div>}
     {failed && <div className="ds-error-strip" role="alert">
       <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}><AlertTriangle size={20} strokeWidth={1.5} color="var(--danger)"/>
-        <span><b style={{ fontWeight: 600 }}>{describeAgent ? `${describeAgent} не ответила` : 'Модель не ответила'}, образцы без описания.</b> Палитра, шрифт, кегли и поля готовы.
+        <span><b style={{ fontWeight: 600 }}>{describeAgent ? `Агент ${describeAgent} не ответил` : 'Модель не ответила'}, образцы без описания.</b> Палитра, шрифт, кегли и поля готовы.
           Какие образцы держатся на фото, не проверено, поэтому все пока в вёрстке. <a href="#/settings">Агенты и модели</a></span></span>
       <button type="button" className="button" onClick={() => describeDesignSystem(id).then(setDs)}><RotateCw size={18} strokeWidth={1.5}/>Описать заново</button>
     </div>}

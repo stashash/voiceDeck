@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { plural } from '../designer/labels';
+import { hashParam } from '../router';
 import { ChevronDown, ArrowUp, Upload, Settings, Boxes, Check } from 'lucide-react';
 import {
   AgentAssignments, AgentInfo, DeckListItem, DesignSystemListItem,
@@ -24,7 +26,7 @@ export default function HomePage() {
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listDesignSystemItems().then(items => { setDesignSystems(items); setDsId(prev => prev || items[0]?.id || ''); }).catch(() => {});
+    listDesignSystemItems().then(items => { setDesignSystems(items); setDsId(prev => { const asked = hashParam('ds'); return prev || (asked && items.some(i => i.id === asked) ? asked : items[0]?.id) || ''; }); }).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
     getAgentAssignments().then(a => { setAssignments(a); setAgentId(prev => prev || a.deck || ''); }).catch(() => {});
     listDecks().then(items => setRecent(items.filter(d => d.slides > 0 && d.status !== 'error').slice(0, RECENT_LIMIT))).catch(() => {});
@@ -124,7 +126,7 @@ export default function HomePage() {
                   onClick={() => { setDsId(d.id); setOpen(null); }}>
                   {d.preview ? <img className="picker-thumb" src={absoluteUrl(d.preview)} alt=""/> : <Boxes size={18} strokeWidth={1.5}/>}
                   <span className="popover-option-body"><span className="popover-option-title">{d.name}</span>
-                    <span className="popover-option-sub">{d.patterns} образцов</span></span>
+                    <span className="popover-option-sub">{plural(d.patterns, 'образец', 'образца', 'образцов')}</span></span>
                   {d.id === dsId && <Check size={18} strokeWidth={1.5}/>}
                 </button>
               </li>)}
@@ -151,7 +153,7 @@ export default function HomePage() {
         {recent.map(d => <a key={d.id} className="recent-card" href={`#/decks/${d.id}/edit/a`}>
           {d.preview ? <img className="recent-thumb" src={absoluteUrl(d.preview)} alt=""/> : <div className="recent-thumb"/>}
           <span className="recent-title">{d.title}</span>
-          <span className="recent-meta">{d.slides} слайдов, {dsById.get(d.design_system_id)?.name ?? d.design_system_id}</span>
+          <span className="recent-meta">{plural(d.slides, 'слайд', 'слайда', 'слайдов')}, {dsById.get(d.design_system_id)?.name ?? d.design_system_id}</span>
         </a>)}
       </div>
     </section>}
