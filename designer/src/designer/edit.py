@@ -111,6 +111,19 @@ def _snapshot(state: _State) -> None:
     store.snapshot_deck_history(state.deck_id, state.variant, state.raw)
 
 
+def _checks(state: _State, touched: set[str] | None = None, drop_ids: set[str] | None = None) -> list[Finding]:
+    """Проверка по правилам заново плюс прежние замечания модели по слайдам, которых правка не касалась.
+
+    Замечание модели считалось по картинке слайда: у изменённого слайда оно устарело, у остальных нет.
+    """
+    present = {spec.slide_id for spec in state.specs}
+    touched = touched or set()
+    drop_ids = drop_ids or set()
+    kept = [f for f in state.findings if f.kind == "contextual" and f.slide_id in present
+            and f.slide_id not in touched and f.id not in drop_ids]
+    return run_checks(state.scenes, state.ds) + kept
+
+
 def _persist(state: _State, findings: list[Finding]) -> None:
     """Переиздаёт файлы варианта (pptx, html, pdf, картинки) и пишет deck.json."""
     deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
@@ -200,7 +213,7 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
     if slot is not None:
         _set_slot_text(state.specs[index], slot, group, unit_index, text)
 
-    findings = run_checks(state.scenes, state.ds)
+    findings = _checks(state, {state.specs[index].slide_id})
     _persist(state, findings)
 
 
@@ -216,7 +229,7 @@ def set_slide_pattern(deck_id: str, variant: str, slide_number: int, pattern_id:
     _snapshot(state)
     _recompose(state, index, state.plan.slides[index], pattern)
 
-    findings = run_checks(state.scenes, state.ds)
+    findings = _checks(state, {state.specs[index].slide_id})
     _persist(state, findings)
 
 
@@ -339,7 +352,7 @@ def ask_agent_rewrite(deck_id: str, variant: str, slide_number: int, instruction
     _snapshot(state)
     _recompose(state, index, new_intent, pattern)
 
-    findings = run_checks(state.scenes, state.ds)
+    findings = _checks(state, {state.specs[index].slide_id})
     _persist(state, findings)
 
 
@@ -362,8 +375,7 @@ def rewrite_from_finding(deck_id: str, variant: str, finding_id: str) -> None:
     _snapshot(state)
     _recompose(state, index, new_intent, pattern)
 
-    kept_contextual = [f for f in state.findings if f.kind == "contextual" and f.id != finding_id]
-    findings = run_checks(state.scenes, state.ds) + kept_contextual
+    findings = _checks(state, {state.specs[index].slide_id}, {finding_id})
     _persist(state, findings)
 
 
@@ -377,7 +389,7 @@ def set_slide_notes(deck_id: str, variant: str, slide_number: int, notes: str) -
     state.plan.slides[index].notes = notes
     state.specs[index].notes = notes
 
-    findings = run_checks(state.scenes, state.ds)
+    findings = _checks(state)
     _persist(state, findings)
 
 
@@ -433,7 +445,7 @@ def apply_slide_action(deck_id: str, variant: str, action: str, index: int, to: 
         state.specs.insert(insert_at, spec)
         state.scenes.insert(insert_at, scene)
 
-    findings = run_checks(state.scenes, state.ds)
+    findings = _checks(state)
     _persist(state, findings)
 
 
