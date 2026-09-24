@@ -84,7 +84,8 @@ public final class Session implements AutoCloseable {
     void text(JsonObject message){submit(()->{
         lastAccess=System.currentTimeMillis();
         String type=message.getString("type","");
-        if(type.equals("text")&&mode.equals("demo")) {
+        // Текст вместо микрофона: в demo всегда, в live пока не идёт запись (иначе текст сдвинет шкалу звука).
+        if(type.equals("text")&&(mode.equals("demo")||audio==null)) {
             if(!message.fieldNames().equals(Set.of("type","text")))throw new IllegalArgumentException("Unexpected text fields");
             String text=message.getString("text","").strip();
             if(text.isEmpty()||text.length()>16000)throw new IllegalArgumentException("Текст: от 1 до 16000 символов");

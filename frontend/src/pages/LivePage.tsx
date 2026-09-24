@@ -113,12 +113,12 @@ export default function LivePage() {
         {s.state.partial && <p className="live-partial">{s.state.partial}<span>▍</span></p>}
       </div>
       <div className="live-controls">
-        {s.live
-          ? <button type="button" className={`button ${s.recording ? 'primary' : ''}`} disabled={s.busy}
+        {s.live && <button type="button" className={`button ${s.recording ? 'primary' : ''}`} disabled={s.busy}
             onClick={() => void (s.recording ? s.stopRecording() : s.startRecording())}>
             {s.recording ? <Square size={15} strokeWidth={1.5}/> : <Mic size={16} strokeWidth={1.5}/>}{s.recording ? 'Стоп' : 'Запись'}
-          </button>
-          : <form className="live-text-form" onSubmit={e => { e.preventDefault(); if (draft.trim()) { void s.sendText(draft); setDraft(''); } }}>
+          </button>}
+        {/* Текст вместо микрофона: и в demo, и в live, пока не идёт запись (сервис принимает его так же). */}
+        {!s.recording && <form className="live-text-form" onSubmit={e => { e.preventDefault(); if (draft.trim()) { void s.sendText(draft); setDraft(''); } }}>
             <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Текст вместо микрофона" maxLength={2000}/>
             <button className="button primary" disabled={!draft.trim() || s.busy} title="Отправить"><ArrowRight size={15} strokeWidth={1.5}/></button>
           </form>}
