@@ -10,15 +10,13 @@ import re
 
 import httpx
 
+from designer.llm.client import LlmResponseError, _matches_schema
+
 BRIDGE_URL_ENV = "DESIGNER_AGENT_BRIDGE_URL"
 DEFAULT_BRIDGE_URL = "http://host.docker.internal:8095"
 
 _MAX_ATTEMPTS = 2  # первая попытка плюс один повтор на битый ответ
 _FENCE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.S)
-
-
-class LlmResponseError(RuntimeError):
-    """Агент через мост не дал валидный JSON по схеме за все попытки."""
 
 
 def _default_bridge_url() -> str:
@@ -42,7 +40,9 @@ class BridgeClient:
     def close(self) -> None:
         self._client.close()
 
-    def complete_json(self, system: str, user: str, schema: dict, images_png: list[bytes] | None = None) -> dict:
+    def complete_json(self, system: str, user: str, schema: dict, images_png: list[bytes] | None = None,
+                      params: dict | None = None) -> dict:
+        """params (temperature, max_tokens из skill.yaml) CLI-агенту не передаются: у CLI нет таких ручек."""
         full_system = _with_schema_instruction(system, schema)
         errors: list[str] = []
         for _ in range(_MAX_ATTEMPTS):
@@ -53,10 +53,14 @@ class BridgeClient:
                 errors.append("в ответе нет JSON")
                 continue
             try:
-                return json.loads(extracted)
+                data = json.loads(extracted)
             except json.JSONDecodeError as exc:
                 errors.append(f"битый JSON: {exc}")
                 continue
+            if not _matches_schema(data, schema, schema.get("$defs", {})):
+                errors.append("ответ не по схеме")
+                continue
+            return data
         raise LlmResponseError(f"агент {self.agent} не дал JSON по схеме за {_MAX_ATTEMPTS} попытки: "
                                 f"{'; '.join(errors)}")
 

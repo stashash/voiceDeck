@@ -126,3 +126,15 @@ def test_default_bridge_url_comes_from_env(monkeypatch):
     client = BridgeClient("claude")
     assert client.bridge_url == "http://myhost:9999"
     client.close()
+
+
+def test_accepts_skill_params_like_llm_client_and_checks_schema():
+    # Генерация зовёт complete_json(..., params=skill.params): клиент моста принимает их, как LlmClient.
+    answers = iter(['{"title": 5}', '{"title": "План"}'])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"text": next(answers), "seconds": 0.1})
+
+    client = BridgeClient("cursor-agent", bridge_url="http://bridge", transport=httpx.MockTransport(handler))
+    schema = {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]}
+    assert client.complete_json("s", "u", schema, params={"temperature": 0.2}) == {"title": "План"}
