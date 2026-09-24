@@ -4,12 +4,11 @@ import {
   AgentAssignments, AgentInfo, DeckListItem, DesignSystemListItem,
   absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments,
 } from '../designer/api';
+import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
 
 type Popover = 'ds' | 'agent' | null;
-
-function agentLabel(a: AgentInfo): string {
-  return a.kind === 'local' ? a.name : a.name;
-}
+// Холст: одна строка на четыре карточки, показаны две строки (Home.dc.html + правка координатора).
+const RECENT_LIMIT = 8;
 
 export default function HomePage() {
   const [brief, setBrief] = useState('');
@@ -28,7 +27,7 @@ export default function HomePage() {
     listDesignSystemItems().then(items => { setDesignSystems(items); setDsId(prev => prev || items[0]?.id || ''); }).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
     getAgentAssignments().then(a => { setAssignments(a); setAgentId(prev => prev || a.deck || ''); }).catch(() => {});
-    listDecks().then(setRecent).catch(() => {});
+    listDecks().then(items => setRecent(items.filter(d => d.slides > 0 && d.status !== 'error').slice(0, RECENT_LIMIT))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -80,10 +79,10 @@ export default function HomePage() {
             <ChevronDown size={16} strokeWidth={1.5}/>
           </button>
           <button type="button" className={`picker-btn ${open === 'agent' ? 'open' : ''}`} aria-haspopup="listbox"
-            aria-expanded={open === 'agent'} aria-label={`Агент: ${selectedAgent ? agentLabel(selectedAgent) : ''}`}
+            aria-expanded={open === 'agent'} aria-label={`Агент: ${selectedAgent ? agentDisplayName(selectedAgent) : ''}`}
             onClick={() => setOpen(v => v === 'agent' ? null : 'agent')}>
             <Boxes size={18} strokeWidth={1.5}/>
-            <span>{selectedAgent ? agentLabel(selectedAgent) : 'Агент'}</span>
+            <span>{selectedAgent ? agentDisplayName(selectedAgent) : 'Агент'}</span>
             <ChevronDown size={16} strokeWidth={1.5}/>
           </button>
           {open === 'agent' && <div className="popover" role="presentation">
@@ -94,8 +93,8 @@ export default function HomePage() {
                   <button type="button" className={`popover-option ${a.id === agentId ? 'selected' : ''}`}
                     onClick={() => { setAgentId(a.id); setOpen(null); }}>
                     <Boxes size={18} strokeWidth={1.5}/>
-                    <span className="popover-option-body"><span className="popover-option-title">{a.name}</span>
-                      <span className="popover-option-sub">{a.detail}</span></span>
+                    <span className="popover-option-body"><span className="popover-option-title">{agentOptionName(a)}</span>
+                      <span className="popover-option-sub">{agentOptionSub(a)}</span></span>
                     {a.id === agentId && <Check size={18} strokeWidth={1.5}/>}
                   </button>
                 </li>)}
@@ -108,8 +107,8 @@ export default function HomePage() {
                   <button type="button" className={`popover-option ${a.id === agentId ? 'selected' : ''}`}
                     onClick={() => { setAgentId(a.id); setOpen(null); }}>
                     <Boxes size={18} strokeWidth={1.5}/>
-                    <span className="popover-option-body"><span className="popover-option-title">{a.name}</span>
-                      <span className="popover-option-sub">{a.detail}</span></span>
+                    <span className="popover-option-body"><span className="popover-option-title">{agentOptionName(a)}</span>
+                      <span className="popover-option-sub">{agentOptionSub(a)}</span></span>
                     {a.id === agentId && <Check size={18} strokeWidth={1.5}/>}
                   </button>
                 </li>)}

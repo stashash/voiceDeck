@@ -1,7 +1,9 @@
 // Клиент сервиса designer. Пути и схемы сверены с api/app.py и api/schemas.py, contracts.py.
 // import.meta.env типизирован через vite/client, которого в проекте нет: берём мягкой приведением типа.
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-export const BASE_URL = env.VITE_DESIGNER_URL || 'http://localhost:8090';
+// Пустая строка — осознанный выбор (адрес того же источника, что и приложение; см. vite.config.ts proxy
+// для /design-systems, /decks, /agents, /settings/agents), поэтому проверяем undefined, а не пустоту.
+export const BASE_URL = env.VITE_DESIGNER_URL !== undefined ? env.VITE_DESIGNER_URL : 'http://localhost:8090';
 
 export type Box = [number, number, number, number];
 
@@ -13,9 +15,13 @@ export type TypeStep = { size_pt: number; role: string; share: number };
 export type Margins = { left: number; top: number; right: number; bottom: number };
 export type Tokens = { colors: ColorToken[]; fonts: FontToken[]; type_scale: TypeStep[]; margins: Margins };
 export type Asset = { id: string; path: string; kind: string; width_px: number; height_px: number; used_on: number[] };
+export type PatternSlot = { id: string; role: string; box: Box };
+export type PatternUnit = { index: number; box: Box };
+export type PatternGroup = { min_units: number; max_units: number; unit_slots: { role: string }[]; units: PatternUnit[] };
 export type Pattern = {
-  id: string; kind: string; kind_confidence: number; theme: 'light' | 'dark';
+  id: string; source_slide?: number; kind: string; kind_confidence: number; theme: 'light' | 'dark';
   purpose: string; needs_images: boolean; background_asset?: string | null; preview?: string | null;
+  slots?: PatternSlot[]; groups?: PatternGroup[];
 };
 export type DescribeStatus = { status: 'pending' | 'running' | 'done' | 'failed'; done: number; total: number; error?: string | null };
 export type DesignSystem = {

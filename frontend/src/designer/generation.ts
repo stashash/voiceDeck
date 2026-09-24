@@ -30,8 +30,10 @@ export function stepIdFor(rawStep: string): StepId | null {
 
 /**
  * Строит пять шагов текущего варианта плюс «Варианты 2 и 3» по журналу событий SSE этой колоды.
- * Шаг «done», когда начался следующий шаг того же варианта или пришёл его собственный done;
- * шаг «current», когда по нему есть события, но он ещё не done; иначе «pending».
+ * Шаг «done», когда начался следующий шаг того же варианта, пришёл его собственный done, или сам
+ * вариант уже done по опросу `GET /decks/{id}` (statuses) — SSE не хранит историю для давно
+ * законченной колоды, открытой заново, поэтому статус варианта из REST-опроса первичен.
+ * Шаг «current», когда по нему есть события, но он ещё не done; иначе «pending».
  */
 export function buildSteps(
   events: DeckEvent[],
@@ -39,6 +41,7 @@ export function buildSteps(
   otherVariants: string[],
   plan: DeckPlan | null,
   slidesDone: number,
+  variantStatus?: Record<string, string>,
 ): StepView[] {
   const forActive = events.filter(e => e.variant === activeVariant || e.variant === null);
   const byStep = new Map<StepId, DeckEvent[]>();
@@ -48,26 +51,29 @@ export function buildSteps(
     if (!byStep.has(id)) byStep.set(id, []);
     byStep.get(id)!.push(e);
   }
-  const variantDone = forActive.some(e => e.step === 'done');
+  const variantDone = forActive.some(e => e.step === 'done') || variantStatus?.[activeVariant] === 'done';
 
   const mainSteps: StepId[] = ['plan', 'layout', 'audit', 'files', 'meaning'];
   const views: StepView[] = mainSteps.map((id, i) => {
     const evs = byStep.get(id) ?? [];
-    const started = evs.length > 0;
+    const evsStarted = evs.length > 0;
     const laterStarted = mainSteps.slice(i + 1).some(later => byStep.has(later));
-    const done = started && (laterStarted || variantDone);
-    const status: StepStatus = done ? 'done' : started ? 'current' : 'pending';
+    const done = variantDone || (evsStarted && laterStarted);
+    const status: StepStatus = done ? 'done' : evsStarted ? 'current' : 'pending';
+    const total = id === 'layout' ? (plan?.slides.length ?? undefined) : undefined;
+    // Готово «X из N»: once the step is done a stale scenes-length snapshot must not show 0 из N.
+    const doneCount = id === 'layout' ? (done ? total : slidesDone) : undefined;
     return {
       id, status,
       startAt: evs.length ? evs[0].at : null,
       endAt: done && evs.length ? evs[evs.length - 1].at : null,
-      doneCount: id === 'layout' ? slidesDone : undefined,
-      total: id === 'layout' ? (plan?.slides.length ?? undefined) : undefined,
+      doneCount, total,
     };
   });
 
-  const othersDone = otherVariants.length > 0 && otherVariants.every(v => events.some(e => e.step === 'done' && e.variant === v));
-  const othersStarted = otherVariants.some(v => events.some(e => e.variant === v));
+  const otherDoneOf = (v: string) => events.some(e => e.step === 'done' && e.variant === v) || variantStatus?.[v] === 'done';
+  const othersDone = otherVariants.length > 0 && otherVariants.every(otherDoneOf);
+  const othersStarted = otherVariants.some(v => events.some(e => e.variant === v) || variantStatus?.[v] !== undefined);
   views.push({
     id: 'variants',
     status: otherVariants.length === 0 ? 'pending' : othersDone ? 'done' : othersStarted ? 'current' : 'pending',

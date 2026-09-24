@@ -3,6 +3,7 @@ import { Mic, Square, MonitorPlay, ArrowRight, Boxes, Undo2 } from 'lucide-react
 import type { Slide } from '../store';
 import { useSession } from '../stage/useSession';
 import { AgentInfo, DesignSystemListItem, getAgentAssignments, listAgents, listDesignSystemItems } from '../designer/api';
+import { agentDisplayName } from '../designer/agentName';
 import '../stage/stage.css';
 
 const time = (ms: number) => `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}`;
@@ -19,11 +20,15 @@ export default function LivePage() {
   const [agentName, setAgentName] = useState('');
 
   useEffect(() => {
-    listDesignSystemItems().then(setDesignSystems).catch(() => {});
+    listDesignSystemItems().then(items => {
+      setDesignSystems(items);
+      if (items.length && !s.designSystemId) s.selectDesignSystem(items[0].id);
+    }).catch(() => {});
     Promise.all([listAgents(), getAgentAssignments()]).then(([agents, a]) => {
       const found = agents.find((x: AgentInfo) => x.id === a.live);
-      if (found) setAgentName(found.name);
+      if (found) setAgentName(agentDisplayName(found));
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

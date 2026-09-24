@@ -58,7 +58,13 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
   const slidesDone = active?.scenes.length ?? 0;
   const total = plan?.slides.length ?? 0;
   const otherVariants = VARIANTS.filter(v => v !== variant);
-  const steps = useMemo(() => buildSteps(events, variant, otherVariants, plan, slidesDone), [events, variant, plan, slidesDone]);
+  const variantStatus = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of VARIANTS) if (state?.variants[v]) map[v] = state.variants[v].status;
+    return map;
+  }, [state]);
+  const steps = useMemo(() => buildSteps(events, variant, otherVariants, plan, slidesDone, variantStatus),
+    [events, variant, plan, slidesDone, variantStatus]);
   const planStep = steps[0];
 
   const failure = active?.status === 'error' ? (active.error || 'Сборка не удалась') : '';

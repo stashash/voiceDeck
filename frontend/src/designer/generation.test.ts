@@ -79,4 +79,22 @@ describe('buildSteps', () => {
     const steps = buildSteps(events, 'a', [], plan, 1);
     expect(steps.find(s => s.id === 'meaning')!.status).toBe('done');
   });
+  it('done-шаг вёрстки показывает «готово N из N», а не отставшее число сцен из старого опроса', () => {
+    const events: DeckEvent[] = [
+      { step: 'plan', slide_index: null, variant: 'a', at: 0 },
+      { step: 'slide', slide_index: 0, variant: 'a', at: 1 },
+      { step: 'audit', slide_index: null, variant: 'a', at: 2 },
+    ];
+    // slidesDone=0 моделирует опрос getDeckState, пришедший раньше, чем scenes успели заполниться.
+    const layout = buildSteps(events, 'a', [], plan, 0).find(s => s.id === 'layout')!;
+    expect(layout.status).toBe('done');
+    expect(layout.doneCount).toBe(3);
+  });
+  it('без истории SSE (давно законченная колода) статус варианта из REST делает все шаги done', () => {
+    const steps = buildSteps([], 'a', ['b', 'c'], plan, 3, { a: 'done', b: 'done', c: 'done' });
+    for (const id of ['plan', 'layout', 'audit', 'files', 'meaning', 'variants'] as const) {
+      expect(steps.find(s => s.id === id)!.status).toBe('done');
+    }
+    expect(steps.find(s => s.id === 'layout')!.doneCount).toBe(3);
+  });
 });
