@@ -80,7 +80,8 @@ export function buildSteps(
 
   const otherDoneOf = (v: string) => events.some(e => e.step === 'done' && e.variant === v) || variantStatus?.[v] === 'done';
   const othersDone = otherVariants.length > 0 && otherVariants.every(otherDoneOf);
-  const othersStarted = otherVariants.some(v => events.some(e => e.variant === v) || variantStatus?.[v] !== undefined);
+  // Статус running сервис ставит всем вариантам сразу, поэтому «начат» решают только события варианта.
+  const othersStarted = otherVariants.some(v => events.some(e => e.variant === v));
   views.push({
     id: 'variants',
     status: otherVariants.length === 0 ? 'pending' : othersDone ? 'done' : othersStarted ? 'current' : 'pending',

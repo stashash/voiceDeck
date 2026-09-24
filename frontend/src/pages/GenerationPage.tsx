@@ -65,7 +65,9 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
 
   const active = state?.variants[variant];
   const plan = active?.plan ?? null;
-  const slidesDone = active?.scenes.length ?? 0;
+  // Готовые слайды: по событиям slide-image (сцены сервис сохраняет только в конце варианта).
+  const imagesReady = new Set(events.filter(e => e.step === 'slide-image' && e.variant === variant).map(e => e.slide_index)).size;
+  const slidesDone = Math.max(active?.scenes.length ?? 0, imagesReady);
   const total = plan?.slides.length ?? 0;
   const otherVariants = VARIANTS.filter(v => v !== variant);
   const variantStatus = useMemo(() => {

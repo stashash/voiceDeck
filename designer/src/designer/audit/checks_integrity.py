@@ -21,6 +21,8 @@ def _is_placeholder(text: str) -> bool:
 
 
 def check_placeholder_text(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    from designer.audit.deterministic import describe_element
+
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -29,7 +31,7 @@ def check_placeholder_text(scenes: list[Scene], ds: DesignSystem) -> list[Findin
             if _is_placeholder(el.text):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="integrity.placeholder_text", kind="deterministic",
-                    severity="error", message=f"В «{el.id}» остался текст-заглушка",
+                    severity="error", message=f"{describe_element(el).capitalize()}: остался текст-заглушка",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
@@ -79,7 +81,7 @@ def check_chart_labels(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             if missing:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="integrity.chart_labels", kind="deterministic",
-                    severity="warning", message=f"У диаграммы «{el.id}» нет: {', '.join(missing)}",
+                    severity="warning", message=f"У диаграммы нет {', '.join(missing)}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

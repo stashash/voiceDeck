@@ -180,7 +180,7 @@ def _fix_type_scale(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, new_size)
-    return f"кегль {describe_element(el)} приведён с {old_size:g} к ступени шкалы {new_size:g} pt"
+    return f"{describe_element(el).capitalize()}: кегль {old_size:g} пт заменён ступенью шкалы {new_size:g} пт"
 
 
 def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -195,14 +195,14 @@ def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern
         old = el.style.color
         new = _nearest_color(old, palette)
         el.style = el.style.model_copy(update={"color": new})
-        changed.append(f"цвет текста {old} на {new}")
+        changed.append(f"цвет текста #{old} заменён на #{new}")
     if el.fill and not _in_palette(el.fill, palette):
         old = el.fill
         el.fill = _nearest_color(old, palette)
-        changed.append(f"заливка {old} на {el.fill}")
+        changed.append(f"заливка #{old} заменена на #{el.fill}")
     if not changed:
         return None
-    return f"{describe_element(el)}: заменены " + "; ".join(changed)
+    return f"{describe_element(el).capitalize()}: " + "; ".join(changed)
 
 
 def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -231,7 +231,7 @@ def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern:
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, chosen)
-    return f"кегль {describe_element(el)} опущен с {old_size:g} до {chosen:g} pt под вместимость рамки"
+    return f"{describe_element(el).capitalize()}: кегль уменьшен с {old_size:g} до {chosen:g} пт, текст помещается в рамку"
 
 
 def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -249,7 +249,7 @@ def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     if _creates_overlap(scene, el, new_box):
         return None
     el.box = new_box
-    return f"левый край {describe_element(el)} сдвинут к направляющей {nearest:g}"
+    return f"{describe_element(el).capitalize()}: левый край сдвинут к направляющей шаблона"
 
 
 def _fix_in_margins(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -323,7 +323,7 @@ def _fix_bullets(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Patte
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_slot_text(spec, slot, group, index, new_text)
-    return f"из {describe_element(el)} убраны лишние пункты: {'; '.join(removed)}"
+    return f"{describe_element(el).capitalize()}: убраны лишние пункты: {'; '.join(removed)}"
 
 
 _FIXERS: dict[str, Callable] = {

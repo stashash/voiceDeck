@@ -59,7 +59,7 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.font", kind="deterministic",
                     severity="warning",
-                    message=f"Шрифт «{el.style.family}» в {describe_element(el)} не входит в токены дизайн-системы",
+                    message=f"{describe_element(el).capitalize()}: шрифта «{el.style.family}» нет в дизайн-системе",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
         if len(used) > _FONT_LIMIT:
@@ -67,7 +67,7 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="template.font", kind="deterministic",
                 severity="warning",
-                message=f"На слайде {len(used)} гарнитур вместо не более {_FONT_LIMIT}",
+                message=f"На слайде {len(used)} шрифтов, в шаблоне не больше {_FONT_LIMIT}",
                 element_ids=el_ids, box=None, fixable=False,
             ))
     return findings
@@ -97,7 +97,7 @@ def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 continue  # крупное число подгоняется по ширине рамки, любой кегль до образца законен
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="template.type_scale", kind="deterministic",
-                severity="warning", message=f"Кегль {size:g} pt в {describe_element(el)} не входит в шкалу шаблона",
+                severity="warning", message=f"{describe_element(el).capitalize()}: кегль {size:g} пт не входит в шкалу шаблона",
                 element_ids=[el.id], box=el.box, fixable=True,
                 fix_hint="уменьшить кегль до ступени шкалы",
             ))
@@ -117,14 +117,14 @@ def check_color(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
                         severity="warning",
-                        message=f"Цвет текста «{el.style.color}» в {describe_element(el)} не из палитры",
+                        message=f"{describe_element(el).capitalize()}: цвет текста #{el.style.color} не из палитры",
                         element_ids=[el.id], box=el.box, fixable=True,
                         fix_hint="заменить цвет ближайшим из палитры",
                     ))
             if el.fill and not _color_in_palette(el.fill, palette):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
-                    severity="warning", message=f"Заливка «{el.fill}» в {describe_element(el)} не из палитры",
+                    severity="warning", message=f"{describe_element(el).capitalize()}: заливка #{el.fill} не из палитры",
                     element_ids=[el.id], box=el.box, fixable=True,
                     fix_hint="заменить цвет ближайшим из палитры",
                 ))
@@ -138,7 +138,7 @@ def check_pattern(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
         if scene.pattern_id not in ids:
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="template.pattern", kind="deterministic",
-                severity="error", message=f"Паттерн «{scene.pattern_id}» отсутствует в дизайн-системе",
+                severity="error", message=f"Образца «{scene.pattern_id}» нет в дизайн-системе",
                 element_ids=[], box=None, fixable=False,
             ))
     return findings
@@ -187,7 +187,7 @@ def check_contrast(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.contrast", kind="deterministic",
                     severity="error",
-                    message=f"Контраст текста в {describe_element(el)} к фону {ratio:.2f}:1 ниже 4,5:1",
+                    message=f"{describe_element(el).capitalize()}: контраст текста к фону {ratio:.1f}:1, нужно не меньше 4,5:1",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

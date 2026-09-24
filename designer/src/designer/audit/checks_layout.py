@@ -40,7 +40,7 @@ def check_out_of_bounds(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             if x < -_EPS or y < -_EPS or x + w > 1 + _EPS or y + h > 1 + _EPS:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.out_of_bounds", kind="deterministic",
-                    severity="error", message=f"{describe_element(el).capitalize()} выходит за границы слайда",
+                    severity="error", message=f"{describe_element(el).capitalize()}: выходит за границы слайда",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
@@ -80,7 +80,7 @@ def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="layout.overlap", kind="deterministic",
                         severity="error",
-                        message=f"{describe_element(a).capitalize()} и {describe_element(b)} накладываются друг на друга",
+                        message=f"{describe_element(a).capitalize()} и {describe_element(b)}: накладываются друг на друга",
                         element_ids=[a.id, b.id], box=None, fixable=False,
                     ))
     return findings
@@ -107,7 +107,7 @@ def check_text_overflow(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.text_overflow", kind="deterministic",
                     severity="error",
-                    message=f"{describe_element(el).capitalize()} не помещается в рамку при кегле {size_pt:g} pt",
+                    message=f"{describe_element(el).capitalize()}: текст не помещается в рамку при кегле {size_pt:g} пт",
                     element_ids=[el.id], box=el.box, fixable=True,
                     fix_hint="уменьшить кегль до ступени шкалы",
                 ))
@@ -132,7 +132,7 @@ def check_in_margins(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     or x + w > 1 - m.right + _EPS or y + h > 1 - m.bottom + _EPS):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.in_margins", kind="deterministic",
-                    severity="warning", message=f"{describe_element(el).capitalize()} заходит в поля слайда",
+                    severity="warning", message=f"{describe_element(el).capitalize()}: заходит в поля слайда",
                     element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
                 ))
     return findings
@@ -158,7 +158,7 @@ def check_off_guides(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.off_guides", kind="deterministic",
                     severity="warning",
-                    message=f"{describe_element(el).capitalize()}: левый край не совпадает ни с одной направляющей",
+                    message=f"{describe_element(el).capitalize()}: левый край не стоит на направляющей шаблона",
                     element_ids=[el.id], box=el.box, fixable=True, fix_hint="сдвинуть к направляющей",
                 ))
     return findings
@@ -185,7 +185,7 @@ def check_image_aspect(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="layout.image_aspect", kind="deterministic",
                     severity="warning",
-                    message=f"{describe_element(el).capitalize()} растянута относительно исходных пропорций",
+                    message=f"{describe_element(el).capitalize()}: пропорции искажены",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

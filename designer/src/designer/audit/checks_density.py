@@ -34,7 +34,7 @@ def check_bullets(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.bullets", kind="deterministic",
                     severity="warning",
-                    message=f"В {describe_element(el)} {len(lines)} пунктов вместо не более {_MAX_BULLETS}",
+                    message=f"{describe_element(el).capitalize()}: {len(lines)} пунктов, в шаблоне не больше {_MAX_BULLETS}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
@@ -53,7 +53,7 @@ def check_bullet_words(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="density.bullet_words", kind="deterministic",
                         severity="warning",
-                        message=f"Пункт «{line[:30]}…» в {describe_element(el)} длиннее {_MAX_BULLET_WORDS} слов",
+                        message=f"{describe_element(el).capitalize()}: пункт «{line[:30]}…» длиннее {_MAX_BULLET_WORDS} слов",
                         element_ids=[el.id], box=el.box, fixable=False,
                     ))
     return findings
@@ -88,7 +88,7 @@ def check_series(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.series", kind="deterministic",
                     severity="warning",
-                    message=f"На {describe_element(el)} {len(el.chart.series)} рядов вместо не более {_MAX_SERIES}",
+                    message=f"{describe_element(el).capitalize()}: {len(el.chart.series)} рядов данных, читается не больше {_MAX_SERIES}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
@@ -118,7 +118,7 @@ def check_fill(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="density.fill", kind="deterministic",
                 severity="warning",
-                message=f"Содержимое занимает {area * 100:.0f}% слайда — вне диапазона 25–75%",
+                message=f"Содержимое занимает {area * 100:.0f} % слайда, удобно от 25 до 75 %",
                 element_ids=[el.id for el in els], box=None, fixable=False,
             ))
     return findings
