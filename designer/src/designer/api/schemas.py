@@ -14,7 +14,7 @@ class DeckCreateRequest(BaseModel):
     purpose: str = ""
     audience: str = ""
     slide_count: int | None = None
-    variants: list[str] = Field(default_factory=lambda: ["a"], description="a, b, c — любое подмножество")
+    variants: list[str] = Field(default_factory=lambda: ["a", "b", "c"], description="a, b, c — любое подмножество")
 
 
 class DeckCreateResponse(BaseModel):
@@ -79,5 +79,84 @@ class HealthResponse(BaseModel):
     skills: list[SkillRef]
 
 
+class DesignSystemListItem(BaseModel):
+    id: str
+    name: str
+    source_file: str
+    patterns: int
+    preview: str | None = None
+    created_at: str
+    describe_status: Literal["pending", "running", "done", "failed"]
+
+
 class DesignSystemListResponse(BaseModel):
     ids: list[str]
+    items: list[DesignSystemListItem] = Field(default_factory=list)
+
+
+class DesignSystemPatchRequest(BaseModel):
+    name: str | None = None
+    pattern_overrides: dict[str, bool] | None = None
+    removal_confirmed: bool | None = None
+
+
+# ---------- колоды: список, правка варианта ----------
+
+class DeckListItem(BaseModel):
+    id: str
+    title: str
+    design_system_id: str
+    slides: int
+    status: Literal["running", "done", "error"]
+    started_at: str
+    preview: str | None = None
+
+
+class DeckListResponse(BaseModel):
+    items: list[DeckListItem] = Field(default_factory=list)
+
+
+class SlideTextRequest(BaseModel):
+    element_id: str
+    text: str
+
+
+class SlidePatternRequest(BaseModel):
+    pattern_id: str
+
+
+class SlidePatternOption(BaseModel):
+    pattern_id: str
+    kind: str
+    preview: str | None = None
+    current: bool = False
+
+
+class SlidePatternsResponse(BaseModel):
+    items: list[SlidePatternOption] = Field(default_factory=list)
+
+
+class SlideAskRequest(BaseModel):
+    instruction: str
+
+
+class SlideActionRequest(BaseModel):
+    action: Literal["add", "copy", "delete", "move"]
+    index: int
+    to: int | None = None
+
+
+class SlideNotesRequest(BaseModel):
+    notes: str
+
+
+class DeckRewriteRequest(BaseModel):
+    finding_id: str
+
+
+# ---------- агенты и модели (поток 2 отдаёт содержимое, здесь только форма ответа) ----------
+
+class AgentAssignmentsRequest(BaseModel):
+    deck: str | None = None
+    live: str | None = None
+    describe: str | None = None

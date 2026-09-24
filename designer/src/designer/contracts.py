@@ -53,6 +53,11 @@ class FontToken(BaseModel):
     role: Literal["heading", "body", "mono", "other"]
     share: float = Field(ge=0, le=1)
     embedded_file: str | None = Field(default=None, description="путь внутри пакета, если шрифт встроен в pptx")
+    embedded_state: Literal["extracted", "embedded_not_extracted", "missing"] = Field(
+        default="missing",
+        description="extracted — embedded_file заполнен; embedded_not_extracted — шрифт в ppt/fonts/*.fntdata "
+                    "есть, но сжат и не извлекается; missing — в файле шрифта нет",
+    )
 
 
 class TypeStep(BaseModel):
@@ -182,15 +187,32 @@ class LayoutInfo(BaseModel):
     pictures: list[Box] = Field(default_factory=list, description="картинки макета не на весь кадр: диаграмма и таблица на них не встают")
 
 
+class DescribeStatus(BaseModel):
+    """Ход описания образцов моделью: пишет pipeline.run_describe, читает экран поллингом."""
+    status: Literal["pending", "running", "done", "failed"] = "pending"
+    done: int = 0
+    total: int = 0
+    error: str = ""
+
+
 class DesignSystem(BaseModel):
     schema_version: str = SCHEMA_VERSION
     id: str
     source_file: str = Field(description="имя исходного файла без пути")
+    name: str = Field(default="", description="имя системы; по умолчанию из имени файла")
+    created_at: str = Field(default="", description="время импорта, ISO 8601")
     slide_size_emu: tuple[int, int]
     tokens: Tokens
     assets: list[Asset] = Field(default_factory=list)
     layouts: list[LayoutInfo] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)
+    pattern_overrides: dict[str, bool] = Field(
+        default_factory=dict,
+        description="решение автора по образцу: true — в вёрстке, false — убран; "
+                    "нет ключа — действует предложение модели needs_images",
+    )
+    removal_confirmed: bool = Field(default=False, description="автор нажал «Согласен» под полосой убранных образцов")
+    describe: DescribeStatus = Field(default_factory=DescribeStatus)
 
 
 # ---------- План презентации ----------

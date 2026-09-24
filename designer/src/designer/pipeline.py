@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from designer import store
+from designer.agent_hook import _client_for
 from designer.audit import fixes as audit_fixes
 from designer.audit.contextual import audit_deck, audit_slide
 from designer.audit.deterministic import run_checks
@@ -48,6 +49,13 @@ from designer.parse.describe import describe_patterns
 from designer.parse.package import build_package, load_package
 from designer.plan.planner import make_plan
 from designer.plan.writer import fill_slots, speech_to_slide
+
+PREVIEW_WIDTH_PX = 640
+"""Ширина превью образца при импорте (contracts.md, поток 1): узнаваемо, но не тяжело."""
+
+
+class CorruptedTemplateError(ValueError):
+    """pptx не открылся: файл повреждён или сохранён не до конца."""
 
 _PLAN_SKILL = "plan-deck"
 _FILL_SKILL = "fill-slots"
@@ -96,7 +104,14 @@ def _pattern_ids_for_plan(plan: DeckPlan, ds: DesignSystem) -> list[str]:
 # ---------- импорт шаблона ----------
 
 def import_template(pptx_bytes: bytes, filename: str) -> DesignSystem:
-    """Разбирает загруженный pptx и кладёт пакет дизайн-системы в хранилище."""
+    """Разбирает загруженный pptx без модели (секунды) и кладёт пакет в хранилище.
+
+    Превью образцов строятся тут же (движок конвертации, без модели). Описание образцов
+    моделью в этот шаг не входит: его запускает отдельно run_describe, обычно в фоне
+    (см. api.app.upload_design_system). Одинаковый файл, загруженный повторно, получает
+    новый id с суффиксом -2, -3: прежняя система с её решениями по образцам остаётся.
+    Файл, который python-pptx не открыл, даёт CorruptedTemplateError.
+    """
     with tempfile.TemporaryDirectory(prefix="designer-import-") as tmp:
         tmp_root = Path(tmp)
         pptx_path = tmp_root / "upload" / (Path(filename).name or "template.pptx")
@@ -104,40 +119,208 @@ def import_template(pptx_bytes: bytes, filename: str) -> DesignSystem:
         pptx_path.write_bytes(pptx_bytes)
 
         staging_dir = tmp_root / "package"
-        design_system = build_package(pptx_path, staging_dir)
-        design_system = _describe(design_system, pptx_path, staging_dir)
+        try:
+            design_system = build_package(pptx_path, staging_dir)
+        except Exception as error:
+            raise CorruptedTemplateError(str(error)) from error
+
+        unique_id = _unique_ds_id(design_system.id)
+        total = len(design_system.patterns)
+        design_system = design_system.model_copy(update={
+            "id": unique_id,
+            "describe": design_system.describe.model_copy(update={"status": "running", "total": total, "done": 0}),
+        })
+        design_system = _generate_previews(design_system, pptx_path, staging_dir)
+        _write_manifest(staging_dir, design_system)
 
         dest = store.design_system_dir(design_system.id)
-        if dest.exists():
-            shutil.rmtree(dest)
         shutil.move(str(staging_dir), str(dest))
     return design_system
 
 
-# ---------- генерация колоды ----------
+def _unique_ds_id(base_id: str) -> str:
+    """base_id, если свободен; иначе base_id-2, base_id-3, ... — прежняя система не стирается."""
+    existing = set(store.list_design_system_ids())
+    if base_id not in existing:
+        return base_id
+    n = 2
+    while f"{base_id}-{n}" in existing:
+        n += 1
+    return f"{base_id}-{n}"
 
-def _describe(ds: DesignSystem, pptx_path: Path, package_dir: Path) -> DesignSystem:
-    """Модель досказывает по картинке образца, для чего слайд и держится ли он на фото.
 
-    Геометрия не видит плашку под фото, вшитую в фон макета: без описания такой паттерн
-    берётся под текст и на слайде остаётся пустой белый квадрат. Сбой модели или движка
-    картинок импорт не роняет: паттерны остаются такими, какими их дал разбор.
-    DESIGNER_DESCRIBE=0 выключает шаг.
+def _write_manifest(package_dir: Path, ds: DesignSystem) -> None:
+    (package_dir / "manifest.json").write_text(ds.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _generate_previews(ds: DesignSystem, pptx_path: Path, package_dir: Path) -> DesignSystem:
+    """Картинка каждого образца, 640px, без модели: Pattern.preview = "previews/<id>.png".
+
+    Движка конвертации нет — превью просто не строятся, импорт не падает.
     """
-    if os.environ.get("DESIGNER_DESCRIBE", "1") == "0" or not ds.patterns:
+    if not ds.patterns or not convert.available():
         return ds
+    previews_dir = package_dir / "previews"
+    previews_dir.mkdir(parents=True, exist_ok=True)
     try:
-        client = LlmClient.from_env()
         session = convert.get_session()
-        by_slide = {p.source_slide - 1: p.id for p in ds.patterns}
-        with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
-            pngs = dict(zip(by_slide.values(), pool.map(lambda i: session.png(pptx_path, i, 640), by_slide)))
-        described = describe_patterns(ds, pngs, client)
-    except Exception as error:  # noqa: BLE001 - шаг необязательный, причина уходит в журнал
-        print(f"описание паттернов пропущено: {error}", flush=True)
+        updated: list[Pattern] = []
+        for pattern in ds.patterns:
+            try:
+                png = session.png(pptx_path, pattern.source_slide - 1, PREVIEW_WIDTH_PX)
+            except Exception as error:  # noqa: BLE001 - превью необязательны, причина в журнал
+                print(f"превью образца {pattern.id} пропущено: {error}", flush=True)
+                updated.append(pattern)
+                continue
+            rel = f"previews/{pattern.id}.png"
+            (package_dir / rel).write_bytes(png)
+            updated.append(pattern.model_copy(update={"preview": rel}))
+        return ds.model_copy(update={"patterns": updated})
+    except Exception as error:  # noqa: BLE001 - движок не поднялся: превью пропущены целиком
+        print(f"превью образцов пропущены: {error}", flush=True)
         return ds
-    (package_dir / "manifest.json").write_text(described.model_dump_json(indent=2), encoding="utf-8")
-    return described
+
+
+# ---------- описание образцов моделью (в фоне) ----------
+
+def start_describe(ds_id: str) -> DesignSystem:
+    """Переводит describe в running и возвращает систему: вызывающий код сам планирует run_describe в фоне."""
+    package_dir = store.design_system_dir(ds_id)
+    ds = load_package(package_dir)
+    total = len(ds.patterns)
+    updated = ds.model_copy(update={
+        "describe": ds.describe.model_copy(update={"status": "running", "total": total, "done": 0, "error": ""}),
+    })
+    _write_manifest(package_dir, updated)
+    return updated
+
+
+def run_describe(ds_id: str) -> None:
+    """Модель дописывает назначение образцов по уже построенным превью. Решения автора
+    (pattern_overrides, removal_confirmed) не трогает — они лежат отдельным полем DesignSystem.
+
+    Решено по ред-тиму 2026-09-24: done меняется с 0 сразу на total по завершении пакета,
+    а не по одному образцу — построчный прогресс требует хука внутри parse/describe.py,
+    файла не из списка потока 1.
+    """
+    package_dir = store.design_system_dir(ds_id)
+    try:
+        ds = load_package(package_dir)
+    except (store.InvalidId, FileNotFoundError):
+        return
+
+    if os.environ.get("DESIGNER_DESCRIBE", "1") == "0" or not ds.patterns:
+        done = ds.model_copy(update={"describe": ds.describe.model_copy(update={
+            "status": "done", "total": len(ds.patterns), "done": len(ds.patterns), "error": "",
+        })})
+        _write_manifest(package_dir, done)
+        return
+
+    try:
+        client = _client_for("describe")
+        try:
+            pngs: dict[str, bytes] = {}
+            for pattern in ds.patterns:
+                if not pattern.preview:
+                    continue
+                path = package_dir / pattern.preview
+                if path.is_file():
+                    pngs[pattern.id] = path.read_bytes()
+            described = describe_patterns(ds, pngs, client)
+        finally:
+            client.close()
+    except Exception as error:  # noqa: BLE001 - сбой уходит в поле describe.error, не роняет процесс
+        failed = ds.model_copy(update={"describe": ds.describe.model_copy(update={
+            "status": "failed", "error": str(error),
+        })})
+        _write_manifest(package_dir, failed)
+        print(f"описание образцов не удалось: {error}", flush=True)
+        return
+
+    done = described.model_copy(update={"describe": described.describe.model_copy(update={
+        "status": "done", "total": len(described.patterns), "done": len(described.patterns), "error": "",
+    })})
+    _write_manifest(package_dir, done)
+
+
+# ---------- правка дизайн-системы автором ----------
+
+def patch_design_system(ds_id: str, *, name: str | None = None, pattern_overrides: dict[str, bool] | None = None,
+                         removal_confirmed: bool | None = None) -> DesignSystem:
+    """Правка автора: pattern_overrides сливается с прежним, а не заменяет его."""
+    package_dir = store.design_system_dir(ds_id)
+    ds = load_package(package_dir)
+    update: dict = {}
+    if name is not None:
+        update["name"] = name
+    if pattern_overrides is not None:
+        merged = dict(ds.pattern_overrides)
+        merged.update(pattern_overrides)
+        update["pattern_overrides"] = merged
+    if removal_confirmed is not None:
+        update["removal_confirmed"] = removal_confirmed
+    updated = ds.model_copy(update=update) if update else ds
+    _write_manifest(package_dir, updated)
+    return updated
+
+
+# ---------- список дизайн-систем и колод ----------
+
+def list_design_systems() -> list[dict]:
+    """Сводка по каждой системе для GET /design-systems, новые сверху."""
+    items = []
+    for ds_id in store.list_design_system_ids():
+        try:
+            ds = load_package(store.design_system_dir(ds_id))
+        except (store.InvalidId, FileNotFoundError):
+            continue
+        preview = next((p.preview for p in ds.patterns if p.preview), None)
+        items.append({
+            "id": ds.id,
+            "name": ds.name,
+            "source_file": ds.source_file,
+            "patterns": len(ds.patterns),
+            "preview": f"/design-systems/{ds.id}/previews/{_preview_pattern_id(ds)}.png" if preview else None,
+            "created_at": ds.created_at,
+            "describe_status": ds.describe.status,
+        })
+    items.sort(key=lambda item: item["created_at"], reverse=True)
+    return items
+
+
+def _preview_pattern_id(ds: DesignSystem) -> str:
+    return next(p.id for p in ds.patterns if p.preview)
+
+
+def list_decks() -> list[dict]:
+    """Сводка по каждой колоде для GET /decks, новые сверху."""
+    items = []
+    for deck_id in store.list_deck_ids():
+        variant_codes = store.deck_variants(deck_id)
+        variant = "a" if "a" in variant_codes else (variant_codes[0] if variant_codes else None)
+        if variant is None:
+            continue
+        state = store.load_deck_state(deck_id, variant)
+        if state is None:
+            continue
+        run = store.load_run(deck_id, variant)
+        plan = state.get("plan") or {}
+        slide_path = store.deck_variant_slide_path(deck_id, variant, 1)
+        has_preview = slide_path is not None and slide_path.is_file()
+        items.append({
+            "id": deck_id,
+            "title": plan.get("title", ""),
+            "design_system_id": state.get("design_system_id", ""),
+            "slides": len(plan.get("slides", [])),
+            "status": state.get("status", "running"),
+            "started_at": run.started_at if run is not None else "",
+            "preview": f"/decks/{deck_id}/{variant}/slides/1.png" if has_preview else None,
+        })
+    items.sort(key=lambda item: item["started_at"], reverse=True)
+    return items
+
+
+# ---------- генерация колоды ----------
 
 
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
@@ -159,7 +342,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
     ds = load_package(package_dir)
 
     owns_client = client is None
-    client = client or LlmClient.from_env()
+    client = client or _client_for("deck")
     recorder = RunRecorder(model=client.model)
     try:
         _emit(on_event, "plan")
@@ -169,6 +352,9 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
 
         plans = variant_axes.make_variants(plan, ds)
         chosen_by_a = _pattern_ids_for_plan(plans["a"], ds)
+        # План виден в состоянии сразу после этого шага, до вёрстки слайдов (по брифу).
+        for variant_code in variant_codes:
+            store.save_deck_plan(deck_id, plans[variant_code].model_dump(mode="json"), variant=variant_code)
 
         decks: dict[str, Deck] = {}
         for variant_code in variant_codes:
@@ -219,10 +405,21 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
 
     specs: list[SlideSpec] = []
     scenes: list[Scene] = []
-    for intent, pattern in zip(filled, patterns):
+    can_render = bool(convert.available())
+    slides_dir = store.deck_variant_slides_dir(deck_id, variant_code) if can_render else None
+    for index, (intent, pattern) in enumerate(zip(filled, patterns), start=1):
         spec = compose(intent, pattern, ds)
         specs.append(spec)
         scenes.append(build_scene(spec, pattern, ds, package_dir))
+        if slides_dir is not None:
+            # Картинка слайда сразу после компоновки (по брифу): лента считает готовые
+            # слайды по ней, не дожидаясь общего экспорта pptx ниже.
+            try:
+                png = render.render_spec(spec, ds, package_dir)
+            except convert.ConverterUnavailable:
+                continue
+            (slides_dir / f"slide-{index:03d}.png").write_bytes(png)
+            _emit(on_event, "slide-image", index, variant_code)
 
     _emit(on_event, "audit", None, variant_code)
     with recorder.stage(f"{variant_code}-audit"):
@@ -382,7 +579,7 @@ def run_contextual_audit(deck_id: str, variant: str, *, client: LlmClient | None
 
     scenes = [Scene.model_validate(item) for item in state["scenes"]]
     owns_client = client is None
-    client = client or LlmClient.from_env()
+    client = client or _client_for("deck")
     try:
         new_findings = _contextual_findings(scenes, png_paths, state.get("brief", ""), client)
     finally:
@@ -406,6 +603,7 @@ def apply_fixes(deck_id: str, variant: str, finding_ids: list[str]) -> tuple[lis
     state = store.load_deck_state(deck_id, variant)
     if state is None:
         raise ValueError(f"колода не найдена: {deck_id}/{variant}")
+    store.snapshot_deck_history(deck_id, variant, state)
 
     ds_id = state["design_system_id"]
     package_dir = store.design_system_dir(ds_id)
@@ -469,7 +667,7 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
     ds = load_package(package_dir)
 
     owns_client = client is None
-    client = client or LlmClient.from_env(live=True)
+    client = client or _client_for("live")
     try:
         # «other» это метка разбора для нераспознанного образца, а не тип содержания:
         # выбранный моделью, он уводил слайд на схему процесса с пустыми блоками.

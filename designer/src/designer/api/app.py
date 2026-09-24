@@ -11,19 +11,34 @@ from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Resp
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 
-from designer import pipeline, store
+from designer import edit, pipeline, store
+from designer.agent_hook import AgentCheckUnavailable, _client_for
+from designer.agent_hook import check_agent as agent_check
+from designer.agent_hook import list_agents as agent_list
+from designer.agent_hook import load_assignments as agent_load_assignments
+from designer.agent_hook import save_assignments as agent_save_assignments
 from designer.api.schemas import (
+    AgentAssignmentsRequest,
     AuditContextualResponse,
     DeckCreateRequest,
     DeckCreateResponse,
     DeckFixRequest,
     DeckFixResponse,
+    DeckListResponse,
+    DeckRewriteRequest,
     DeckStateResponse,
     DeckVariantState,
     DesignSystemListResponse,
+    DesignSystemPatchRequest,
     HealthResponse,
     LiveSlideRequest,
     LiveSlideResponse,
+    SlideActionRequest,
+    SlideAskRequest,
+    SlideNotesRequest,
+    SlidePatternRequest,
+    SlidePatternsResponse,
+    SlideTextRequest,
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
@@ -42,13 +57,16 @@ if _origins:
 
 
 def get_llm_client() -> LlmClient:
-    """Клиент модели на запрос. Переопределяется в тестах через app.dependency_overrides."""
-    return LlmClient.from_env()
+    """Клиент модели на запрос: через агента, назначенного на генерацию колоды.
+
+    Переопределяется в тестах через app.dependency_overrides.
+    """
+    return _client_for("deck")
 
 
 def get_live_llm_client() -> LlmClient:
-    """Клиент модели живого режима: своя модель из DESIGNER_LIVE_LLM_*, короткое ожидание загрузки."""
-    return LlmClient.from_env(live=True)
+    """Клиент модели живого режима: агент, назначенный на Live, короткое ожидание загрузки."""
+    return _client_for("live")
 
 
 def _not_found(ds_id_error: bool = False):
@@ -58,16 +76,21 @@ def _not_found(ds_id_error: bool = False):
 # ---------- дизайн-системы ----------
 
 @app.post("/design-systems", response_model=DesignSystem)
-async def upload_design_system(file: UploadFile = File(...)) -> DesignSystem:
+async def upload_design_system(background_tasks: BackgroundTasks, file: UploadFile = File(...)) -> DesignSystem:
+    if not (file.filename or "").lower().endswith(".pptx"):
+        raise HTTPException(400, "Файл не pptx")
     data = await file.read()
-    if not data:
-        raise HTTPException(400, "пустой файл")
-    return pipeline.import_template(data, file.filename or "template.pptx")
+    try:
+        design_system = pipeline.import_template(data, file.filename or "template.pptx")
+    except pipeline.CorruptedTemplateError:
+        raise HTTPException(400, "Файл повреждён или сохранён не до конца")
+    background_tasks.add_task(pipeline.run_describe, design_system.id)
+    return design_system
 
 
 @app.get("/design-systems", response_model=DesignSystemListResponse)
 def list_design_systems() -> DesignSystemListResponse:
-    return DesignSystemListResponse(ids=store.list_design_system_ids())
+    return DesignSystemListResponse(ids=store.list_design_system_ids(), items=pipeline.list_design_systems())
 
 
 @app.get("/design-systems/{ds_id}", response_model=DesignSystem)
@@ -76,6 +99,50 @@ def get_design_system(ds_id: str) -> DesignSystem:
         return load_package(store.design_system_dir(ds_id))
     except (store.InvalidId, FileNotFoundError):
         raise _not_found(True)
+
+
+@app.patch("/design-systems/{ds_id}", response_model=DesignSystem)
+def patch_design_system(ds_id: str, payload: DesignSystemPatchRequest) -> DesignSystem:
+    try:
+        return pipeline.patch_design_system(
+            ds_id, name=payload.name, pattern_overrides=payload.pattern_overrides,
+            removal_confirmed=payload.removal_confirmed,
+        )
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found(True)
+
+
+@app.delete("/design-systems/{ds_id}", status_code=204)
+def delete_design_system(ds_id: str) -> Response:
+    try:
+        store.design_system_dir(ds_id)  # проверка id, дальше молча — удаление идемпотентно
+    except store.InvalidId:
+        raise _not_found(True)
+    store.delete_design_system(ds_id)
+    return Response(status_code=204)
+
+
+@app.post("/design-systems/{ds_id}/describe", response_model=DesignSystem)
+def describe_design_system(ds_id: str, background_tasks: BackgroundTasks) -> DesignSystem:
+    try:
+        design_system = pipeline.start_describe(ds_id)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found(True)
+    background_tasks.add_task(pipeline.run_describe, ds_id)
+    return design_system
+
+
+@app.get("/design-systems/{ds_id}/previews/{pattern_id}.png")
+def get_design_system_preview(ds_id: str, pattern_id: str) -> FileResponse:
+    try:
+        path = store.design_system_asset_path(ds_id, f"previews/{pattern_id}.png")
+    except store.InvalidId:
+        raise _not_found(True)
+    if path is None:
+        raise HTTPException(400, "недопустимый путь")
+    if not path.is_file():
+        raise HTTPException(404, "превью не найдено")
+    return FileResponse(str(path), media_type="image/png")
 
 
 @app.get("/design-systems/{ds_id}/tokens.css")
@@ -103,6 +170,11 @@ def get_design_system_asset(ds_id: str, name: str) -> FileResponse:
 
 
 # ---------- колоды ----------
+
+@app.get("/decks", response_model=DeckListResponse)
+def list_decks() -> DeckListResponse:
+    return DeckListResponse(items=pipeline.list_decks())
+
 
 @app.post("/decks", response_model=DeckCreateResponse)
 def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
@@ -235,6 +307,117 @@ def fix_deck_variant(deck_id: str, variant: str, payload: DeckFixRequest) -> Dec
     except ValueError:
         raise HTTPException(404, "колода не найдена")
     return DeckFixResponse(report=report, findings=findings)
+
+
+# ---------- правка варианта: текст, образец, лента слайдов, агент, история ----------
+
+_EDIT_NOT_FOUND = (edit.DeckNotFound, edit.SlideNotFound, edit.ElementNotFound,
+                    edit.PatternNotFound, edit.FindingNotFound)
+
+
+def _edit_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, _EDIT_NOT_FOUND):
+        return HTTPException(404, str(exc))
+    if isinstance(exc, edit.NoHistory):
+        return HTTPException(409, str(exc))
+    return HTTPException(400, str(exc))
+
+
+@app.patch("/decks/{deck_id}/{variant}/slides/{number}/text", response_model=DeckVariantState)
+def patch_slide_text(deck_id: str, variant: str, number: int, payload: SlideTextRequest) -> DeckVariantState:
+    try:
+        edit.set_slide_text(deck_id, variant, number, payload.element_id, payload.text)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/slides/{number}/pattern", response_model=DeckVariantState)
+def post_slide_pattern(deck_id: str, variant: str, number: int, payload: SlidePatternRequest) -> DeckVariantState:
+    try:
+        edit.set_slide_pattern(deck_id, variant, number, payload.pattern_id)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.get("/decks/{deck_id}/{variant}/slides/{number}/patterns", response_model=SlidePatternsResponse)
+def get_slide_patterns(deck_id: str, variant: str, number: int) -> SlidePatternsResponse:
+    try:
+        items = edit.list_slide_patterns(deck_id, variant, number)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return SlidePatternsResponse(items=items)
+
+
+@app.post("/decks/{deck_id}/{variant}/slides/{number}/ask", response_model=DeckVariantState)
+def post_slide_ask(deck_id: str, variant: str, number: int, payload: SlideAskRequest) -> DeckVariantState:
+    try:
+        edit.ask_agent_rewrite(deck_id, variant, number, payload.instruction)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/slides", response_model=DeckVariantState)
+def post_slide_action(deck_id: str, variant: str, payload: SlideActionRequest) -> DeckVariantState:
+    try:
+        edit.apply_slide_action(deck_id, variant, payload.action, payload.index, payload.to)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.patch("/decks/{deck_id}/{variant}/notes/{number}", response_model=DeckVariantState)
+def patch_slide_notes(deck_id: str, variant: str, number: int, payload: SlideNotesRequest) -> DeckVariantState:
+    try:
+        edit.set_slide_notes(deck_id, variant, number, payload.notes)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/revert", response_model=DeckVariantState)
+def post_revert(deck_id: str, variant: str) -> DeckVariantState:
+    try:
+        edit.revert(deck_id, variant)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/rewrite", response_model=DeckVariantState)
+def post_rewrite(deck_id: str, variant: str, payload: DeckRewriteRequest) -> DeckVariantState:
+    try:
+        edit.rewrite_from_finding(deck_id, variant, payload.finding_id)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+# ---------- агенты и настройки (поток 2 наполняет designer.agents, здесь только вызов) ----------
+
+@app.get("/agents")
+def get_agents() -> dict:
+    return agent_list()
+
+
+@app.post("/agents/{agent_id}/check")
+def post_agent_check(agent_id: str) -> dict:
+    try:
+        return agent_check(agent_id)
+    except AgentCheckUnavailable:
+        raise HTTPException(503, "мост агентов не запущен")
+
+
+@app.get("/settings/agents")
+def get_agent_settings() -> dict:
+    return agent_load_assignments()
+
+
+@app.put("/settings/agents")
+def put_agent_settings(payload: AgentAssignmentsRequest) -> dict:
+    return agent_save_assignments(payload.model_dump(exclude_none=True))
 
 
 # ---------- живой режим ----------

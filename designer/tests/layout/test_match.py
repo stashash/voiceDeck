@@ -316,3 +316,38 @@ def test_pattern_with_many_idle_text_places_is_penalised():
                          items=[Item(heading="Остаток", number="14")])
     assert _idle_slots_penalty(diagram, intent) > 0
     assert _idle_slots_penalty(_cards(), intent) == 0
+
+
+# ---------- поток 1: pattern_overrides сильнее needs_images ----------
+
+def test_pattern_override_true_brings_back_a_needs_images_pattern():
+    from designer.layout.match import fits
+
+    photo = _cards("p002")
+    photo.needs_images = True
+    ds = _ds([photo]).model_copy(update={"pattern_overrides": {"p002": True}})
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+
+    assert fits(intent, photo, ds)
+
+
+def test_pattern_override_false_removes_a_pattern_the_model_kept():
+    from designer.layout.match import fits
+
+    safe = _cards("p002")
+    safe.needs_images = False
+    ds = _ds([safe]).model_copy(update={"pattern_overrides": {"p002": False}})
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+
+    assert not fits(intent, safe, ds)
+
+
+def test_choose_pattern_respects_author_override():
+    photo = _cards("p002")
+    photo.needs_images = True
+    safe = _cards("p005")
+    ds = _ds([photo, safe]).model_copy(update={"pattern_overrides": {"p002": True}})
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))
+
+    # Оба образца годятся: побеждает меньший id при равных оценках (p002 < p005).
+    assert choose_pattern(intent, ds, []).id == "p002"

@@ -285,10 +285,21 @@ def _holds_items(pattern: Pattern, intent: SlideIntent) -> bool:
     return places > taken
 
 
+def _in_layout(pattern: Pattern, ds: DesignSystem) -> bool:
+    """Решение о том, берётся ли образец в вёрстку: автор в pattern_overrides сильнее модели.
+
+    Ключа нет — действует предложение модели (needs_images значит образец убран).
+    """
+    override = ds.pattern_overrides.get(pattern.id)
+    if override is not None:
+        return override
+    return not pattern.needs_images
+
+
 def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
     """Годится ли паттерн под намерение. Негодный берут, только когда годных нет совсем."""
-    if pattern.needs_images:
-        return False  # паттерн держится на фото, а своих картинок у намерения нет
+    if not _in_layout(pattern, ds):
+        return False  # паттерн держится на фото либо автор снял его, а своих картинок у намерения нет
     if intent.kind in _PLAIN_KINDS and (pattern.groups or _samples(pattern)):
         return False
     if intent.kind is SlideKind.big_number and not _big_number_slot(pattern, ds):

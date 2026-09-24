@@ -45,3 +45,40 @@ def test_play_font_token_has_file_in_package(templates, tmp_path):
         fonts_dir = out_dir / "fonts"
         saved = list(fonts_dir.glob("Play-*"))
         assert saved, f"{path.name}: нет сохранённого файла шрифта Play в {fonts_dir}"
+
+
+# ---------- поток 1: name, created_at, embedded_state ----------
+
+def test_manifest_has_name_and_created_at(templates, tmp_path):
+    path = templates[0]
+    design_system = build_package(path, tmp_path / "out")
+    assert design_system.name  # непусто: посчитано из имени файла
+    assert design_system.created_at  # ISO 8601, непусто
+
+
+def test_display_name_replaces_underscore_and_dash_with_space(tmp_path):
+    from designer.parse.package import _display_name
+
+    assert _display_name("my_template-file.pptx") == "my template file"
+    assert _display_name("Обычное имя.pptx") == "Обычное имя"
+
+
+def test_build_package_uses_display_name_from_input_filename(templates, tmp_path):
+    import shutil
+
+    renamed = tmp_path / "my_template-file.pptx"
+    shutil.copyfile(templates[0], renamed)
+
+    design_system = build_package(renamed, tmp_path / "out")
+
+    assert design_system.name == "my template file"
+
+
+def test_font_embedded_state_is_extracted_or_missing(templates, tmp_path):
+    for path in templates:
+        design_system = build_package(path, tmp_path / path.stem)
+        for font in design_system.tokens.fonts:
+            if font.embedded_file:
+                assert font.embedded_state == "extracted", f"{path.name}: {font.family}"
+            else:
+                assert font.embedded_state in ("embedded_not_extracted", "missing"), f"{path.name}: {font.family}"

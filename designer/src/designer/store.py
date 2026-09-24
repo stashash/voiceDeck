@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import uuid
 from pathlib import Path
 
@@ -56,6 +57,13 @@ def design_system_dir(ds_id: str) -> Path:
 def list_design_system_ids() -> list[str]:
     root = design_systems_root()
     return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "manifest.json").is_file())
+
+
+def delete_design_system(ds_id: str) -> None:
+    """Удаляет папку системы целиком. Тихо, если её уже нет."""
+    path = design_system_dir(ds_id)
+    if path.is_dir():
+        shutil.rmtree(path)
 
 
 def latest_design_system_id() -> str | None:
@@ -99,6 +107,12 @@ def deck_variants(deck_id: str) -> list[str]:
     return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "deck.json").is_file())
 
 
+def list_deck_ids() -> list[str]:
+    """Id колод, у которых есть хотя бы один вариант с deck.json."""
+    root = decks_root()
+    return sorted(p.name for p in root.iterdir() if p.is_dir() and deck_variants(p.name))
+
+
 def deck_variant_dir(deck_id: str, variant: str) -> Path:
     d = deck_dir(deck_id) / _check_id(variant)
     d.mkdir(parents=True, exist_ok=True)
@@ -122,6 +136,25 @@ def deck_variant_run_path(deck_id: str, variant: str) -> Path:
 def deck_variant_file_path(deck_id: str, variant: str, name: str) -> Path | None:
     """Путь к готовому файлу варианта колоды; None — путь выходит за пределы каталога."""
     return safe_join(deck_variant_files_dir(deck_id, variant), name)
+
+
+def deck_variant_history_dir(deck_id: str, variant: str) -> Path:
+    """Снимки deck.json перед каждой правкой варианта (задача T-13, правка варианта)."""
+    d = deck_variant_dir(deck_id, variant) / "history"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def snapshot_deck_history(deck_id: str, variant: str, state: dict) -> None:
+    """Кладёт текущее deck.json варианта в history/<n>.json перед правкой, n по счёту с единицы."""
+    history_dir = deck_variant_history_dir(deck_id, variant)
+    numbers = [int(p.stem) for p in history_dir.glob("*.json") if p.stem.isdigit()]
+    n = max(numbers, default=0) + 1
+    _write_json(history_dir / f"{n}.json", state)
+
+
+def read_json_file(path: Path) -> dict:
+    return _read_json(path)
 
 
 def deck_variant_slides_dir(deck_id: str, variant: str) -> Path:
@@ -179,6 +212,16 @@ def init_deck(deck_id: str, design_system_id: str, variants: list[str] | None = 
             "status": "running", "design_system_id": design_system_id, "brief": brief,
             "plan": None, "specs": [], "scenes": [], "findings": [], "error": None,
         })
+
+
+def save_deck_plan(deck_id: str, plan: dict, variant: str = _DEFAULT_VARIANT) -> None:
+    """Пишет план в состояние варианта сразу после шага plan, до вёрстки слайдов."""
+    state = load_deck_state(deck_id, variant) or {
+        "status": "running", "design_system_id": "", "brief": "", "plan": None,
+        "specs": [], "scenes": [], "findings": [], "error": None,
+    }
+    state["plan"] = plan
+    _write_json(deck_variant_state_path(deck_id, variant), state)
 
 
 def save_deck_result(deck_id: str, deck: Deck, findings: list[Finding], variant: str = _DEFAULT_VARIANT) -> None:

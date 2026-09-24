@@ -200,6 +200,9 @@ def _fake_convert(monkeypatch, png_count: int = 5) -> None:
     monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
     monkeypatch.setattr("designer.pipeline.convert.to_pdf", fake_to_pdf)
     monkeypatch.setattr("designer.pipeline.render.render_slides", fake_render_slides)
+    # Картинка сразу после компоновки слайда (T-13, поток 1) тоже идёт через render_spec:
+    # без подмены она звала бы настоящий движок (на этой машине — PowerPoint через COM).
+    monkeypatch.setattr("designer.pipeline.render.render_spec", lambda spec, ds, package_dir: PNG)
 
 
 def test_generate_deck_with_three_variants_produces_three_pptx(templates):
@@ -434,3 +437,185 @@ def test_live_slide_without_design_system_takes_the_latest_template(templates):
     client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
     assert pipeline.live_slide("", "всем привет, начинаем", [], client=client) is None
     assert asked  # шаблон нашёлся, до модели дошло
+
+
+# ---------- поток 1: дизайн-системы (id, превью, describe, правка, список) ----------
+
+class _FakeSession:
+    """Заглушка сессии движка: отдаёт ту же фейковую картинку для любого слайда."""
+
+    def png(self, pptx_path, index, width_px=640):
+        return PNG
+
+
+def _describe_mock_client(payload: dict) -> LlmClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload)}}]})
+
+    return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+
+
+def test_import_template_twice_gives_new_id_with_suffix(templates):
+    path = templates[0]
+    first = pipeline.import_template(path.read_bytes(), path.name)
+    second = pipeline.import_template(path.read_bytes(), path.name)
+
+    assert second.id == f"{first.id}-2"
+    assert {first.id, second.id} <= set(store.list_design_system_ids())
+    assert store.design_system_dir(first.id).is_dir()
+    assert store.design_system_dir(second.id).is_dir()
+
+
+def test_import_template_rejects_corrupted_bytes():
+    with pytest.raises(pipeline.CorruptedTemplateError):
+        pipeline.import_template(b"not a pptx file at all", "broken.pptx")
+
+
+def test_import_template_does_not_run_describe(templates):
+    """import_template — только быстрый разбор; describe запускает отдельный вызов run_describe."""
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+    assert ds.describe.status == "running"
+    assert ds.describe.done == 0
+
+
+def test_previews_are_built_when_converter_is_available(templates, monkeypatch):
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.convert.get_session", lambda: _FakeSession())
+
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+
+    assert ds.patterns, "в шаблоне должен быть хотя бы один образец"
+    assert all(p.preview == f"previews/{p.id}.png" for p in ds.patterns)
+    package_dir = store.design_system_dir(ds.id)
+    for pattern in ds.patterns:
+        assert (package_dir / pattern.preview).is_file()
+
+
+def test_no_previews_without_converter(templates):
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+    assert all(p.preview is None for p in ds.patterns)
+
+
+def test_run_describe_updates_purpose_and_marks_done(templates, monkeypatch):
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.convert.get_session", lambda: _FakeSession())
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+
+    payload = {"kind": ds.patterns[0].kind.value, "purpose": "Слайд для итога", "needs_images": False}
+    monkeypatch.setattr("designer.pipeline._client_for", lambda task: _describe_mock_client(payload))
+
+    pipeline.run_describe(ds.id)
+
+    updated = pipeline.load_package(store.design_system_dir(ds.id))
+    assert updated.describe.status == "done"
+    assert updated.describe.done == updated.describe.total == len(updated.patterns)
+    assert all(p.purpose == "Слайд для итога" for p in updated.patterns)
+
+
+def test_run_describe_without_previews_still_finishes(templates):
+    """Движка нет — превью не построились, но describe не зависает и не падает."""
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+    pipeline.run_describe(ds.id)
+    updated = pipeline.load_package(store.design_system_dir(ds.id))
+    assert updated.describe.status == "done"
+
+
+def test_start_describe_resets_progress_to_running(templates, monkeypatch):
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
+    monkeypatch.setattr("designer.pipeline.convert.get_session", lambda: _FakeSession())
+    ds = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+    monkeypatch.setattr("designer.pipeline._client_for",
+                         lambda task: _describe_mock_client({"kind": ds.patterns[0].kind.value,
+                                                              "purpose": "п1", "needs_images": False}))
+    pipeline.run_describe(ds.id)
+
+    restarted = pipeline.start_describe(ds.id)
+    assert restarted.describe.status == "running"
+    assert restarted.describe.done == 0
+
+
+def test_patch_design_system_merges_pattern_overrides(templates):
+    ds_id = _import_first_template(templates)
+    original = pipeline.load_package(store.design_system_dir(ds_id))
+    first_pattern = original.patterns[0].id
+
+    pipeline.patch_design_system(ds_id, pattern_overrides={first_pattern: False})
+    once = pipeline.load_package(store.design_system_dir(ds_id))
+    assert once.pattern_overrides == {first_pattern: False}
+
+    # Второй ключ синтетический: pattern_overrides — просто словарь id -> решение,
+    # merge проверяется по факту слияния ключей, а не по существованию образца.
+    other_pattern = f"{first_pattern}-other"
+    pipeline.patch_design_system(ds_id, pattern_overrides={other_pattern: True},
+                                  name="Моя система", removal_confirmed=True)
+    twice = pipeline.load_package(store.design_system_dir(ds_id))
+    assert twice.pattern_overrides[first_pattern] is False
+    assert twice.pattern_overrides[other_pattern] is True
+    assert twice.name == "Моя система"
+    assert twice.removal_confirmed is True
+
+
+def test_list_design_systems_sorted_newest_first(templates):
+    first_id = _import_first_template(templates)
+    second = pipeline.import_template(templates[0].read_bytes(), templates[0].name)
+
+    items = pipeline.list_design_systems()
+    order = [item["id"] for item in items]
+    assert order.index(second.id) < order.index(first_id)
+    top = items[order.index(second.id)]
+    assert top["patterns"] == len(second.patterns)
+    assert top["describe_status"] == "running"
+    assert top["source_file"] == second.source_file
+
+
+def test_list_decks_sorted_newest_first_with_summary(templates):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    deck = pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                                   lambda e: None, client=client)
+
+    items = pipeline.list_decks()
+    assert items[0]["id"] == deck.id
+    assert items[0]["design_system_id"] == ds_id
+    assert items[0]["slides"] == 5
+    assert items[0]["status"] == "done"
+    assert items[0]["title"] == "План"
+    assert items[0]["preview"] is None  # конвертера в этом тесте нет
+
+
+# ---------- поток 1: план виден в состоянии до вёрстки слайдов ----------
+
+def test_plan_is_visible_in_state_before_slides_are_built(templates):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    deck_id = store.new_deck_id()
+    seen: dict = {}
+
+    def _on_event(event: pipeline.PipelineEvent) -> None:
+        if event.step == "slide" and "plan" not in seen:
+            state = store.load_deck_state(deck_id, "a")
+            seen["plan"] = state["plan"] if state else None
+
+    pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                            _on_event, deck_id=deck_id, client=client)
+
+    assert seen.get("plan") is not None
+    assert seen["plan"]["title"] == "План"
+
+
+# ---------- поток 1: картинка слайда сразу после компоновки ----------
+
+def test_slide_image_event_emitted_right_after_compose(templates, monkeypatch):
+    ds_id = _import_first_template(templates)
+    client = _mock_client(_plan_json(5))
+    _fake_convert(monkeypatch, png_count=5)
+    events: list[pipeline.PipelineEvent] = []
+
+    pipeline.generate_deck(ds_id, BRIEF, "показать эффект пилота", "регистратура", 5,
+                            events.append, client=client)
+
+    image_indices = [e.slide_index for e in events if e.step == "slide-image"]
+    assert image_indices == [1, 2, 3, 4, 5]
+    audit_pos = next(i for i, e in enumerate(events) if e.step == "audit")
+    first_image_pos = next(i for i, e in enumerate(events) if e.step == "slide-image")
+    assert first_image_pos < audit_pos

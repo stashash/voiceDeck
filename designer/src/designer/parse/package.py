@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.oxml.ns import qn
 
 from designer.contracts import DesignSystem, LayoutInfo, Pattern
 
@@ -39,6 +41,29 @@ def _slugify(name: str) -> str:
     return slug or "design-system"
 
 
+def _display_name(filename: str) -> str:
+    """Имя системы по умолчанию: имя файла без расширения, «_» и «-» — пробелами."""
+    stem = Path(filename).stem
+    name = stem.replace("_", " ").replace("-", " ")
+    while "  " in name:
+        name = name.replace("  ", " ")
+    return name.strip() or stem
+
+
+def _embedded_font_families(prs: Presentation) -> set[str]:
+    """Имена шрифтов, перечисленных в embeddedFontLst, извлечены они или нет."""
+    lst = prs.part._element.find(qn("p:embeddedFontLst"))
+    if lst is None:
+        return set()
+    families = set()
+    for embedded in lst.findall(qn("p:embeddedFont")):
+        font_el = embedded.find(qn("p:font"))
+        family = font_el.get("typeface") if font_el is not None else None
+        if family:
+            families.add(family)
+    return families
+
+
 def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
     """Пишет out_dir/manifest.json, tokens.css, assets/, fonts/ и возвращает манифест."""
     pptx_path = Path(pptx_path)
@@ -54,10 +79,16 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
     assets = extract_assets(pptx_path, out_dir)
 
     font_files = _extract_embedded_fonts(prs, out_dir / "fonts")
+    embedded_families = _embedded_font_families(prs)
     for font_token in tokens.fonts:
         rel_path = font_files.get(font_token.family)
         if rel_path:
             font_token.embedded_file = rel_path
+            font_token.embedded_state = "extracted"
+        elif font_token.family in embedded_families:
+            font_token.embedded_state = "embedded_not_extracted"
+        else:
+            font_token.embedded_state = "missing"
 
     try:
         patterns: list[Pattern] = extract_patterns(pptx_path)
@@ -72,6 +103,8 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
     design_system = DesignSystem(
         id=_slugify(pptx_path.name),
         source_file=pptx_path.name,
+        name=_display_name(pptx_path.name),
+        created_at=datetime.now(timezone.utc).isoformat(),
         slide_size_emu=slide_size_emu,
         tokens=tokens,
         assets=assets,
