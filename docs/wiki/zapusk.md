@@ -7,18 +7,26 @@
 | Windows 10 или 11, Docker Desktop с Linux-контейнерами | Java-сервис речи, сервис `designer`, PostgreSQL |
 | [LM Studio](https://lmstudio.ai) | сервер модели на порту 1234 |
 | Видеокарта NVIDIA от 24 ГБ | Qwen3.8-27B с контекстом 20k на четыре запроса занимает 22,7 ГБ |
-| PowerShell, `tar`, Node.js 22 или новее | веса распознавания речи и сквозные прогоны |
-| Python 3.12 | только для тестов `designer` вне контейнера |
+| PowerShell 7 (`pwsh`), `tar`, Node.js 22 или новее | веса распознавания речи и сквозные прогоны |
+| Python 3.12 | мост к CLI-агентам и тесты `designer` вне контейнера |
+| Git | клонировать репозиторий |
 
-## 1. Веса распознавания речи
+## 1. Репозиторий и веса распознавания речи
 
-1. В корне репозитория выполните:
+1. Клонируйте репозиторий и перейдите в него:
 
    ```powershell
-   ./scripts/setup-models.ps1
+   git clone https://github.com/stashash/voiceDeck.git
+   cd voiceDeck
    ```
 
-Скрипт кладёт в `models/` GigaAM-v3, Silero VAD и библиотеки sherpa-onnx и сверяет их SHA-256.
+2. Скачайте веса:
+
+   ```powershell
+   pwsh scripts/setup-models.ps1
+   ```
+
+Скрипт кладёт в `models/` GigaAM-v3, Silero VAD и MiniLM для смысловых фрагментов, в `native/` библиотеки sherpa-onnx и сверяет их SHA-256. Если `.env` ещё нет, он копирует `.env.example`: настройки там уже под LM Studio.
 
 ## 2. Модели в LM Studio
 
@@ -41,22 +49,7 @@
 
 ## 3. Настройки
 
-1. Скопируйте пример:
-
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-2. В `.env` замените эти строки:
-
-   ```ini
-   MODE=live
-   SLIDE_MODE=designer
-   EMBEDDING_URL=http://host.docker.internal:1234/v1
-   EMBEDDING_MODEL=text-embedding-bge-m3
-   ```
-
-`MODE=live` включает микрофон, поле для текста вместо микрофона работает в обоих режимах, пока не идёт запись. `SLIDE_MODE=designer` строит слайды Live-режима по дизайн-системе. Остальные переменные описаны в [README](../../README.md#переменные-окружения).
+Менять ничего не нужно: `.env` из шага 1 уже содержит `MODE=live`, `SLIDE_MODE=designer` и адрес LM Studio. `MODE=live` включает микрофон, поле для текста вместо микрофона работает, пока не идёт запись. `SLIDE_MODE=designer` строит слайды Live-режима по дизайн-системе. Остальные переменные описаны в [README](../../README.md#переменные-окружения).
 
 ## 4. Стек
 
@@ -71,5 +64,19 @@
 4. Откройте в Chrome или Edge `http://localhost:8088`.
 
 Первая сборка идёт несколько минут: в неё входят Java-тесты и LibreOffice для картинок слайдов. Контейнеры поднимаются сами после перезапуска Docker, модели в LM Studio нет: после перезагрузки машины запустите `scripts/start-models.ps1`.
+
+## 5. CLI-агенты, по желанию
+
+Qwen в LM Studio работает без этого шага. Чтобы слайды писали Claude Code, Codex, Cursor Agent или OpenCode, запустите в корне репозитория мост и оставьте окно открытым:
+
+```powershell
+python scripts/agent_bridge.py
+```
+
+Подробности и проверка агента: [агенты](agenty.md).
+
+## 6. Первая дизайн-система
+
+На свежей установке дизайн-систем нет. Откройте **Дизайн-системы**, нажмите кнопку загрузки и выберите любой pptx: [как это выглядит](prezentaciya-po-brifu.md#сделать-дизайн-систему-из-pptx).
 
 Дальше: [презентация по брифу](prezentaciya-po-brifu.md) или [Live-режим](zhivoy-rezhim.md).

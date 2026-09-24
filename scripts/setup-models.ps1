@@ -30,5 +30,5 @@ if (-not (Test-Path -LiteralPath $model)) {
 $config = Join-Path $taskRoot 'models/config.json'
 if (-not (Test-Path -LiteralPath $config)) { Copy-Item -LiteralPath (Join-Path $taskRoot 'docs/live-models.json') -Destination $config }
 $envFile = Join-Path $taskRoot '.env'
-if (-not (Test-Path -LiteralPath $envFile)) { [System.IO.File]::WriteAllText($envFile, "MODE=live`nSLIDE_MODE=sketch`nAPP_PORT=8088`n") }
-Write-Host 'Models verified. Set MODE=live and SLIDE_MODE=sketch in .env, then run docker compose up --build -d.'
+if (-not (Test-Path -LiteralPath $envFile)) { Copy-Item -LiteralPath (Join-Path $taskRoot '.env.example') -Destination $envFile }
+Write-Host 'Models verified, .env is ready. Next: pwsh scripts/start-models.ps1, then docker compose up --build -d (docs/wiki/zapusk.md).'
