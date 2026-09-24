@@ -17,6 +17,7 @@ import uuid
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
+from designer.plan.numerals import digits_from_speech
 
 _FILL_SKILL = "fill-slots"
 _SPEECH_SKILL = "speech-to-slide"
@@ -67,13 +68,23 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     schema = _speech_schema(kinds)
     system = skill.render(kinds=", ".join(kind.value for kind in kinds))
 
-    data = client.complete_json(system=system, user=chunk_text, schema=schema, params=skill.params)
+    # Распознанная речь несёт числа словами. Модель переводила их сама и ошибалась на времени:
+    # «к половине девятого» становилось «6:00». Код переводит их до модели, и числа на слайде
+    # сверяются с тем, что сказал докладчик.
+    spoken = digits_from_speech(chunk_text)
+    data = client.complete_json(system=system, user=spoken, schema=schema, params=skill.params)
     intent = _speech_intent(data, kinds)
-    # В распознанной речи числа идут словами («к восьми тридцати»), модель пишет их цифрами.
-    # Сверить цифры слайда с такими словами нечем: вычистка превращала «к 8:30» в «к :».
-    # Поэтому сверяем только фрагменты без числительных: там любое число на слайде выдумано.
-    if intent.title and not _NUMBER_WORDS.search(chunk_text):
-        _drop_unknown_numbers(intent, _numbers_in_text(chunk_text), strip_text=True)
+    if intent.title:
+        facts = _speech_facts(spoken)
+        unknown = _speech_values_in_intent(intent) - facts
+        if unknown:
+            # Один повтор с перечнем чужих чисел: вычистка оставляет дыру во фразе, исправление нет.
+            retry = client.complete_json(system=system, user=_speech_retry_note(spoken, unknown, facts),
+                                         schema=schema, params=skill.params)
+            fixed = _speech_intent(retry, kinds)
+            if fixed.title:
+                intent = fixed
+        _strip_speech_values(intent, facts)
     # Крупное число держит одно значение. Несколько показателей в одной реплике это карточки,
     # иначе пункты втискиваются в подписи под одним числом.
     if intent.kind is SlideKind.big_number and len(intent.items) > 1 and SlideKind.cards in kinds:
@@ -81,9 +92,54 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     return intent
 
 
-_NUMBER_WORDS = re.compile(
-    r"\b(ноль|один|одн[аоуи]|дв[аеу]|двух|три|тр[её]х|четыр|пят|шест|сем[ьи]|восем|восьм|девят|десят|сорок|девяност"
-    r"|сто\b|ста\b|сот|тысяч|миллион|миллиард|полтор|процент)", re.IGNORECASE)
+# ---------- числа во фрагменте речи ----------
+
+_SPEECH_VALUE = re.compile(r"\d{1,2}:\d{2}|\d+(?:[.,]\d+)?")
+"""Число или время: «8:30» сверяется целиком, иначе «6:00» прошло бы за счёт «6 недель»."""
+_HOUR_MENTION = re.compile(r"\b(?:в|к|до|с|со|после|около)\s+(\d{1,2})\b(?![:.,]\d)", re.IGNORECASE)
+_SPEECH_PHRASE = re.compile(
+    r"(?:\b(?:в|на|до|с|со|к|от|по|после|около)\s+)?(\d{1,2}:\d{2}|\d+(?:[.,]\d+)?)"
+    r"(?:\s*(?:%|раза?\b|процент\w*|час\w*|минут\w*|дн\w*|недел\w*|месяц\w*|раз\b|утра\b|вечера\b|ночи\b))?",
+    re.IGNORECASE)
+"""Чужое число уходит с предлогом и единицей: «до 6:00 утра» целиком, иначе во фразе дыра."""
+
+
+def _speech_value(token: str) -> str:
+    return token.replace(",", ".")
+
+
+def _speech_facts(spoken: str) -> set[str]:
+    """Числа и время, сказанные докладчиком. «к 11» разрешает и «11», и «11:00»."""
+    facts = {_speech_value(token) for token in _SPEECH_VALUE.findall(spoken)}
+    for match in _HOUR_MENTION.finditer(spoken):
+        if int(match.group(1)) <= 24:
+            facts.add(f"{int(match.group(1))}:00")
+    return facts
+
+
+def _speech_values_in_intent(intent: SlideIntent) -> set[str]:
+    texts = [intent.title, intent.key_message] + [part for item in intent.items for part in (item.heading, item.body)]
+    return {_speech_value(token) for text in texts for token in _SPEECH_VALUE.findall(text or "")}
+
+
+def _speech_retry_note(spoken: str, unknown: set[str], facts: set[str]) -> str:
+    said = ", ".join(sorted(facts)) if facts else "чисел нет"
+    return (f"{spoken}\n\nВ прошлом ответе были числа, которых во фрагменте нет: {', '.join(sorted(unknown))}. "
+            f"Во фрагменте сказано только это: {said}. Пиши числа и время ровно так, как во фрагменте, "
+            "ничего не пересчитывай.")
+
+
+def _strip_speech_values(intent: SlideIntent, facts: set[str]) -> None:
+    def clean(text: str) -> str:
+        cleaned = _SPEECH_PHRASE.sub(
+            lambda m: m.group(0) if _speech_value(m.group(1)) in facts else "", text)
+        return re.sub(r"\s{2,}", " ", cleaned).strip()
+
+    intent.title = clean(intent.title)
+    intent.key_message = clean(intent.key_message)
+    for item in intent.items:
+        item.heading = clean(item.heading)
+        item.body = clean(item.body)
 
 
 # ---------- схема ответа ----------
@@ -269,33 +325,11 @@ def _numbers_in_intent(intent: SlideIntent) -> set[str]:
     return numbers
 
 
-_NUMBER_PHRASE = re.compile(
-    r"(?:\b(?:в|на|до|с|к|от|по)\s+)?(\d+(?:[.,]\d+)?)"
-    r"(?:\s*(?:%|раза?\b|процент\w*|час\w*|минут\w*|дн\w*|недел\w*|месяц\w*|раз\b))?",
-    re.IGNORECASE)
-"""Число вместе с предлогом перед ним и единицей после: уходят целиком, иначе во фразе дыра («в раза»)."""
-
-
-def _strip_unknown_numbers(text: str, allowed: set[str]) -> str:
-    def _replace(match: re.Match[str]) -> str:
-        return match.group(0) if match.group(1).replace(",", ".") in allowed else ""
-
-    cleaned = _NUMBER_PHRASE.sub(_replace, text)
-    return re.sub(r"\s{2,}", " ", cleaned).strip()
-
-
-def _drop_unknown_numbers(draft: SlideIntent, allowed: set[str], strip_text: bool = False) -> None:
-    """Убирает числа, которых нет во входе. Из фраз цифры вырезаются только при strip_text:
-    так делает живой режим, когда во фрагменте речи чисел нет вовсе и любое число выдумано.
-    Для брифа фразы не трогаем: вырезание калечило текст («к 11:00» превращалось в «к 11:»),
-    незнакомое число в тексте находит аудит."""
-    if strip_text:
-        draft.title = _strip_unknown_numbers(draft.title, allowed)
-        draft.key_message = _strip_unknown_numbers(draft.key_message, allowed)
+def _drop_unknown_numbers(draft: SlideIntent, allowed: set[str]) -> None:
+    """Убирает крупные числа пунктов, которых нет во входе. Фразы брифа не трогаем: вырезание
+    калечило текст («к 11:00» превращалось в «к 11:»), незнакомое число в тексте находит аудит.
+    Живой режим сверяет фразы сам: _strip_speech_values."""
     for item in draft.items:
-        if strip_text:
-            item.heading = _strip_unknown_numbers(item.heading, allowed)
-            item.body = _strip_unknown_numbers(item.body, allowed)
         if item.number is not None and _numbers_in_text(item.number) - allowed:
             item.number = None
 

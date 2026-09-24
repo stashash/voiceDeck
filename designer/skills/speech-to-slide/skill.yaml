@@ -1,5 +1,5 @@
 name: speech-to-slide
-version: "1"
+version: "2"
 temperature: 0.2
 max_tokens: 400
 reasoning_effort: none

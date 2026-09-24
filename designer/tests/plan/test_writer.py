@@ -195,7 +195,38 @@ def test_speech_to_slide_keeps_digits_for_spoken_numerals():
 
 
 def test_unknown_number_leaves_with_its_preposition_and_unit():
-    from designer.plan.writer import _strip_unknown_numbers
-    allowed = {"9", "2", "12"}
-    assert _strip_unknown_numbers("Инциденты сократились в 4,5 раза при росте затрат на 12%", allowed) == (
-        "Инциденты сократились при росте затрат на 12%")
+    from designer.contracts import SlideIntent
+    from designer.plan.writer import _strip_speech_values
+    intent = SlideIntent(id="s", kind=SlideKind.title,
+                         title="Инциденты сократились в 4,5 раза при росте затрат на 12%")
+    _strip_speech_values(intent, {"9", "2", "12"})
+    assert intent.title == "Инциденты сократились при росте затрат на 12%"
+
+
+def test_speech_to_slide_sends_digits_and_fixes_wrong_time():
+    # Qwen писал «6:00» на «к половине девятого»: модель получает цифры, чужое время уходит на повтор.
+    wrong = {"kind": "title", "title": "Отчёт готов к 6:00 утра", "key_message": "", "items": []}
+    right = {"kind": "title", "title": "Отчёт готов к 8:30 утра", "key_message": "", "items": []}
+    bodies: list[dict] = []
+    answers = iter([wrong, right])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(next(answers))}}]})
+
+    client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+    intent = speech_to_slide("Отчёт теперь готов к половине девятого утра, а не к одиннадцати.",
+                             [SlideKind.title], client)
+
+    assert "к 8:30 утра, а не к 11" in bodies[0]["messages"][-1]["content"]
+    assert "6:00" in bodies[1]["messages"][-1]["content"]
+    assert intent.title == "Отчёт готов к 8:30 утра"
+
+
+def test_speech_to_slide_strips_time_the_speaker_did_not_say():
+    wrong = {"kind": "title", "title": "Подготовка отчёта до 6:00 утра", "key_message": "", "items": []}
+    client = _client_returning(wrong, wrong)
+    intent = speech_to_slide("Пилот занял шесть недель, отчёт готов к половине девятого.", [SlideKind.title], client)
+
+    # «6» сказано («шесть недель»), а время 6:00 нет: оно уходит вместе с предлогом.
+    assert intent.title == "Подготовка отчёта"
