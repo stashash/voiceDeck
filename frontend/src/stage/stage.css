@@ -1,33 +1,5 @@
-/* Пульт спикера и окно зала живого режима. */
-.stage{flex:1;display:flex;flex-direction:column;padding:24px 32px;gap:16px;background:#f6f7f4;min-height:0}
-.stage-head{display:flex;align-items:center;gap:14px}
-.stage-connection{display:flex;align-items:center;gap:7px;font-size:11px;color:#879080}
-.stage-connection span{width:6px;height:6px;border-radius:50%;background:#c7cdbe;display:inline-block}
-.stage-connection span.on{background:#4b7755}
-.stage-select{border:1px solid #dce2d8;border-radius:7px;padding:9px 12px;font-size:12px;color:#3d5646;background:white}
-.stage-body{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;flex:1;min-height:0}
-.stage-slide{border:1px solid #e2e7dc;border-radius:10px;background:#fcfdf9;padding:18px;display:flex;flex-direction:column;min-height:0}
-.stage-slide h3{margin:0 0 12px;font-size:11px;letter-spacing:.5px;color:#7d916c;font-weight:600;text-transform:uppercase}
-.stage-frame-wrap{flex:1;border-radius:6px;overflow:hidden;background:#111;min-height:0}
-.stage-frame{width:100%;height:100%;border:0;display:block}
-.stage-sketch{flex:1;overflow:auto}
-.stage-sketch h4{font-family:Georgia,'Times New Roman',serif;font-size:20px;margin:0 0 12px;font-weight:400}
-.stage-sketch ul{padding-left:16px;font-size:13px;color:#5f6d56;line-height:1.7;margin:0}
-.stage-empty{flex:1;display:grid;place-items:center;color:#a0aa94;font-size:12px}
-.stage-transcript{border-top:1px solid #e5ecd9;padding-top:12px;max-height:130px;overflow:auto;font-size:12px;color:#6a7a60;line-height:1.9}
-.stage-transcript p{margin:0}
-.stage-transcript time{color:#9da992;margin-right:8px;font-variant-numeric:tabular-nums}
-.stage-partial{color:#909c87;font-style:italic}
-.stage-partial span{color:#497549}
-.stage-empty-line{color:#a0aa94}
-.stage-controls{display:flex;align-items:center;gap:16px}
-.stage-composer{display:flex;gap:8px;flex:1}
-.stage-composer input{flex:1;border:1px solid #dce2d8;border-radius:7px;padding:10px 12px;font:inherit;font-size:12px;color:#3d5646}
-.stage-keys{margin-left:auto;display:flex;gap:8px;font-size:10px;color:#9ba88c;align-items:center}
-.stage-keys kbd{border:1px solid #d5dfc7;border-radius:4px;padding:2px 6px;font:inherit;background:white;margin-right:4px}
-
-/* Окно зала: только слайд и субтитры на весь экран. */
-.audience-page{position:fixed;inset:0;background:#0c1210;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+/* Окно зала живого режима: только слайд и субтитры на весь экран. */
+.audience-page{position:fixed;inset:0;background:#0c1210;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Onest',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .audience-fade{opacity:0;transition:opacity .3s ease;width:min(92vw,1600px);aspect-ratio:16/9;display:flex}
 .audience-fade.visible{opacity:1}
 .audience-frame{width:100%;height:100%;border:0;background:#fff;border-radius:4px}
@@ -37,3 +9,32 @@
 .audience-empty{width:100%;height:100%;display:grid;place-items:center;color:#5a6a60;font-size:20px;background:#141b18;border-radius:4px}
 .audience-subtitle{position:fixed;left:0;right:0;bottom:0;padding:22px 40px;text-align:center;color:#eef2ea;font-size:24px;line-height:1.5;background:linear-gradient(0deg,rgba(0,0,0,.55),transparent)}
 .audience-subtitle .tail{color:#93a58c}
+
+/* Live-режим: пульт спикера. */
+.live-shell{min-height:100vh}
+.live-topbar{display:flex;align-items:center;gap:16px;padding:16px 32px;border-bottom:1px solid var(--border)}
+.live-idle{flex-grow:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px}
+.live-idle-composer{display:flex;flex-direction:column;gap:10px;align-items:center}
+.live-idle-hint{font-size:12px;color:var(--text-muted)}
+.live-text-form{display:flex;gap:8px;width:480px;max-width:90vw}
+.live-text-form input{flex-grow:1;height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:0 12px;font-family:var(--font);font-size:14px}
+.live-main{flex-grow:1;display:grid;grid-template-columns:1.3fr 1fr;gap:20px;padding:24px 32px;min-height:0}
+.live-slide-col{display:flex;flex-direction:column;gap:10px;min-height:0}
+.live-slide-col h3{font-size:12px;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin:0}
+.live-slide-box{flex-grow:1;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden;display:flex}
+.live-slide-empty{flex:1;display:grid;place-items:center;color:var(--text-muted);font-size:12px}
+.live-frame{width:100%;height:100%;border:0}
+.live-sketch{flex:1;overflow:auto;padding:20px}
+.live-sketch h4{font-family:Georgia,serif;font-size:20px;margin:0 0 12px;font-weight:400}
+.live-sketch ul{padding-left:16px;font-size:13px;color:var(--text-muted);line-height:1.7;margin:0}
+.live-transcript{border-top:1px solid var(--border);padding:12px 32px;max-height:130px;overflow:auto;font-size:13px;color:var(--text-muted);line-height:1.9}
+.live-transcript p{margin:0}
+.live-transcript time{color:var(--text-faint);margin-right:8px;font-variant-numeric:tabular-nums}
+.live-partial{color:var(--text-muted);font-style:italic}
+.live-partial span{color:var(--accent)}
+.live-controls{display:flex;align-items:center;gap:16px;padding:16px 32px;border-top:1px solid var(--border)}
+.live-keys{margin-left:auto;display:flex;gap:8px;font-size:11px;color:var(--text-muted);align-items:center}
+.live-keys kbd{border:1px solid var(--border);border-radius:4px;padding:2px 6px;font:inherit;background:var(--surface-2);margin-right:4px}
+.live-connection{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted)}
+.live-connection span{width:6px;height:6px;border-radius:50%;background:var(--border);display:inline-block}
+.live-connection span.on{background:var(--success)}

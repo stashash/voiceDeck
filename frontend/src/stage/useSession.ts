@@ -23,6 +23,7 @@ const realTransport:CreateTransport=(c,cursor,event,status,failure)=>new Transpo
 export class SessionEngine{
  state:State=initial();credentials:Credentials|null=null;connection='Нет сессии';error='';
  currentId:string|null=null;fixedId?:string;suppressed?:string;
+ private history:(string|null)[]=[];
  transport?:TransportLike;channel?:BroadcastChannel;
  constructor(private createTransport:CreateTransport,private onChange:()=>void){}
  reset(){this.state=initial();this.currentId=null;this.fixedId=undefined;this.suppressed=undefined;}
@@ -55,7 +56,13 @@ export class SessionEngine{
  private settle(){
   const l=this.latest();
   if(!l||l.id===this.suppressed||l.id===this.currentId)return;
-  if(l.status==='confirmed'||l.id===this.fixedId)this.currentId=l.id;
+  if(l.status==='confirmed'||l.id===this.fixedId){this.history.push(this.currentId);this.currentId=l.id;}
+ }
+ /** «Вернуть прошлый»: залу снова показывается слайд, который был текущим до этого. */
+ revertPrevious(){
+  if(!this.history.length)return;
+  this.currentId=this.history.pop()??null;
+  this.broadcastSlide();this.onChange();
  }
  private broadcastSlide(){
   const slide=this.currentId?this.state.slides[this.currentId]??null:null;
@@ -86,7 +93,7 @@ export type Session={
  designSystems:string[];designSystemId:string;selectDesignSystem:(id:string)=>void;
  sessionId:string|null;current:Slide|null;draft:Slide|null;
  startRecording:()=>Promise<void>;stopRecording:()=>Promise<void>;sendText:(text:string)=>Promise<void>;
- fixDraft:()=>void;removeLast:()=>void;clearError:()=>void;
+ fixDraft:()=>void;removeLast:()=>void;revertPrevious:()=>void;clearError:()=>void;
 };
 
 export function useSession():Session{
@@ -159,6 +166,7 @@ export function useSession():Session{
   draft:draftChunk?eng.state.slides[draftChunk.id]??null:null,
   startRecording,stopRecording,sendText,
   fixDraft:()=>{eng.fixDraft();force();},removeLast:()=>{eng.removeCurrent();force();},
+  revertPrevious:()=>{eng.revertPrevious();force();},
   clearError:()=>{eng.error='';force();},
  };
 }
