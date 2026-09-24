@@ -23,7 +23,7 @@ def _bullet_lines(text: str) -> list[str]:
 
 
 def check_bullets(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -34,14 +34,14 @@ def check_bullets(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.bullets", kind="deterministic",
                     severity="warning",
-                    message=f"{describe_element(el).capitalize()}: {len(lines)} пунктов, в шаблоне не больше {_MAX_BULLETS}",
+                    message=f"{upper_first(describe_element(el))}: {len(lines)} пунктов, в шаблоне не больше {_MAX_BULLETS}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings
 
 
 def check_bullet_words(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -53,14 +53,14 @@ def check_bullet_words(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="density.bullet_words", kind="deterministic",
                         severity="warning",
-                        message=f"{describe_element(el).capitalize()}: пункт «{line[:30]}…» длиннее {_MAX_BULLET_WORDS} слов",
+                        message=f"{upper_first(describe_element(el))}: пункт «{line[:30]}…» длиннее {_MAX_BULLET_WORDS} слов",
                         element_ids=[el.id], box=el.box, fixable=False,
                     ))
     return findings
 
 
 def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -70,7 +70,7 @@ def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.table", kind="deterministic",
                     severity="warning",
-                    message=(f"{describe_element(el).capitalize()}: {len(el.table.rows)} строк, "
+                    message=(f"{upper_first(describe_element(el))}: {len(el.table.rows)} строк, "
                              f"{len(el.table.columns)} колонок — больше нормы"),
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
@@ -78,7 +78,7 @@ def check_table(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 
 
 def check_series(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     findings: list[Finding] = []
     for scene in scenes:
         for el in scene.elements:
@@ -88,7 +88,7 @@ def check_series(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="density.series", kind="deterministic",
                     severity="warning",
-                    message=f"{describe_element(el).capitalize()}: {len(el.chart.series)} рядов данных, читается не больше {_MAX_SERIES}",
+                    message=f"{upper_first(describe_element(el))}: {len(el.chart.series)} рядов данных, читается не больше {_MAX_SERIES}",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

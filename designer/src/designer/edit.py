@@ -198,6 +198,26 @@ def _set_slot_text(spec: SlideSpec, slot, group, index: int | None, text: str) -
         target[index][slot.id] = text
 
 
+def _set_intent_text(intent: SlideIntent, slot, group, unit_index: int | None, text: str) -> None:
+    """Правка автора пишется и в намерение слайда: смена образца и просьба агенту пересобирают
+    слайд из намерения, и без этого ручная правка терялась (проверено 2026-09-24 в интерфейсе)."""
+    if group is None:
+        if slot.role == "title":
+            intent.title = text
+        elif slot.role in ("subtitle", "body"):
+            intent.key_message = text
+        return
+    if unit_index is None or not 0 <= unit_index < len(intent.items):
+        return
+    item = intent.items[unit_index]
+    if slot.role in ("heading", "title", "label"):
+        item.heading = text
+    elif slot.role == "number":
+        item.number = text
+    else:
+        item.body = text
+
+
 def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: str, text: str) -> None:
     state = _load(deck_id, variant)
     index = _slide_index(state, slide_number)
@@ -212,6 +232,7 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
     slot, group, unit_index = _slot_ref(el, pattern)
     if slot is not None:
         _set_slot_text(state.specs[index], slot, group, unit_index, text)
+        _set_intent_text(state.plan.slides[index], slot, group, unit_index, text)
 
     findings = _checks(state, {state.specs[index].slide_id})
     _persist(state, findings)

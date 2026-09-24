@@ -46,7 +46,7 @@ def _contrast_ratio(hex_a: str, hex_b: str) -> float:
 
 
 def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     palette = {f.family for f in ds.tokens.fonts}
     findings: list[Finding] = []
     for scene in scenes:
@@ -59,7 +59,7 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.font", kind="deterministic",
                     severity="warning",
-                    message=f"{describe_element(el).capitalize()}: шрифта «{el.style.family}» нет в дизайн-системе",
+                    message=f"{upper_first(describe_element(el))}: шрифта «{el.style.family}» нет в дизайн-системе",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
         if len(used) > _FONT_LIMIT:
@@ -76,7 +76,7 @@ def check_font(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     """Кегль в шкале шаблона допустим; кегль, которым этот слот набран в образце
     паттерна, — тоже (T-29): вёрстка часто просто повторяет образец."""
-    from designer.audit.deterministic import describe_element, pattern_by_id, sample_type_size
+    from designer.audit.deterministic import describe_element, upper_first, pattern_by_id, sample_type_size
     scale = ds.tokens.type_scale
     if not scale:
         return []
@@ -97,7 +97,7 @@ def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 continue  # крупное число подгоняется по ширине рамки, любой кегль до образца законен
             findings.append(Finding(
                 id="", slide_id=scene.slide_id, check_id="template.type_scale", kind="deterministic",
-                severity="warning", message=f"{describe_element(el).capitalize()}: кегль {size:g} пт не входит в шкалу шаблона",
+                severity="warning", message=f"{upper_first(describe_element(el))}: кегль {size:g} пт не входит в шкалу шаблона",
                 element_ids=[el.id], box=el.box, fixable=True,
                 fix_hint="уменьшить кегль до ступени шкалы",
             ))
@@ -105,7 +105,7 @@ def check_type_scale(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
 
 
 def check_color(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
-    from designer.audit.deterministic import describe_element
+    from designer.audit.deterministic import describe_element, upper_first
     palette = [c.hex for c in ds.tokens.colors]
     if not palette:
         return []
@@ -117,14 +117,14 @@ def check_color(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                     findings.append(Finding(
                         id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
                         severity="warning",
-                        message=f"{describe_element(el).capitalize()}: цвет текста #{el.style.color} не из палитры",
+                        message=f"{upper_first(describe_element(el))}: цвет текста #{el.style.color} не из палитры",
                         element_ids=[el.id], box=el.box, fixable=True,
                         fix_hint="заменить цвет ближайшим из палитры",
                     ))
             if el.fill and not _color_in_palette(el.fill, palette):
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.color", kind="deterministic",
-                    severity="warning", message=f"{describe_element(el).capitalize()}: заливка #{el.fill} не из палитры",
+                    severity="warning", message=f"{upper_first(describe_element(el))}: заливка #{el.fill} не из палитры",
                     element_ids=[el.id], box=el.box, fixable=True,
                     fix_hint="заменить цвет ближайшим из палитры",
                 ))
@@ -162,7 +162,7 @@ def _background_for(el, scene: Scene) -> str | None:
 def check_contrast(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     """Цвет текста и фон под ним, взятые из образца без изменений, находки не дают (T-29):
     вёрстка ничего не перекрашивала, а вычисленный контраст мог занизить оценку самого шаблона."""
-    from designer.audit.deterministic import describe_element, on_template, pattern_by_id, sample_type_color, template_frames
+    from designer.audit.deterministic import describe_element, upper_first, on_template, pattern_by_id, sample_type_color, template_frames
     patterns = pattern_by_id(ds)
     findings: list[Finding] = []
     for scene in scenes:
@@ -187,7 +187,7 @@ def check_contrast(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="template.contrast", kind="deterministic",
                     severity="error",
-                    message=f"{describe_element(el).capitalize()}: контраст текста к фону {ratio:.1f}:1, нужно не меньше 4,5:1",
+                    message=f"{upper_first(describe_element(el))}: контраст текста к фону {ratio:.1f}:1, нужно не меньше 4,5:1",
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

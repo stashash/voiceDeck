@@ -156,6 +156,11 @@ def _snippet(text: str) -> str:
     return line
 
 
+def upper_first(text: str) -> str:
+    """Заглавная только первая буква: str.capitalize() опускает остальные («Заголовок «перевод…»»)."""
+    return text[:1].upper() + text[1:]
+
+
 def describe_element(el: Element) -> str:
     """Человеческое имя элемента для сообщений находок: роль по-русски и начало текста,
     без внутреннего id фигуры вроде «s401» или «d1056»."""

@@ -7,7 +7,7 @@
 import re
 from collections.abc import Callable
 
-from designer.audit.deterministic import describe_element
+from designer.audit.deterministic import describe_element, upper_first
 from designer.contracts import Box, DesignSystem, Element, Finding, Pattern, Scene, SlideSpec
 
 _COLOR_CHANNEL_TOLERANCE = 8
@@ -180,7 +180,7 @@ def _fix_type_scale(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, new_size)
-    return f"{describe_element(el).capitalize()}: кегль {old_size:g} пт заменён ступенью шкалы {new_size:g} пт"
+    return f"{upper_first(describe_element(el))}: кегль {old_size:g} пт заменён ступенью шкалы {new_size:g} пт"
 
 
 def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -202,7 +202,7 @@ def _fix_color(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern
         changed.append(f"заливка #{old} заменена на #{el.fill}")
     if not changed:
         return None
-    return f"{describe_element(el).capitalize()}: " + "; ".join(changed)
+    return f"{upper_first(describe_element(el))}: " + "; ".join(changed)
 
 
 def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -231,7 +231,7 @@ def _fix_text_overflow(finding: Finding, scene: Scene, spec: SlideSpec, pattern:
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_fitted_size(spec, slot, chosen)
-    return f"{describe_element(el).capitalize()}: кегль уменьшен с {old_size:g} до {chosen:g} пт, текст помещается в рамку"
+    return f"{upper_first(describe_element(el))}: кегль уменьшен с {old_size:g} до {chosen:g} пт, текст помещается в рамку"
 
 
 def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -249,7 +249,7 @@ def _fix_off_guides(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pa
     if _creates_overlap(scene, el, new_box):
         return None
     el.box = new_box
-    return f"{describe_element(el).capitalize()}: левый край сдвинут к направляющей шаблона"
+    return f"{upper_first(describe_element(el))}: левый край сдвинут к направляющей шаблона"
 
 
 def _fix_in_margins(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Pattern | None, ds: DesignSystem):
@@ -323,7 +323,7 @@ def _fix_bullets(finding: Finding, scene: Scene, spec: SlideSpec, pattern: Patte
     slot, group, index = _slot_ref(el, pattern)
     if slot is not None:
         _set_slot_text(spec, slot, group, index, new_text)
-    return f"{describe_element(el).capitalize()}: убраны лишние пункты: {'; '.join(removed)}"
+    return f"{upper_first(describe_element(el))}: убраны лишние пункты: {'; '.join(removed)}"
 
 
 _FIXERS: dict[str, Callable] = {

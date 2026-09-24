@@ -52,3 +52,19 @@ def test_revert_without_history_raises_no_history():
 def test_rewrite_from_finding_on_missing_deck_raises_deck_not_found():
     with pytest.raises(edit.DeckNotFound):
         edit.rewrite_from_finding("no-such-deck", "a", "finding-1")
+
+
+
+def test_text_edit_is_written_to_the_slide_intent():
+    # Регрессия 2026-09-24: правка текста жила только в слоте, смена образца и просьба агенту
+    # пересобирают слайд из намерения и затирали её.
+    from types import SimpleNamespace
+    from designer.contracts import Item, SlideIntent, SlideKind
+
+    intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Было", items=[Item(heading="А", body="б")])
+    edit._set_intent_text(intent, SimpleNamespace(role="title"), None, None, "Своё название")
+    edit._set_intent_text(intent, SimpleNamespace(role="heading"), object(), 0, "Новый пункт")
+    edit._set_intent_text(intent, SimpleNamespace(role="body"), object(), 0, "Новый текст")
+    assert intent.title == "Своё название"
+    assert intent.items[0].heading == "Новый пункт"
+    assert intent.items[0].body == "Новый текст"
