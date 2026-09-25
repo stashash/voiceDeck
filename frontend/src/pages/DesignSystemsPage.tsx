@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Upload, Presentation, MonitorPlay, RotateCw, MoreHorizontal, ChevronDown, Info, AlertTriangle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
+import { Upload, Loader2, Presentation, MonitorPlay, RotateCw, MoreHorizontal, ChevronDown, Info, AlertTriangle, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
 import {
   DesignSystem, DesignSystemListItem, Pattern,
   absoluteUrl, deleteDesignSystem, describeDesignSystem, getAgentAssignments, getManifest, listAgents, listDesignSystemItems,
@@ -71,14 +71,15 @@ function Sidebar({ items, activeId }: { items: DesignSystemListItem[]; activeId?
 function NewSystem({ onUploaded }: { onUploaded: (id: string) => void }) {
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [parsing, setParsing] = useState('');
   const [badName, setBadName] = useState('');
   const [error, setError] = useState('');
 
   const submit = useCallback(async (file: File) => {
-    setBusy(true); setError(''); setBadName('');
+    setBusy(true); setParsing(file.name); setError(''); setBadName('');
     try { const ds = await uploadDesignSystem(file); onUploaded(ds.id); }
     catch (e) { setBadName(file.name); setError(String(e)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setParsing(''); }
   }, [onUploaded]);
 
   return <div className="ds-new-col">
@@ -89,7 +90,12 @@ function NewSystem({ onUploaded }: { onUploaded: (id: string) => void }) {
         ? 'Выберите презентацию PowerPoint с расширением .pptx.'
         : 'Файл повреждён или сохранён не до конца. Сохраните его в PowerPoint заново и загрузите ещё раз.'}</span>
     </div>}
-    <div className={`ds-dropzone ${drag ? 'drag' : ''}`}
+    {/* Пока сервис разбирает файл, видно какой и что именно: без этого полминуты экран молчит. */}
+    {parsing ? <div className="ds-dropzone" role="status" aria-busy="true">
+      <span className="ds-dropzone-icon"><Loader2 className="spin" size={28} strokeWidth={1.5} color="var(--accent)"/></span>
+      <span className="ds-dropzone-label">Разбираю «{parsing}»</span>
+      <span className="ds-dropzone-step">Палитра, шрифты, кегли, поля и картинки слайдов-образцов</span>
+    </div> : <div className={`ds-dropzone ${drag ? 'drag' : ''}`}
       onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
       onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) void submit(f); }}>
       <span className="ds-dropzone-icon"><Upload size={28} strokeWidth={1.5} color="var(--accent)"/></span>
@@ -98,7 +104,7 @@ function NewSystem({ onUploaded }: { onUploaded: (id: string) => void }) {
         {error ? 'Выбрать другой файл' : 'Выбрать файл'}
         <input type="file" accept=".pptx" hidden disabled={busy} onChange={e => { const f = e.target.files?.[0]; if (f) void submit(f); e.target.value = ''; }}/>
       </label>
-    </div>
+    </div>}
     <p>Сервис возьмёт из pptx палитру, шрифты, кегли, поля и слайды-образцы. Сам файл не меняется.</p>
   </div>;
 }

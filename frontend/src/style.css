@@ -277,6 +277,7 @@ p{margin:0}
 .ds-dropzone.drag{border-color:var(--accent);background:var(--accent-soft)}
 .ds-dropzone-icon{width:56px;height:56px;border-radius:10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center}
 .ds-dropzone-label{font-size:16px;font-weight:500}
+.ds-dropzone-step{font-size:13px;color:var(--text-muted)}
 .ds-upload-error{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-radius:10px;background:var(--danger-soft);border:1px solid var(--danger-border);font-size:14px;line-height:1.45}
 .ds-upload-error b{font-weight:600}
 .ds-drawer-backdrop{position:fixed;inset:0;background:rgba(8,9,12,.62);z-index:30}
