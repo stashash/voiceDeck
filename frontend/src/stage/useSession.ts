@@ -23,10 +23,13 @@ const realTransport:CreateTransport=(c,cursor,event,status,failure)=>new Transpo
 export class SessionEngine{
  state:State=initial();credentials:Credentials|null=null;connection='Нет сессии';error='';
  currentId:string|null=null;fixedId?:string;suppressed?:string;
- private history:(string|null)[]=[];
+ /** Слайд на экране зала. Сервис может разбить или склеить фрагмент речи и удалить его слайд:
+  *  зал при этом не пустеет, слайд меняет только новая законченная мысль или докладчик. */
+ shown:Slide|null=null;
+ private history:{id:string|null;slide:Slide|null}[]=[];
  transport?:TransportLike;channel?:BroadcastChannel;
  constructor(private createTransport:CreateTransport,private onChange:()=>void){}
- reset(){this.state=initial();this.currentId=null;this.fixedId=undefined;this.suppressed=undefined;}
+ reset(){this.state=initial();this.currentId=null;this.shown=null;this.history=[];this.fixedId=undefined;this.suppressed=undefined;}
  connect(c:Credentials){
   this.transport?.close();this.channel?.close();
   this.credentials=c;this.channel=new BroadcastChannel(channelName(c.id));
@@ -41,9 +44,11 @@ export class SessionEngine{
   if(e.type==='warning'){this.error=String(e.message);this.onChange();return;}
   if(e.type==='metrics')return;
   this.state=reduce(this.state,e);
-  const before=this.currentId;
+  const before=this.shown;
   this.settle();
-  if(this.currentId!==before)this.broadcastSlide();
+  // Новая ревизия слайда текущего фрагмента сменяет картинку в зале; удалённый слайд остаётся.
+  if(this.currentId&&this.state.slides[this.currentId])this.shown=this.state.slides[this.currentId];
+  if(this.shown!==before)this.broadcastSlide();
   this.broadcastSubtitle();
   this.onChange();
  }
@@ -56,17 +61,19 @@ export class SessionEngine{
  private settle(){
   const l=this.latest();
   if(!l||l.id===this.suppressed||l.id===this.currentId)return;
-  if(l.status==='confirmed'||l.id===this.fixedId){this.history.push(this.currentId);this.currentId=l.id;}
+  if(l.status==='confirmed'||l.id===this.fixedId){
+   this.history.push({id:this.currentId,slide:this.shown});
+   this.currentId=l.id;this.shown=this.state.slides[l.id]??null;
+  }
  }
  /** «Вернуть прошлый»: залу снова показывается слайд, который был текущим до этого. */
  revertPrevious(){
-  if(!this.history.length)return;
-  this.currentId=this.history.pop()??null;
+  const previous=this.history.pop();if(!previous)return;
+  this.currentId=previous.id;this.shown=previous.slide;
   this.broadcastSlide();this.onChange();
  }
  private broadcastSlide(){
-  const slide=this.currentId?this.state.slides[this.currentId]??null:null;
-  this.channel?.postMessage({kind:'slide',slide} satisfies ChannelMessage);
+  this.channel?.postMessage({kind:'slide',slide:this.shown} satisfies ChannelMessage);
  }
  private broadcastSubtitle(){
   const sentences=Object.values(this.state.sentences).sort((a,b)=>a.t0-b.t0);
@@ -76,14 +83,14 @@ export class SessionEngine{
  fixDraft(){
   const d=this.draft();if(!d)return;
   this.suppressed=undefined;this.fixedId=d.id;
-  const before=this.currentId;this.settle();
-  if(this.currentId!==before)this.broadcastSlide();
+  const before=this.shown;this.settle();
+  if(this.shown!==before)this.broadcastSlide();
   this.onChange();
  }
  /** Backspace: убирает последний слайд с экрана зала, не трогая состояние фрагментов. */
  removeCurrent(){
   if(!this.currentId)return;
-  this.suppressed=this.currentId;this.currentId=null;
+  this.suppressed=this.currentId;this.currentId=null;this.shown=null;
   this.broadcastSlide();this.onChange();
  }
 }
@@ -162,7 +169,7 @@ export function useSession():Session{
   state:eng.state,connection:eng.connection,error:eng.error,recording,busy,live,
   designSystems,designSystemId,selectDesignSystem:setDesignSystemId,
   sessionId:eng.credentials?.id??null,
-  current:eng.currentId?eng.state.slides[eng.currentId]??null:null,
+  current:eng.shown,
   draft:draftChunk?eng.state.slides[draftChunk.id]??null:null,
   startRecording,stopRecording,sendText,
   fixDraft:()=>{eng.fixDraft();force();},removeLast:()=>{eng.removeCurrent();force();},

@@ -70,6 +70,23 @@ describe('SessionEngine',()=>{
   hall.close();engine.close();
  });
 
+ it('keeps the hall slide when the service replaces its chunk',async()=>{
+  // Показанный залу слайд не пропадает, когда сервис разбивает или склеивает фрагмент речи.
+  const engine=makeEngine('s-revise');
+  const hall=listen('s-revise');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>в зале</section>')});
+  engine.fixDraft();
+  await wait();
+  engine.event({type:'chunk_revise',seq:3,replace_ids:['a'],chunks:[chunk('b',1,'provisional')]});
+  await wait();
+  const sent=slidesOf(hall.messages);
+  expect(sent.at(-1)?.chunk_id).toBe('a');
+  expect(sent.some(s=>s===null)).toBe(false);
+  expect(engine.shown?.html).toBe('<section>в зале</section>');
+  hall.close();engine.close();
+ });
+
  it('removes the current slide from the hall channel on backspace without touching chunk state',async()=>{
   const engine=makeEngine('s-remove');
   engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'confirmed')});
