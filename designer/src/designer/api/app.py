@@ -17,6 +17,7 @@ from designer.agent_hook import check_agent as agent_check
 from designer.agent_hook import list_agents as agent_list
 from designer.agent_hook import load_assignments as agent_load_assignments
 from designer.agent_hook import save_assignments as agent_save_assignments
+from designer.agents import load_model_settings, save_model_settings
 from designer.api.schemas import (
     AgentAssignmentsRequest,
     AuditContextualResponse,
@@ -32,6 +33,7 @@ from designer.api.schemas import (
     DesignSystemPatchRequest,
     HealthResponse,
     LiveBoundaryRequest,
+    ModelSettingsRequest,
     LiveBoundaryResponse,
     LiveSlideRequest,
     LiveSlideResponse,
@@ -451,6 +453,19 @@ def get_agent_settings() -> dict:
 @app.put("/settings/agents")
 def put_agent_settings(payload: AgentAssignmentsRequest) -> dict:
     return agent_save_assignments(payload.model_dump(exclude_none=True))
+
+
+@app.get("/settings/models")
+def get_model_settings() -> dict:
+    return load_model_settings()
+
+
+@app.put("/settings/models")
+def put_model_settings(payload: ModelSettingsRequest) -> dict:
+    try:
+        return save_model_settings(payload.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 # ---------- живой режим ----------

@@ -6,9 +6,13 @@
 же переменная, что уже читают другие модули напрямую (llm.client, store, __main__,
 export.convert, api.app), так что уже существующие переменные продолжают работать без
 этого файла настроек.
+
+Третий слой, поверх переменных: адрес сервера модели и модель, сохранённые с экрана «Агенты и модели»
+(файл settings/models.json в каталоге данных). Человек поменял их в приложении, значит так и работать.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Mapping
@@ -72,10 +76,29 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         if var in env:
             value = env[var]
             raw[field] = _split_list(value) if field in _LIST_FIELDS else value
+    saved = read_saved_models(Path(env.get("DESIGNER_DATA_DIR") or raw.get("data_dir") or "./data"))
+    for field in ("llm_url", "llm_model"):
+        if saved.get(field):
+            raw[field] = saved[field]
     try:
         return Settings(**raw)
     except ValidationError as exc:
         raise SettingsError(_format_error(path, exc)) from exc
+
+
+SAVED_MODELS_REL = Path("settings") / "models.json"
+
+
+def read_saved_models(data_dir: Path) -> dict:
+    """Сохранённое с экрана настроек: llm_url, llm_url_shown, llm_model, cli_models. Нет файла — пусто."""
+    path = data_dir / SAVED_MODELS_REL
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _read_yaml(path: Path) -> dict:

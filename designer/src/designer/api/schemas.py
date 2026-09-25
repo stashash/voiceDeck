@@ -171,3 +171,10 @@ class AgentAssignmentsRequest(BaseModel):
     deck: str | None = None
     live: str | None = None
     describe: str | None = None
+
+
+class ModelSettingsRequest(BaseModel):
+    """Экран «Агенты и модели»: адрес сервера модели, модель по умолчанию, модели CLI-агентов."""
+    llm_url: str | None = Field(default=None, max_length=500)
+    llm_model: str | None = Field(default=None, max_length=200)
+    cli_models: dict[str, str] | None = None

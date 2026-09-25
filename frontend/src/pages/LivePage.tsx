@@ -3,9 +3,14 @@ import { hashParam } from '../router';
 import { Mic, Square, MonitorPlay, ArrowRight, Boxes, Undo2 } from 'lucide-react';
 import type { Slide } from '../store';
 import { useSession } from '../stage/useSession';
-import { AgentAssignments, AgentInfo, DesignSystemListItem, getAgentAssignments, listAgents, listDesignSystemItems, setAgentAssignments } from '../designer/api';
+import { AgentAssignments, AgentInfo, DesignSystemListItem, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments } from '../designer/api';
 import { agentDisplayName } from '../designer/agentName';
 import '../stage/stage.css';
+
+// Дизайн-система, выбранная в Live в прошлый раз: хранится в браузере докладчика.
+const LIVE_DS_KEY = 'voicedeck.live.designSystem';
+function savedLiveDs(): string | null { try { return localStorage.getItem(LIVE_DS_KEY); } catch { return null; } }
+function saveLiveDs(id: string) { try { localStorage.setItem(LIVE_DS_KEY, id); } catch { /* браузер без хранилища: выбор не запоминается */ } }
 
 const time = (ms: number) => `${Math.floor(ms / 60000).toString().padStart(2, '0')}:${Math.floor(ms / 1000 % 60).toString().padStart(2, '0')}`;
 
@@ -22,9 +27,13 @@ export default function LivePage() {
   const [assign, setAssign] = useState<AgentAssignments | null>(null);
 
   useEffect(() => {
-    listDesignSystemItems().then(items => {
+    Promise.all([listDesignSystemItems(), listDecks().catch(() => [])]).then(([items, decks]) => {
       setDesignSystems(items);
-      if (items.length && !s.designSystemId) { const asked = hashParam('ds'); s.selectDesignSystem(asked && items.some(i => i.id === asked) ? asked : items[0].id); }
+      if (!items.length || s.designSystemId) return;
+      // Последняя использованная: из ссылки, выбранная в Live прошлый раз, система самой свежей презентации.
+      const known = (id?: string | null) => !!id && items.some(i => i.id === id);
+      const pick = [hashParam('ds'), savedLiveDs(), decks[0]?.design_system_id].find(known);
+      s.selectDesignSystem(pick ?? items[0].id);
     }).catch(() => {});
     Promise.all([listAgents(), getAgentAssignments()]).then(([list, a]) => {
       setAgents(list.filter(x => x.found)); setAssign(a);
@@ -62,7 +71,7 @@ export default function LivePage() {
     <div className="live-topbar">
       <label className="live-select">
         <span className="visually-hidden">Дизайн-система</span>
-        <select value={s.designSystemId ?? ''} disabled={started} onChange={e => s.selectDesignSystem(e.target.value)}>
+        <select value={s.designSystemId ?? ''} disabled={started} onChange={e => { s.selectDesignSystem(e.target.value); saveLiveDs(e.target.value); }}>
           {designSystems.map(d => <option key={d.id} value={d.id}>{d.name || d.source_file}</option>)}
         </select>
       </label>
