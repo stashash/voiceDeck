@@ -32,3 +32,10 @@ def test_words_that_are_not_numbers_stay():
     assert digits_from_speech("семью мы не трогаем") == "семью мы не трогаем"
     assert digits_from_speech("во втором квартале") == "во втором квартале"
     assert digits_from_speech("три первых слайда") == "3 первых слайда"
+
+
+def test_millions_keep_the_scale_word():
+    assert digits_from_speech("затраты полтора миллиона рублей в квартал") == "затраты 1,5 миллиона рублей в квартал"
+    assert digits_from_speech("два миллиарда") == "2 миллиарда"
+    assert digits_from_speech("четыре с половиной из пяти") == "4,5 из 5"
+    assert digits_from_speech("с четырёх минут до полутора") == "с 4 минут до 1,5"

@@ -18,3 +18,5 @@ examples/**/deck.pptx
 examples/**/deck.html
 # Готовые презентации для репозитория лежат в demo/ (examples/export_demo.py), здесь только листы слайдов
 examples/**/deck.pdf
+# Видео-демо и запись голоса для Live: в репозиторий не идут
+video/

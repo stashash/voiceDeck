@@ -236,6 +236,10 @@ def digits_from_speech(text: str) -> str:
                     and keys[0] not in _SCALE_ALONE:
                 continue
             number = _format(value)
+            last_value, last_kind = _WORD_VALUE.get(keys[-1], (0, ""))
+            if last_kind == "scale" and last_value >= 1_000_000 and len(keys) > 1:
+                # «полтора миллиона» пишется «1,5 миллиона», а не «1500000»: так число читают на слайде.
+                number = f"{_format(value / last_value)} {piece[-1].group(0)}"
             span_end = piece[-1].end()
             # «два с половиной» 2,5
             half = re.match(r"\s+с\s+половиной\b", text[span_end:], re.IGNORECASE)
