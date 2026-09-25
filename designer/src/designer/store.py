@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -349,8 +350,26 @@ def safe_join(base: Path, relative: str) -> Path | None:
     return candidate
 
 
+def write_text_atomic(path: Path, text: str) -> None:
+    """Запись, которую читатель никогда не видит наполовину.
+
+    write_text сначала обнуляет файл: страница, опрашивающая manifest.json или deck.json во время
+    описания образцов и генерации, ловила пустой файл, и сервис отвечал 500. Текст пишется во
+    временный файл рядом и подменяет старый одной операцией os.replace.
+    """
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.",
+                                         suffix=".tmp", delete=False)
+    try:
+        with handle:
+            handle.write(text)
+        os.replace(handle.name, path)
+    except BaseException:
+        Path(handle.name).unlink(missing_ok=True)
+        raise
+
+
 def _write_json(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_text_atomic(path, json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _read_json(path: Path) -> dict:

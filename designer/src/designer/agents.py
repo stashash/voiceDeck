@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 
+from designer import store
 from designer.llm.bridge import BRIDGE_URL_ENV, DEFAULT_BRIDGE_URL, BridgeClient
 from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
 from designer.settings import load_settings
@@ -144,7 +145,7 @@ def load_assignments() -> dict:
 def save_assignments(data: dict) -> dict:
     current = load_assignments()
     current.update({task: data[task] for task in _TASKS if task in data})
-    _assignments_path().write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+    store.write_text_atomic(_assignments_path(), json.dumps(current, ensure_ascii=False, indent=2))
     return current
 
 

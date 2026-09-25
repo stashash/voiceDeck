@@ -98,5 +98,5 @@ def save_assignments(payload: dict) -> dict:
         value = payload.get(task)
         if value:
             current[task] = value
-    _settings_path().write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+    store.write_text_atomic(_settings_path(), json.dumps(current, ensure_ascii=False, indent=2))
     return current

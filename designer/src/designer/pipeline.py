@@ -151,7 +151,7 @@ def _unique_ds_id(base_id: str) -> str:
 
 
 def _write_manifest(package_dir: Path, ds: DesignSystem) -> None:
-    (package_dir / "manifest.json").write_text(ds.model_dump_json(indent=2), encoding="utf-8")
+    store.write_text_atomic(package_dir / "manifest.json", ds.model_dump_json(indent=2))
 
 
 def _generate_previews(ds: DesignSystem, pptx_path: Path, package_dir: Path) -> DesignSystem:
