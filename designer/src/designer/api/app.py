@@ -33,6 +33,7 @@ from designer.api.schemas import (
     DesignSystemPatchRequest,
     HealthResponse,
     LiveBoundaryRequest,
+    LiveWarmRequest,
     ModelSettingsRequest,
     LiveBoundaryResponse,
     LiveSlideRequest,
@@ -488,6 +489,30 @@ def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_live_l
 
     image = base64.b64encode(result.png).decode("ascii") if result.png else None
     return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=image)
+
+
+@app.post("/live/draft", response_model=LiveSlideResponse)
+def live_draft(payload: LiveSlideRequest) -> LiveSlideResponse:
+    """Черновик слайда сразу после фразы, без модели: слайд от /live/slide приходит следом и заменяет его."""
+    try:
+        result = pipeline.live_draft(payload.design_system_id, payload.chunk_text)
+    except LookupError as exc:
+        raise HTTPException(409, str(exc))
+    except (store.InvalidId, FileNotFoundError):
+        raise HTTPException(404, "дизайн-система не найдена")
+    return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=None)
+
+
+@app.post("/live/warm", status_code=202)
+def live_warm(payload: LiveWarmRequest, background_tasks: BackgroundTasks) -> dict:
+    """Фон черновика готовится заранее, при выборе дизайн-системы в Live."""
+    def _warm() -> None:
+        try:
+            pipeline.live_warm(payload.design_system_id)
+        except Exception as exc:  # noqa: BLE001 - прогрев не должен ронять сервис
+            print(f"прогрев черновика: {exc}", flush=True)
+    background_tasks.add_task(_warm)
+    return {"ok": True}
 
 
 @app.post("/live/boundary", response_model=LiveBoundaryResponse)

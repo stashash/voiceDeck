@@ -20,8 +20,9 @@ export function reduce(state:State,e:Event):State{
     for(const c of e.chunks??[]){
       chunks[c.id]=c;
       // Подтверждение не меняет состав фрагмента: слайд остаётся, сервис не собирает его заново.
+      // Склейка меняет состав: прежний слайд виден, пока сервис не пришлёт дополненный.
       const old=before[c.id],slide=s.slides[c.id];
-      if(old&&slide&&old.sentence_ids.join()===c.sentence_ids.join())slides[c.id]={...slide,rev:c.rev};
+      if(old&&slide)slides[c.id]=old.sentence_ids.join()===c.sentence_ids.join()?{...slide,rev:c.rev}:slide;
     }
     s={...s,chunks,slides};
   }

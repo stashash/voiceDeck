@@ -36,7 +36,9 @@ from designer.audit.deterministic import run_checks
 from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideKind, SlideSpec
 from designer.export import convert, render
 from designer.export.html import render_deck
-from designer.export.html_image import render_deck_images, slide_html
+from designer.export.html import _font_faces
+from designer.plan.numerals import digits_from_speech
+from designer.export.html_image import draft_html, render_deck_images, slide_html
 from designer.export.pptx_deck import export_pptx
 from designer.layout import variants as variant_axes
 from designer.layout.capacity import main_group, slot_limits, unit_count
@@ -769,6 +771,58 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
                     plan=DeckPlan(title="", purpose="", slides=[]), specs=[spec], scenes=[scene])
         return LiveSlide(scene=scene, html=render_deck(solo, ds, package_dir))
     return LiveSlide(scene=scene, html=slide_html(png, scene, ds), png=png)
+
+
+def _draft_parts(ds_id: str, chunk_text: str):
+    """Сцена черновика: сказанная фраза заголовком на титульном образце, без модели."""
+    ds_id = ds_id or store.latest_design_system_id() or ""
+    if not ds_id:
+        raise LookupError("шаблон не загружен: загрузите pptx на экране «Шаблон»")
+    package_dir = store.design_system_dir(ds_id)
+    ds = load_package(package_dir)
+    text = " ".join(digits_from_speech(chunk_text).split())
+    if len(text) > _DRAFT_CHARS:
+        text = text[:_DRAFT_CHARS].rsplit(" ", 1)[0] + "…"
+    intent = SlideIntent(id="draft", kind=SlideKind.title, title=text)
+    pattern = choose_pattern(intent, ds, [])
+    return ds, package_dir, intent, pattern
+
+
+_DRAFT_CHARS = 140
+
+
+def _draft_background(intent: SlideIntent, pattern, ds: DesignSystem, package_dir: Path) -> bytes | None:
+    """Чистый фон образца без текста: один раз через движок, дальше из кеша render_spec."""
+    if not convert.available():
+        return None
+    empty = compose(intent.model_copy(update={"title": " "}), pattern, ds)
+    try:
+        return render.render_spec(empty, ds, package_dir)
+    except convert.ConverterUnavailable:
+        return None
+
+
+def live_draft(ds_id: str, chunk_text: str) -> LiveSlide:
+    """Черновик слайда сразу после фразы: чистый фон образца и сказанный текст поверх, без модели.
+
+    Живой слайд от модели идёт 3–4 с (модель 2,5 с, картинка 1,5 с); черновик — миллисекунды, если фон
+    образца уже в кеше (его греет live_warm при выборе дизайн-системы).
+    """
+    ds, package_dir, intent, pattern = _draft_parts(ds_id, chunk_text)
+    spec = compose(intent, pattern, ds)
+    scene = build_scene(spec, pattern, ds, package_dir)
+    background = _draft_background(intent, pattern, ds, package_dir)
+    if background is None:
+        solo = Deck(id="live", design_system_id="live", variant="a",
+                    plan=DeckPlan(title="", purpose="", slides=[]), specs=[spec], scenes=[scene])
+        return LiveSlide(scene=scene, html=render_deck(solo, ds, package_dir))
+    return LiveSlide(scene=scene, html=draft_html(background, scene, ds, _font_faces(ds, package_dir)))
+
+
+def live_warm(ds_id: str) -> None:
+    """Готовит фон черновика заранее, чтобы первый слайд Live не ждал движок картинок."""
+    ds, package_dir, intent, pattern = _draft_parts(ds_id, "Черновик")
+    _draft_background(intent, pattern, ds, package_dir)
 
 
 def _live_png(spec: SlideSpec, ds: DesignSystem, package_dir: Path) -> bytes | None:

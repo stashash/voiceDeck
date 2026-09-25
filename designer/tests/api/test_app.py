@@ -639,3 +639,15 @@ def test_live_boundary_reports_model_loading(client):
     response = client.post("/live/boundary", json={"thought": "Начну с проблемы.", "next_sentence": "Далее."})
 
     assert response.status_code == 503
+
+
+def test_live_draft_puts_spoken_words_on_template_without_model(client, templates, monkeypatch):
+    ds_id = _upload_first_template(client, templates)
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: [])
+
+    response = client.post("/live/draft", json={
+        "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию за три месяца", "used_pattern_ids": [],
+    })
+
+    assert response.status_code == 200
+    assert "3 месяца" in response.json()["html"]

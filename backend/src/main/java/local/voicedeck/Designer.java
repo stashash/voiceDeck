@@ -42,6 +42,22 @@ public final class Designer {
         if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
         return toSlide(new JsonObject(res.body()));
     }
+    /** Черновик слайда сразу после фразы: сказанный текст на чистом фоне образца, без модели (designer /live/draft). */
+    public JsonObject draft(String designSystemId,String chunkText)throws Exception {
+        if(!enabled)throw new IllegalStateException("Designer disabled");
+        var body=new JsonObject().put("design_system_id",designSystemId).put("chunk_text",chunkText).put("used_pattern_ids",new JsonArray());
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/draft")).timeout(Duration.ofSeconds(5)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        var res=http.send(req,HttpResponse.BodyHandlers.ofString());
+        if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
+        return toSlide(new JsonObject(res.body()));
+    }
+    /** Фон черновика готовится заранее, как только выбрана дизайн-система. */
+    public void warm(String designSystemId){
+        if(!enabled||designSystemId==null||designSystemId.isBlank())return;
+        var body=new JsonObject().put("design_system_id",designSystemId);
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/warm")).timeout(Duration.ofSeconds(5)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        http.sendAsync(req,HttpResponse.BodyHandlers.discarding());
+    }
     /** Начинает ли next новую мысль после thought: так Live делит речь на слайды (designer /live/boundary). */
     public boolean boundary(String thought,String next)throws Exception {
         if(!enabled)throw new IllegalStateException("Designer disabled");
