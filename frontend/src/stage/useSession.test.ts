@@ -70,6 +70,20 @@ describe('SessionEngine',()=>{
   hall.close();engine.close();
  });
 
+ it('shows the draft slide in the hall when its chunk is confirmed',async()=>{
+  // Подтверждение не меняет фрагмент: зал получает тот же слайд, что докладчик видел черновиком, без пустого экрана.
+  const engine=makeEngine('s-confirm');
+  const hall=listen('s-confirm');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>черновик</section>')});
+  engine.event({type:'chunk_revise',seq:3,replace_ids:['a'],chunks:[chunk('a',2,'confirmed')]});
+  await wait();
+  expect(engine.state.slides.a?.rev).toBe(2);
+  expect(engine.shown?.html).toBe('<section>черновик</section>');
+  expect(slidesOf(hall.messages).some(s=>s===null)).toBe(false);
+  hall.close();engine.close();
+ });
+
  it('keeps the hall slide when the service replaces its chunk',async()=>{
   // Показанный залу слайд не пропадает, когда сервис разбивает или склеивает фрагмент речи.
   const engine=makeEngine('s-revise');

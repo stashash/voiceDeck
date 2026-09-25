@@ -13,9 +13,17 @@ import java.util.concurrent.*;
 public final class Main {
     static String env(String key,String fallback){String value=System.getenv(key);return value==null||value.isBlank()?fallback:value;}
     private static String hash(String token){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
+    /** Live без весов распознавания речи не падает: сервис поднимается без микрофона и пишет, что скачать. */
+    static Models loadModels(boolean live)throws Exception {
+        if(!live)return new Models(false);
+        try{return new Models(true);}
+        catch(Exception e){
+            System.err.println("Веса распознавания речи не загрузились ("+e.getClass().getSimpleName()+": "+e.getMessage()+"): сервис работает без микрофона. Скачайте веса мастером установки или scripts/setup-models.ps1 и перезапустите app");
+            return new Models(false);
+        }
+    }
     public static void main(String[] args)throws Exception {
-        boolean live=env("MODE","demo").equals("live");
-        Store store=new Store();store.init();Models models=new Models(live);Llm llm=new Llm();Designer designer=new Designer();
+        Store store=new Store();store.init();Models models=loadModels(env("MODE","demo").equals("live"));boolean live=models.live;Llm llm=new Llm();Designer designer=new Designer();
         Vertx vertx=Vertx.vertx();Router router=Router.router(vertx);
         Map<String,Session> sessions=new ConcurrentHashMap<>();
         String allowedOrigin=env("ALLOWED_ORIGIN","http://localhost:8080");

@@ -42,6 +42,17 @@ public final class Designer {
         if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
         return toSlide(new JsonObject(res.body()));
     }
+    /** Начинает ли next новую мысль после thought: так Live делит речь на слайды (designer /live/boundary). */
+    public boolean boundary(String thought,String next)throws Exception {
+        if(!enabled)throw new IllegalStateException("Designer disabled");
+        if(thought.length()>16000)thought=thought.substring(thought.length()-16000);
+        var body=new JsonObject().put("thought",thought).put("next_sentence",next.length()>4000?next.substring(0,4000):next);
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/boundary")).timeout(Duration.ofSeconds(10)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        var res=http.send(req,HttpResponse.BodyHandlers.ofString());
+        if(res.statusCode()==503)throw new ModelLoading();
+        if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
+        return new JsonObject(res.body()).getBoolean("new_thought",false);
+    }
     /** Сцена + html -> прежние поля slide (заголовок и тексты блоков по роли элемента) плюс pattern_id и html. */
     static JsonObject toSlide(JsonObject response) {
         JsonObject scene=response.getJsonObject("scene");

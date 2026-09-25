@@ -150,6 +150,10 @@ public final class Models implements AutoCloseable {
     public int chunkSizeEmergency(){return config.getInteger("chunkSizeEmergency",500);}
     public int chunkSentencesMax(){return config.getInteger("chunkSentencesMax",12);} // T1a: sentence-count cap for slide-sized chunks.
     public int markerMinWords(){return config.getInteger("markerMinWords",30);} // T1a: marker commit threshold, was chunkSizeMin (60).
+    /** Слов в мысли до первого вопроса модели о границе: короче мысль слайда не держит. */
+    public int thoughtMinWords(){return config.getInteger("thoughtMinWords",20);}
+    /** Молчание, после которого мысль закрывается без вопроса модели: докладчик остановился. */
+    public int thoughtPauseMs(){return config.getInteger("thoughtPauseMs",4000);}
     public int chunkCoalesceMax(){return config.getInteger("chunkCoalesceMax",250);}
     public double coalesceThreshold(){return config.getDouble("coalesceThreshold",0.65);}
     public double emergencyThreshold(){return config.getDouble("emergencyThreshold",0.2);}

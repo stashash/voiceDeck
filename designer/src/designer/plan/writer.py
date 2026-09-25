@@ -1,9 +1,10 @@
 """Заполнение текстовых слотов слайда под вместимость паттерна.
 
-Два скилла:
+Три скилла:
 - fill_slots — уже собранное намерение слайда сокращается и подгоняется под лимиты
   знаков и число пунктов конкретного паттерна;
-- speech_to_slide — фрагмент устной речи (живой режим) превращается в намерение слайда.
+- speech_to_slide — фрагмент устной речи (живой режим) превращается в намерение слайда;
+- speech_boundary — начинает ли следующее предложение речи новую мысль, то есть новый слайд.
 
 Локальный сервер не проверяет maxLength из JSON-схемы (см. llm/client._matches_schema),
 поэтому длины и число пунктов проверяются кодом после ответа: один повтор с перечнем
@@ -21,6 +22,10 @@ from designer.plan.numerals import digits_from_speech
 
 _FILL_SKILL = "fill-slots"
 _SPEECH_SKILL = "speech-to-slide"
+_BOUNDARY_SKILL = "speech-boundary"
+# Заголовок идёт первым: назвав мысль текущего слайда, модель реже склеивает соседние темы.
+_BOUNDARY_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "new_thought"],
+                    "properties": {"title": {"type": "string"}, "new_thought": {"type": "boolean"}}}
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _SENTENCE_END = re.compile(r"(?<!\d)[.!?](?=\s|$)")
@@ -90,6 +95,18 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     if intent.kind is SlideKind.big_number and len(intent.items) > 1 and SlideKind.cards in kinds:
         intent.kind = SlideKind.cards
     return intent
+
+
+def speech_boundary(thought: str, next_sentence: str, client: LlmClient) -> bool:
+    """True, если next_sentence начинает новую мысль после thought, то есть нужен новый слайд.
+
+    Пауза в речи мысль не закрывает: докладчик молчит и посреди мысли. Эмбеддинги соседних
+    предложений внутри одного доклада почти одинаковы, границу по ним не видно.
+    """
+    skill = load_skill(_BOUNDARY_SKILL)
+    user = f"Текущий слайд:\n{thought}\n\nСледующее предложение:\n{next_sentence}"
+    data = client.complete_json(system=skill.render(), user=user, schema=_BOUNDARY_SCHEMA, params=skill.params)
+    return data.get("new_thought") is True
 
 
 # ---------- числа во фрагменте речи ----------

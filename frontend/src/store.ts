@@ -15,8 +15,14 @@ export function reduce(state:State,e:Event):State{
     const chunks={...s.chunks},slides={...s.slides};
     // Reject stale replacement atomically, including its associated deletions.
     if((e.chunks??[]).some(c=>chunks[c.id]&&chunks[c.id].rev>=c.rev))return s;
+    const before={...s.chunks};
     for(const id of e.replace_ids??[]){delete chunks[id];delete slides[id];}
-    for(const c of e.chunks??[])chunks[c.id]=c;
+    for(const c of e.chunks??[]){
+      chunks[c.id]=c;
+      // Подтверждение не меняет состав фрагмента: слайд остаётся, сервис не собирает его заново.
+      const old=before[c.id],slide=s.slides[c.id];
+      if(old&&slide&&old.sentence_ids.join()===c.sentence_ids.join())slides[c.id]={...slide,rev:c.rev};
+    }
     s={...s,chunks,slides};
   }
   if(e.type==='slide'&&e.slide&&s.chunks[e.slide.chunk_id]?.rev===e.slide.rev)s={...s,slides:{...s.slides,[e.slide.chunk_id]:e.slide}};

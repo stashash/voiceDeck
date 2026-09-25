@@ -5,7 +5,7 @@ import httpx
 
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
-from designer.plan.writer import fill_slots, speech_to_slide
+from designer.plan.writer import fill_slots, speech_boundary, speech_to_slide
 
 BASE_INTENT = SlideIntent(
     id="s1",
@@ -230,3 +230,10 @@ def test_speech_to_slide_strips_time_the_speaker_did_not_say():
 
     # «6» сказано («шесть недель»), а время 6:00 нет: оно уходит вместе с предлогом.
     assert intent.title == "Подготовка отчёта"
+
+
+def test_speech_boundary_follows_model_decision():
+    thought = "Начну с проблемы. Обращений в прошлом году было сорок тысяч."
+    assert speech_boundary(thought, "Теперь о результатах пилота.", _client_returning({"title": "Проблема первой линии", "new_thought": True})) is True
+    assert speech_boundary(thought, "Каждое стоило сто двадцать рублей.",
+                           _client_returning({"title": "Проблема первой линии", "new_thought": False})) is False

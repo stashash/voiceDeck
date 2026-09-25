@@ -31,6 +31,8 @@ from designer.api.schemas import (
     DesignSystemListResponse,
     DesignSystemPatchRequest,
     HealthResponse,
+    LiveBoundaryRequest,
+    LiveBoundaryResponse,
     LiveSlideRequest,
     LiveSlideResponse,
     SlideActionRequest,
@@ -45,9 +47,10 @@ from designer.export import convert
 from designer.llm.client import LlmClient, ModelLoading, auth_headers
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
+from designer.plan.writer import speech_boundary
 
 _ORIGINS_ENV = "DESIGNER_ALLOWED_ORIGINS"
-_HEALTH_SKILLS = ("plan-deck", "fill-slots", "speech-to-slide", "audit-slide", "audit-deck")
+_HEALTH_SKILLS = ("plan-deck", "fill-slots", "speech-to-slide", "speech-boundary", "audit-slide", "audit-deck")
 
 app = FastAPI(title="Цифровой дизайнер презентаций")
 
@@ -470,6 +473,17 @@ def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_live_l
 
     image = base64.b64encode(result.png).decode("ascii") if result.png else None
     return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=image)
+
+
+@app.post("/live/boundary", response_model=LiveBoundaryResponse)
+def live_boundary(payload: LiveBoundaryRequest, client: LlmClient = Depends(get_live_llm_client)):
+    """Начинает ли следующее предложение новую мысль: так Live делит речь на слайды."""
+    try:
+        new_thought = speech_boundary(payload.thought, payload.next_sentence, client)
+    except ModelLoading as exc:
+        print(f"граница мысли: {exc}", flush=True)
+        raise HTTPException(503, "модель загружается в LM Studio")
+    return LiveBoundaryResponse(new_thought=new_thought)
 
 
 # ---------- здоровье ----------

@@ -68,6 +68,15 @@ class LiveSlideRequest(BaseModel):
     used_pattern_ids: list[str] = Field(default_factory=list)
 
 
+class LiveBoundaryRequest(BaseModel):
+    thought: str = Field(min_length=1, max_length=16000, description="текст текущего слайда: мысль докладчика до сих пор")
+    next_sentence: str = Field(min_length=1, max_length=4000, description="следующее распознанное предложение")
+
+
+class LiveBoundaryResponse(BaseModel):
+    new_thought: bool
+
+
 class LiveSlideResponse(BaseModel):
     scene: Scene
     html: str

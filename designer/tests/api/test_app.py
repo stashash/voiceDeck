@@ -620,3 +620,22 @@ def test_agent_settings_default_and_roundtrip(client):
     again = client.get("/settings/agents")
     assert again.json()["deck"] == "cli:claude"
     assert again.json()["live"] == body["live"]  # не тронуто частичным PUT
+
+
+def test_live_boundary_returns_model_decision(client):
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm({"title": "Проблема", "new_thought": True})
+
+    response = client.post("/live/boundary", json={
+        "thought": "Начну с проблемы. Обращений стало больше.", "next_sentence": "Теперь о результатах пилота.",
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {"new_thought": True}
+
+
+def test_live_boundary_reports_model_loading(client):
+    app.dependency_overrides[get_live_llm_client] = lambda: _loading_llm()
+
+    response = client.post("/live/boundary", json={"thought": "Начну с проблемы.", "next_sentence": "Далее."})
+
+    assert response.status_code == 503

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Мастер установки voiceDeck для macOS: Docker, модель, веса распознавания речи, .env, запуск стека.
 # Запуск из корня репозитория: ./setup.sh
-# Без вопросов: VD_MODEL=lmstudio|api|none VD_YES=1 [VD_API_URL=... VD_API_MODEL=... VD_API_KEY=...] ./setup.sh
+# Без вопросов: VD_MODEL=lmstudio|ollama|api|none VD_YES=1 [VD_API_URL=... VD_API_MODEL=... VD_API_KEY=...] ./setup.sh
 # Написан под bash 3.2, который стоит в macOS.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -10,6 +10,9 @@ ROOT="$(pwd)"
 APP_URL=http://localhost:8088
 QWEN=qwen/qwen3.8-27b
 BGE_URL=https://huggingface.co/lm-kit/bge-m3-gguf/blob/main/bge-m3-Q8_0.gguf
+OLLAMA_QWEN=qwen3.8:27b
+# Своя модель поверх qwen3.8: у Ollama контекст 4096 по умолчанию, промпты designer длиннее
+OLLAMA_MODEL=voicedeck-qwen3.8
 MODEL="${VD_MODEL:-}"
 API_URL="${VD_API_URL:-}"
 API_MODEL="${VD_API_MODEL:-}"
@@ -45,6 +48,18 @@ find_lms() {
   if have lms; then command -v lms
   elif [ -x "$HOME/.lmstudio/bin/lms" ]; then echo "$HOME/.lmstudio/bin/lms"
   else return 1; fi
+}
+find_ollama() { have ollama && command -v ollama; }
+# Qwen3.8 27B на Mac: Apple Silicon и от 32 ГБ общей памяти.
+check_mac() {
+  [ "$(uname -m)" = arm64 ] || die "$1 с Qwen3.8 27B на Mac работает только на Apple Silicon: выберите внешний API"
+  memory_gb=$(( $(sysctl -n hw.memsize) / 1073741824 ))
+  if [ "$memory_gb" -lt 32 ]; then
+    note "Памяти $memory_gb ГБ: Qwen3.8 27B может не поместиться."
+    confirm "Продолжить с $1?" || die 'выберите внешний API или режим без модели'
+  else
+    ok "память $memory_gb ГБ"
+  fi
 }
 brew_install() {
   have brew || die "нет Homebrew (https://brew.sh): поставьте $2 вручную и запустите мастер снова"
@@ -96,23 +111,17 @@ ok 'Docker работает'
 step 2 'Модель'
 while [ -z "$MODEL" ]; do
   echo '  1  LM Studio на этой машине: Qwen3.8 27B и bge-m3, около 18 ГБ, нужен Mac на Apple Silicon от 32 ГБ памяти'
-  echo '  2  Внешний OpenAI-совместимый API с Qwen3.8 27B, например инференс VK'
-  echo '  3  Без модели: готовые дизайн-системы и презентации, правка текста, скачивание'
-  printf '  Выберите 1, 2 или 3: '
+  echo '  2  Ollama на этой машине: те же модели, около 19 ГБ, тот же Mac'
+  echo '  3  Внешний OpenAI-совместимый API с Qwen3.8 27B, например инференс VK'
+  echo '  4  Без модели: готовые дизайн-системы и презентации, правка текста, скачивание'
+  printf '  Выберите 1, 2, 3 или 4: '
   read -r choice
-  case "$choice" in 1) MODEL=lmstudio ;; 2) MODEL=api ;; 3) MODEL=none ;; esac
+  case "$choice" in 1) MODEL=lmstudio ;; 2) MODEL=ollama ;; 3) MODEL=api ;; 4) MODEL=none ;; esac
 done
 
 if [ "$MODEL" = lmstudio ]; then
   if [ "$OS" = Darwin ]; then
-    [ "$(uname -m)" = arm64 ] || die 'LM Studio для macOS работает только на Apple Silicon: выберите внешний API'
-    memory_gb=$(( $(sysctl -n hw.memsize) / 1073741824 ))
-    if [ "$memory_gb" -lt 32 ]; then
-      note "Памяти $memory_gb ГБ: Qwen3.8 27B может не поместиться."
-      confirm 'Продолжить с LM Studio?' || die 'выберите внешний API или режим без модели'
-    else
-      ok "память $memory_gb ГБ"
-    fi
+    check_mac 'LM Studio'
     if ! find_lms >/dev/null; then
       [ -d '/Applications/LM Studio.app' ] || brew_install lm-studio 'LM Studio'
       open -a 'LM Studio' || true
@@ -135,10 +144,43 @@ if [ "$MODEL" = lmstudio ]; then
   set_env DESIGNER_LLM_URL http://host.docker.internal:1234/v1
   set_env DESIGNER_LLM_MODEL "$QWEN"
   set_env DESIGNER_LLM_API_KEY ''
+  set_env DESIGNER_LLM_PARALLEL 4
   set_env EMBEDDING_BACKEND ollama
   set_env EMBEDDING_URL http://host.docker.internal:1234/v1
   set_env EMBEDDING_MODEL text-embedding-bge-m3
   ok 'LM Studio с Qwen3.8 27B и bge-m3'
+elif [ "$MODEL" = ollama ]; then
+  if [ "$OS" = Darwin ]; then
+    check_mac 'Ollama'
+    if ! find_ollama >/dev/null; then
+      brew_install ollama-app 'Ollama'
+      open -a Ollama || true
+    fi
+  else
+    find_ollama >/dev/null || die 'поставьте Ollama: curl -fsSL https://ollama.com/install.sh | sh'
+    note 'На Linux контейнеры ходят на хост не через 127.0.0.1: Ollama должна слушать 0.0.0.0 (OLLAMA_HOST=0.0.0.0:11434 через sudo systemctl edit ollama).'
+  fi
+  OLLAMA="$(find_ollama)"
+  if ! http_ok http://127.0.0.1:11434/api/version; then
+    ("$OLLAMA" serve >/dev/null 2>&1 &)
+    wait_for 60 http_ok http://127.0.0.1:11434/api/version || die 'Ollama не отвечает на 127.0.0.1:11434: откройте приложение Ollama'
+  fi
+  note "Скачиваю модели, если их ещё нет. $OLLAMA_QWEN весит около 18 ГБ."
+  "$OLLAMA" pull "$OLLAMA_QWEN" || die "не скачалась $OLLAMA_QWEN"
+  "$OLLAMA" pull bge-m3 || die 'не скачались эмбеддинги bge-m3'
+  modelfile="$(mktemp)"
+  printf 'FROM %s\nPARAMETER num_ctx 20480\n' "$OLLAMA_QWEN" > "$modelfile"
+  "$OLLAMA" create "$OLLAMA_MODEL" -f "$modelfile" || die "не создалась модель $OLLAMA_MODEL"
+  rm -f "$modelfile"
+  # Ollama по умолчанию отвечает на один запрос за раз: designer не шлёт параллельных, чтобы Live не ждал очереди.
+  set_env DESIGNER_LLM_URL http://host.docker.internal:11434/v1
+  set_env DESIGNER_LLM_MODEL "$OLLAMA_MODEL"
+  set_env DESIGNER_LLM_API_KEY ''
+  set_env DESIGNER_LLM_PARALLEL 1
+  set_env EMBEDDING_BACKEND ollama
+  set_env EMBEDDING_URL http://host.docker.internal:11434/v1
+  set_env EMBEDDING_MODEL bge-m3
+  ok "Ollama с $OLLAMA_QWEN и bge-m3"
 elif [ "$MODEL" = api ]; then
   if [ -z "$API_URL" ]; then printf '  Адрес API, например https://example.com/v1: '; read -r API_URL; fi
   if [ -z "$API_MODEL" ]; then printf '  Имя модели [%s]: ' "$QWEN"; read -r API_MODEL; fi
@@ -203,7 +245,7 @@ ok "дизайн-систем: $systems, презентаций: $decks"
 if curl -fsS http://127.0.0.1:8090/health | grep -q '"model_ok":true'; then
   ok 'модель отвечает: генерация и Live доступны'
 elif [ "$MODEL" != none ]; then
-  note 'Модель пока не отвечает: проверьте LM Studio или API. Просмотр и скачивание работают.'
+  note 'Модель пока не отвечает: проверьте LM Studio, Ollama или API. Просмотр и скачивание работают.'
 fi
 
 echo
