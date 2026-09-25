@@ -8,34 +8,31 @@
 
 ## Быстрый старт
 
-```bash
-git clone https://github.com/stashash/voiceDeck.git
-cd voiceDeck
-```
+Нужны Windows 10 или 11, Docker Desktop с Linux-контейнерами, [LM Studio](https://lmstudio.ai), видеокарта NVIDIA от 24 ГБ, PowerShell 7, Git, Node.js 22 и Python 3.12. Те же шаги с проверкой каждого: [запуск на своей машине](docs/wiki/zapusk.md).
 
-Затем мастер установки: `setup.cmd` на Windows, `./setup.sh` на macOS.
+1. Клонируйте репозиторий и скачайте веса распознавания речи. Скрипт заодно создаёт `.env` из `.env.example`, настройки там уже под LM Studio:
 
-Мастер спрашивает, откуда брать модель, и ставит недостающее, спросив согласия: Docker Desktop, LM Studio, Qwen3.8 27B, веса распознавания речи. Он пишет `.env`, собирает и поднимает контейнеры, проверяет сервисы и открывает `http://localhost:8088`. Повторный запуск пропускает сделанное.
+   ```powershell
+   git clone https://github.com/stashash/voiceDeck.git
+   cd voiceDeck
+   pwsh scripts/setup-models.ps1
+   ```
 
-| Модель | Что нужно | Что работает |
-|---|---|---|
-| LM Studio на этой машине | видеокарта NVIDIA от 24 ГБ или Mac на Apple Silicon от 32 ГБ, около 30 ГБ на диске | всё: генерация, правка, Live-режим |
-| внешний OpenAI-совместимый API с Qwen3.8 27B | адрес, имя модели и ключ | всё; в Live границы мыслей идут по паузам речи |
-| без модели | только Docker | готовые дизайн-системы и презентации, правка текста и образца, скачивание |
+2. Скачайте модели LM Studio: `lms get qwen/qwen3.8-27b` и в самом LM Studio эмбеддинги `text-embedding-bge-m3`. Затем закрепите обе в памяти:
 
-Сразу после установки в приложении есть три дизайн-системы из шаблонов VK и три презентации по одному брифу из `examples/brief.txt`, у каждой три варианта вёрстки: всего 9 вариантов, как требует ТЗ. Их копия лежит в `demo/`, при первом старте сервис переносит её в своё хранилище.
+   ```powershell
+   pwsh scripts/start-models.ps1
+   ```
 
-Ручная установка по шагам с проверкой каждого: [запуск на своей машине](docs/wiki/zapusk.md). Мастер для Windows проверен на Windows 11 всеми тремя путями модели. Для macOS проверены шаги до запуска контейнеров в bash 3.2 под arm64 и сборка обоих образов под arm64; на живом Mac мастер не запускался.
+3. Поднимите стек и откройте `http://localhost:8088` в Chrome или Edge:
 
-## Готовые презентации
+   ```powershell
+   docker compose up --build -d
+   ```
 
-Один бриф, три шаблона VK, три варианта вёрстки: `a` как в шаблоне, `b` плотнее, `c` данные вперёд. Шаблоны лежат в `docs/requirements/template/`, пересобрать всё заново: `python examples/build.py examples/brief.txt` и `python examples/export_demo.py <каталог данных designer>`.
+4. Для CLI-агентов (Claude Code, Codex, Cursor Agent, OpenCode) запустите мост и оставьте окно открытым: `python scripts/agent_bridge.py`. Qwen в LM Studio работает и без него.
 
-| Шаблон | Вариант a | Вариант b | Вариант c |
-|---|---|---|---|
-| VK Tech шаблон | [pdf](demo/decks/vk-tech-shablon/a/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/a/files/deck.pptx), [html](demo/decks/vk-tech-shablon/a/files/deck.html) | [pdf](demo/decks/vk-tech-shablon/b/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/b/files/deck.pptx), [html](demo/decks/vk-tech-shablon/b/files/deck.html) | [pdf](demo/decks/vk-tech-shablon/c/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/c/files/deck.pptx), [html](demo/decks/vk-tech-shablon/c/files/deck.html) |
-| VK WorkSpace Клиентская конференция Шаблон 03 | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.html) | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.html) | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.html) |
-| Шаблон презентации VK Education | [pdf](demo/decks/shablon-prezentacii-vk-education/a/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/a/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/a/files/deck.html) | [pdf](demo/decks/shablon-prezentacii-vk-education/b/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/b/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/b/files/deck.html) | [pdf](demo/decks/shablon-prezentacii-vk-education/c/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/c/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/c/files/deck.html) |
+На свежей установке дизайн-систем нет: загрузите любой pptx в разделе «Дизайн-системы». После перезагрузки машины снова выполните `pwsh scripts/start-models.ps1`: контейнеры поднимаются сами, модели в LM Studio нет.
 
 ## Сервис `designer`: генерация презентаций по шаблону
 
