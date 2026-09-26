@@ -235,22 +235,35 @@ def _intent_material(intent: SlideIntent) -> str:
 
 # ---------- разбор ответа ----------
 
+_PLACEHOLDER_WRAP = {"{": "}", "[": "]", "<": ">"}
+
+
+def _slot_text(value: object) -> str:
+    """Текст слота без обёртки заглушки: модель иногда пишет «{14 витрин до конца квартала}»."""
+    text = str(value).strip()
+    close = _PLACEHOLDER_WRAP.get(text[:1])
+    inner = text[1:-1]
+    if close and len(text) > 2 and text.endswith(close) and text[0] not in inner and close not in inner:
+        return inner.strip()
+    return text
+
+
 def _apply_fill_response(intent: SlideIntent, data: dict, limits: dict[str, int],
                           unit_limits: dict[str, int]) -> SlideIntent:
     draft = intent.model_copy(deep=True)
     for role in limits:
         if role in data:
-            setattr(draft, _TOP_ROLE_FIELD[role], str(data[role]))
+            setattr(draft, _TOP_ROLE_FIELD[role], _slot_text(data[role]))
     if "items" in data and isinstance(data["items"], list):
         items = []
         for raw in data["items"]:
             kwargs: dict[str, str | None] = {}
             if "heading" in unit_limits:
-                kwargs["heading"] = str(raw.get("heading", ""))
+                kwargs["heading"] = _slot_text(raw.get("heading", ""))
             if "body" in unit_limits:
-                kwargs["body"] = str(raw.get("body", ""))
+                kwargs["body"] = _slot_text(raw.get("body", ""))
             if "number" in unit_limits:
-                kwargs["number"] = str(raw.get("number", "")) or None
+                kwargs["number"] = _slot_text(raw.get("number", "")) or None
             items.append(Item(**kwargs))
         draft.items = items
     return draft

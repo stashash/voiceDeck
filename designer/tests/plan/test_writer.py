@@ -128,6 +128,17 @@ def test_item_count_is_forced_to_n_units():
     assert len(client.call_durations_ms) == 2  # несовпадение числа пунктов — тоже нарушение
 
 
+def test_placeholder_braces_are_stripped_from_slot_text():
+    # Qwen на образце-таймлайне вернул «{14 витрин до конца квартала}», скобки попали на слайд.
+    payload = {"title": "{Итог квартала}", "items": [{"heading": "[Раз]", "body": "Текст {не обёртка}"}]}
+    client = _client_returning(payload)
+    result = fill_slots(BASE_INTENT, {"title": 40}, {"heading": 20, "body": 30}, 1, client)
+
+    assert result.title == "Итог квартала"
+    assert result.items[0].heading == "Раз"
+    assert result.items[0].body == "Текст {не обёртка}"
+
+
 def test_unknown_number_stays_in_phrase_and_is_left_to_audit():
     payload = {"title": "Рост 20 против 42 процента", "items": []}
     client = _client_returning(payload)
