@@ -29,6 +29,7 @@ from designer.layout.capacity import (
     ink_box,
     lead_number,
     line_capacity,
+    companion_icon_groups,
     linked_groups,
     number_caption,
     primary_group,
@@ -598,8 +599,12 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.group_id = group.id
         spec.unit_text = spread[group.id]
         spec.linked_unit_text = {other.id: spread[other.id] for other in linked}
+        # Ряд значков без текста рядом с пунктами повторяется тем же числом блоков, а не убирается.
+        companions = [other for other in companion_icon_groups(pattern, group)
+                      if other.min_units <= n <= other.max_units]
+        spec.linked_unit_text.update({other.id: [{} for _ in range(n)] for other in companions})
         # Значок у каждого пункта свой, по подсказке модели; без подсказки остаётся значок образца.
-        if any(area.kind == "icon" for g in (group, *linked) for area in g.unit_areas):
+        if any(area.kind == "icon" for g in (group, *linked, *companions) for area in g.unit_areas):
             picked = [icons.pick(rest[i].icon_hint) if i < len(rest) else None for i in range(n)]
             if any(picked):
                 spec.unit_icons = picked

@@ -498,3 +498,20 @@ def test_key_message_repeating_title_is_not_placed():
     assert repeats(title, title)
     assert repeats("Нужно одобрение руководства", title), "то же самое короче это тоже повтор"
     assert not repeats("Без решения руководства перевод остановится до весны.", title)
+
+
+def test_icon_row_next_to_items_follows_their_count():
+    # Ряд значков без текста над рядом подписей повторяется вместе с пунктами, а не убирается как пустой.
+    from designer.contracts import Area, Pattern, RepeatGroup, RepeatUnit, Slot, SlideKind, TextStyle
+    from designer.layout.capacity import companion_icon_groups
+    icons = RepeatGroup(id="g1", direction="row", cols=3, rows=1, step=(0.30, 0.0), unit_size=(0.04, 0.07),
+                        units=[RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.38, 0.04, 0.07), shape_ids=[10 + i]) for i in range(3)],
+                        unit_areas=[Area(id="a", kind="icon", box=(0, 0, 0.04, 0.07), shape_id=10)], max_units=6)
+    texts = RepeatGroup(id="g2", direction="row", cols=2, rows=1, step=(0.30, 0.0), unit_size=(0.24, 0.18),
+                        units=[RepeatUnit(index=i, box=(0.05 + i * 0.30, 0.48, 0.24, 0.18), shape_ids=[20 + i]) for i in range(2)],
+                        unit_slots=[Slot(id="h", role="heading", shape_id=20, box=(0, 0, 0.24, 0.18), style=TextStyle(), max_chars=80, max_lines=3)],
+                        max_units=6)
+    pattern = Pattern(id="p", source_slide=1, layout_name="l", kind=SlideKind.cards, kind_confidence=1, theme="light",
+                      groups=[icons, texts])
+    assert [g.id for g in companion_icon_groups(pattern, texts)] == ["g1"]
+    assert companion_icon_groups(pattern, icons) == [], "у ряда значков своих пунктов нет"

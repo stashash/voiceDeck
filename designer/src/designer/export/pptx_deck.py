@@ -19,7 +19,7 @@ from designer import icons
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
-from designer.layout.capacity import number_caption, split_number
+from designer.layout.capacity import number_caption, split_number, unit_boxes
 from designer.layout.units import keeps_aspect, map_shape_box, place_units
 from designer.parse.package import SOURCE_NAME
 from designer.viz.pptx_native import add_chart, add_table
@@ -255,10 +255,12 @@ def _renumber(element, issue) -> int:
 
 def _fill_repeat_group(
     placed, group: RepeatGroup, unit_texts: list[dict[str, str]], count: int,
-    fitted_size_pt: dict[str, float], ds: DesignSystem, issue,
+    fitted_size_pt: dict[str, float], ds: DesignSystem, issue, boxes: list[Box] | None = None,
 ) -> None:
-    """Перекладывает и заполняет блоки одной группы на count блоков. Общая часть для главной и связанных групп."""
-    boxes = place_units(group, count)
+    """Перекладывает и заполняет блоки одной группы на count блоков. Общая часть для главной и связанных групп.
+
+    boxes: рамки блоков, если их задаёт главная группа (связанный ряд едет её преобразованием)."""
+    boxes = boxes or place_units(group, count)
     units = group.units
     kept = min(count, len(units))
     maps = [_unit_map(group, units[i], placed) for i in range(kept)]
@@ -289,13 +291,20 @@ def _fill_group(placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem, iss
     count = len(spec.unit_text)
     _fill_repeat_group(placed, group, spec.unit_text, count, spec.fitted_size_pt, ds, issue)
 
+    # Связанная группа и ряд значков рядом с пунктами перекладываются тем же числом блоков и тем же
+    # преобразованием, что главная (как в сцене, capacity.unit_boxes): значок стоит над своей подписью.
+    # Какие это группы, решила вёрстка (spec.linked_unit_text), экспорт исполняет буквально.
+    for linked_group, boxes in _linked_boxes(spec, pattern, group, count):
+        _fill_repeat_group(placed, linked_group, spec.linked_unit_text[linked_group.id], count,
+                           spec.fitted_size_pt, ds, issue, boxes)
+
+
+def _linked_boxes(spec: SlideSpec, pattern: Pattern, main: RepeatGroup, count: int) -> list[tuple[RepeatGroup, list[Box]]]:
     groups = {g.id: g for g in pattern.groups}
-    for linked_id in group.linked_group_ids:  # связанная группа перекладывается тем же числом блоков
-        linked_group = groups.get(linked_id)
-        unit_texts = spec.linked_unit_text.get(linked_id)
-        if linked_group is None or not linked_group.units or not unit_texts:
-            continue
-        _fill_repeat_group(placed, linked_group, unit_texts, count, spec.fitted_size_pt, ds, issue)
+    linked = [groups[g] for g, texts in spec.linked_unit_text.items()
+              if g in groups and g != main.id and groups[g].units and texts]
+    _, boxes = unit_boxes(main, linked, count)
+    return [(other, boxes[other.id]) for other in linked]
 
 
 def _content_box(pattern: Pattern, ds: DesignSystem) -> Box:
@@ -401,23 +410,26 @@ def _set_unit_icons(slide, placed, spec: SlideSpec, pattern: Pattern) -> None:
     main = _group_of(pattern, spec.group_id)
     if main is None:
         return
-    groups = {g.id: g for g in pattern.groups}
     count = len(spec.unit_text)
-    for group in [main, *(groups[g] for g in main.linked_group_ids if g in groups)]:
+    if not main.min_units <= count <= main.max_units:
+        return
+    for group, boxes in [(main, place_units(main, count)), *_linked_boxes(spec, pattern, main, count)]:
         areas = [area for area in group.unit_areas if area.kind == "icon"]
-        if not areas or not group.min_units <= count <= group.max_units:
+        if not areas:
             continue
         limit_w = max(area.box[2] for area in areas) * 1.5
         limit_h = max(area.box[3] for area in areas) * 1.5
-        for index, unit in enumerate(place_units(group, count)):
+        for index, unit in enumerate(boxes):
             name = spec.unit_icons[index] if index < len(spec.unit_icons) else None
             if not name:
                 continue
             for item in placed.values():
                 if item.dropped or item.kind != KEEP_SIZE_KIND or item.box[2] > limit_w or item.box[3] > limit_h:
                     continue
+                # Значок размера не меняет, а рамка блока при сжатии ряда бывает уже значка: ищем по большему.
                 cx, cy = item.box[0] + item.box[2] / 2, item.box[1] + item.box[3] / 2
-                if unit[0] <= cx <= unit[0] + unit[2] and unit[1] <= cy <= unit[1] + unit[3]:
+                width, height = max(unit[2], item.box[2]), max(unit[3], item.box[3])
+                if unit[0] <= cx <= unit[0] + width and unit[1] <= cy <= unit[1] + height:
                     _replace_picture(slide, item, name)
 
 
