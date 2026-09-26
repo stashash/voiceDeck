@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from designer.contracts import (
     Area,
     Box,
@@ -539,6 +541,22 @@ def _head_fix(
     return out
 
 
+def _words(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
+
+
+def repeats(message: str, title: str) -> bool:
+    """Ключевая мысль повторяет заголовок: дословно или теми же словами. Такой текст под заголовком
+    читается как заготовка, и на слайд он не ставится."""
+    a, b = _words(message), _words(title)
+    if not a or not b:
+        return False
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if " ".join(short) in " ".join(long):
+        return True
+    return len(set(short) & set(long)) >= 0.8 * len(set(short))
+
+
 def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpec:
     """Инструкция сборки слайда: какой слот чем заполнить, где диаграмма и что со слайда убрать."""
     spec = SlideSpec(slide_id=intent.id, pattern_id=pattern.id, notes=intent.notes)
@@ -587,7 +605,7 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
                 spec.unit_icons = picked
         rest = []
 
-    if intent.key_message:
+    if intent.key_message and not repeats(intent.key_message, intent.title):
         message = intent.key_message
         slot = (
             _take(free, ("subtitle",), avoid=region, phrase=True)

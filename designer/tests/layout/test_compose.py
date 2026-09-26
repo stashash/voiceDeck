@@ -490,3 +490,11 @@ def test_item_beside_the_big_number_does_not_repeat_it():
     spec = compose(intent, pattern, _ds())
     assert spec.slot_text["s6"] == "14"
     assert spec.slot_text["s7"] == "витрин ждут перевода"
+
+
+def test_key_message_repeating_title_is_not_placed():
+    from designer.layout.compose import repeats
+    title = "Для перевода оставшихся 14 витрин нужно одобрение руководства"
+    assert repeats(title, title)
+    assert repeats("Нужно одобрение руководства", title), "то же самое короче это тоже повтор"
+    assert not repeats("Без решения руководства перевод остановится до весны.", title)
