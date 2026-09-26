@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, errorText
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
 
@@ -27,7 +27,7 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
   const [titleDraft, setTitleDraft] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => { getDeckState(deckId).then(setState).catch(e => setError(String(e))); }, [deckId]);
+  useEffect(() => { getDeckState(deckId).then(setState).catch(e => setError(errorText(e))); }, [deckId]);
 
   const active = state?.variants[variant];
   const scenes = useMemo(() => active?.scenes ?? [], [active]);
@@ -49,10 +49,10 @@ export default function EditPage({ deckId, variant }: { deckId: string; variant:
     getSlidePatterns(deckId, variant, index + 1).then(setPatterns).catch(() => setPatterns([]));
   }, [deckId, variant, index, scene?.pattern_id]);
 
-  async function refresh() { try { setState(await getDeckState(deckId)); } catch (e) { setError(String(e)); } }
+  async function refresh() { try { setState(await getDeckState(deckId)); } catch (e) { setError(errorText(e)); } }
   async function guard(fn: () => Promise<unknown>) {
     setBusy(true); setError('');
-    try { await fn(); await refresh(); } catch (e) { setError(String(e)); } finally { setBusy(false); }
+    try { await fn(); await refresh(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
 
   if (!scene) return <div className="edit-shell"><div className="page-loading">{error || 'Загрузка'}</div></div>;

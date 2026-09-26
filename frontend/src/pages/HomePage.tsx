@@ -4,7 +4,7 @@ import { hashParam } from '../router';
 import { ChevronDown, ArrowUp, Upload, Settings, Boxes, Check } from 'lucide-react';
 import {
   AgentAssignments, AgentInfo, DeckListItem, DesignSystemListItem,
-  absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments,
+  absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments, errorText
 } from '../designer/api';
 import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
 
@@ -60,7 +60,7 @@ export default function HomePage() {
       }
       const { deck_id } = await createDeck({ design_system_id: dsId, brief, variants: ['a', 'b', 'c'] });
       window.location.hash = `#/decks/${deck_id}`;
-    } catch (e) { setError(String(e)); }
+    } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
   }
 

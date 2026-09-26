@@ -3,7 +3,7 @@ import { Upload, Loader2, Presentation, MonitorPlay, RotateCw, MoreHorizontal, C
 import {
   DesignSystem, DesignSystemListItem, Pattern,
   absoluteUrl, deleteDesignSystem, describeDesignSystem, getAgentAssignments, getManifest, listAgents, listDesignSystemItems,
-  patchDesignSystem, patternPreviewUrl, uploadDesignSystem,
+  patchDesignSystem, patternPreviewUrl, uploadDesignSystem, errorText
 } from '../designer/api';
 import { agentDisplayName } from '../designer/agentName';
 import { KIND_LABEL, plural } from '../designer/labels';
@@ -78,7 +78,7 @@ function NewSystem({ onUploaded }: { onUploaded: (id: string) => void }) {
   const submit = useCallback(async (file: File) => {
     setBusy(true); setParsing(file.name); setError(''); setBadName('');
     try { const ds = await uploadDesignSystem(file); onUploaded(ds.id); }
-    catch (e) { setBadName(file.name); setError(String(e)); }
+    catch (e) { setBadName(file.name); setError(errorText(e)); }
     finally { setBusy(false); setParsing(''); }
   }, [onUploaded]);
 
@@ -165,7 +165,7 @@ function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
   const [moreColors, setMoreColors] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const load = useCallback(() => { getManifest(id).then(setDs).catch(e => setError(String(e))); }, [id]);
+  const load = useCallback(() => { getManifest(id).then(setDs).catch(e => setError(errorText(e))); }, [id]);
   useEffect(() => { setDs(null); setSampleId(null); setMoreColors(false); load(); }, [id, load]);
   // Список слева показывает имя и «идёт разбор»: перечитывается, когда они меняются здесь.
   useEffect(() => { if (ds) onChanged?.(); }, [ds?.describe?.status, ds?.name]);
@@ -200,7 +200,7 @@ function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
     const next = { ...(ds!.pattern_overrides ?? {}) };
     next[p.id] = !inUse(ds!, p);
     setBusy(true);
-    patchDesignSystem(id, { pattern_overrides: next }).then(setDs).catch(e => setError(String(e))).finally(() => setBusy(false));
+    patchDesignSystem(id, { pattern_overrides: next }).then(setDs).catch(e => setError(errorText(e))).finally(() => setBusy(false));
   }
   function nav(dir: -1 | 1) {
     const i = ds!.patterns.findIndex(p => p.id === sampleId);

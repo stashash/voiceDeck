@@ -61,6 +61,9 @@ _HEALTH_SKILLS = ("plan-deck", "fill-slots", "speech-to-slide", "speech-boundary
 app = FastAPI(title="Цифровой дизайнер презентаций")
 
 _origins = [origin.strip() for origin in os.environ.get(_ORIGINS_ENV, "").split(",") if origin.strip()]
+# Приложение открывают и по localhost, и по 127.0.0.1: второй адрес пускается так же, как в Java-сервисе,
+# иначе со страницы http://127.0.0.1:8088 не открывается ни один запрос к designer.
+_origins += [o.replace("localhost", "127.0.0.1") for o in _origins if "localhost" in o and o.replace("localhost", "127.0.0.1") not in _origins]
 if _origins:
     app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_methods=["*"], allow_headers=["*"])
 

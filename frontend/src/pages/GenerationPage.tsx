@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { plural } from '../designer/labels';
 import { Check, Square, AlertTriangle, RotateCw, Settings, Boxes } from 'lucide-react';
 import {
-  DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getAgentAssignments, getDeckState, getRunManifest, watchDeckEvents,
+  DeckEvent, DeckStateResponse, absoluteUrl, cancelDeck, getAgentAssignments, getDeckState, getRunManifest, watchDeckEvents, errorText
 } from '../designer/api';
 import { STEP_LABEL, StepView, buildSteps } from '../designer/generation';
 import { modelDisplayName } from '../designer/agentName';
@@ -55,7 +55,7 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
 
   useEffect(() => {
     setState(null); setEvents([]); setStopped(false); setError('');
-    getDeckState(deckId).then(setState).catch(e => setError(String(e)));
+    getDeckState(deckId).then(setState).catch(e => setError(errorText(e)));
     const source = watchDeckEvents(deckId, e => {
       setEvents(prev => [...prev, e]);
       getDeckState(deckId).then(setState).catch(() => {});
@@ -123,7 +123,7 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
             </div>}
           </div>
           {doneAll ? <a className="button primary" href={`#/decks/${deckId}/edit/${variant}`}>Открыть и править</a>
-            : !stopped && <button type="button" className="button" onClick={() => { setStopped(true); cancelDeck(deckId).catch(e => setError(String(e))); }}>
+            : !stopped && <button type="button" className="button" onClick={() => { setStopped(true); cancelDeck(deckId).catch(e => setError(errorText(e))); }}>
               <Square size={18} strokeWidth={1.5}/>Остановить
             </button>}
         </div>

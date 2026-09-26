@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { RotateCw, TerminalSquare, Boxes } from 'lucide-react';
 import {
   AgentAssignments, AgentCheckResult, AgentInfo, ModelSettings,
-  checkAgent, getAgentAssignments, getModelSettings, listAgents, setAgentAssignments, setModelSettings,
+  checkAgent, getAgentAssignments, getModelSettings, listAgents, setAgentAssignments, setModelSettings, errorText
 } from '../designer/api';
 import { agentOptionName } from '../designer/agentName';
 
@@ -29,14 +29,14 @@ export default function SettingsPage() {
   const [urlDraft, setUrlDraft] = useState('');
 
   function reload() {
-    listAgents().then(setAgents).catch(e => setError(String(e)));
+    listAgents().then(setAgents).catch(e => setError(errorText(e)));
     getAgentAssignments().then(setAssignments).catch(() => {});
     getModelSettings().then(m => { setModels(m); setUrlDraft(m.llm_url); }).catch(() => {});
   }
 
   // Сервис отвечает сохранёнными настройками; после смены сервера или модели список агентов и роли перечитываются.
   function saveModels(change: Partial<Omit<ModelSettings, 'server'>>) {
-    setModelSettings(change).then(m => { setModels(m); setUrlDraft(m.llm_url); reload(); }).catch(e => setError(String(e)));
+    setModelSettings(change).then(m => { setModels(m); setUrlDraft(m.llm_url); reload(); }).catch(e => setError(errorText(e)));
   }
   function saveUrl() {
     const next = urlDraft.trim();
@@ -50,19 +50,23 @@ export default function SettingsPage() {
   async function runCheck(id: string) {
     setChecks(prev => ({ ...prev, [id]: 'busy' }));
     try { const result = await checkAgent(id); setChecks(prev => ({ ...prev, [id]: result })); }
-    catch (e) { setChecks(prev => ({ ...prev, [id]: { ok: false, images: null, seconds: 0, message: String(e) } })); }
+    catch (e) { setChecks(prev => ({ ...prev, [id]: { ok: false, images: null, seconds: 0, message: errorText(e) } })); }
   }
 
   function assign(task: keyof AgentAssignments, agentId: string) {
     if (!assignments) return;
     const next = { ...assignments, [task]: agentId };
     setAssignments(next);
-    setAgentAssignments(next).catch(e => setError(String(e)));
+    setAgentAssignments(next).catch(e => setError(errorText(e)));
   }
 
   return <main className="settings-shell">
     <h1 style={{ fontSize: 28, fontWeight: 600 }}>Агенты и модели</h1>
-    {error && <div className="notice" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+    {error && <div className="notice" role="alert">{error}
+      <span style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={() => { setError(''); reload(); }} aria-label="Повторить" title="Повторить запрос"><RotateCw size={16} strokeWidth={1.5}/></button>
+        <button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button>
+      </span></div>}
     <div role="tablist" className="settings-tabs">
       <button type="button" role="tab" aria-selected={tab === 'cli'} className={`settings-tab ${tab === 'cli' ? 'active' : ''}`} onClick={() => setTab('cli')}>Локальный CLI</button>
       <button type="button" role="tab" aria-selected={tab === 'local'} className={`settings-tab ${tab === 'local' ? 'active' : ''}`} onClick={() => setTab('local')}>Локальная модель</button>

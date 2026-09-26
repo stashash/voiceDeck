@@ -87,6 +87,12 @@ function url(path: string): string {
   return `${BASE_URL}${path}`;
 }
 
+/** Ошибка запроса словами человека: сбой сети браузер отдаёт как «TypeError: Failed to fetch». */
+export function errorText(e: unknown): string {
+  if (e instanceof TypeError) return `Сервис дизайнера не отвечает (${BASE_URL}). Проверьте, что контейнеры запущены: docker compose ps.`;
+  return e instanceof Error ? e.message : String(e);
+}
+
 async function asJson<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`Сервис дизайнера ответил ${res.status}`);
   return res.json() as Promise<T>;
