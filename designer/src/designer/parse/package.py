@@ -13,6 +13,7 @@ from designer.contracts import DesignSystem, LayoutInfo, Pattern
 SOURCE_NAME = "source.pptx"
 from designer.parse.assets import _extract_embedded_fonts, extract_assets
 from designer.parse.patterns import extract_layouts, extract_patterns
+from designer.layout.units import attach_unit_decor
 from designer.parse.tokens import extract_tokens
 
 _TRANSLIT = {
@@ -91,7 +92,7 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
             font_token.embedded_state = "missing"
 
     try:
-        patterns: list[Pattern] = extract_patterns(pptx_path)
+        patterns: list[Pattern] = [attach_unit_decor(p) for p in extract_patterns(pptx_path)]
     except NotImplementedError:
         patterns = []
 
@@ -122,7 +123,9 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
 
 def load_package(package_dir: Path) -> DesignSystem:
     manifest_path = Path(package_dir) / "manifest.json"
-    return DesignSystem.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    ds = DesignSystem.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    # Фигуры по одной у каждого блока ряда едут вместе с блоком; уже разобранные шаблоны не переразбираются.
+    return ds.model_copy(update={"patterns": [attach_unit_decor(p) for p in ds.patterns]})
 
 
 def _css_var_name(prefix: str, key: str, index: int) -> str:

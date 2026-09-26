@@ -123,7 +123,7 @@ def check_in_margins(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     findings: list[Finding] = []
     for scene in scenes:
         pattern = patterns.get(scene.pattern_id)
-        frames = template_frames(pattern) if pattern else {}
+        frames = template_frames(pattern, ds.slide_size_emu[0] / ds.slide_size_emu[1]) if pattern else {}
         for el in scene.elements:
             if el.role in DECOR_ROLES or on_template(el, frames):
                 continue
@@ -149,7 +149,7 @@ def check_off_guides(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     findings: list[Finding] = []
     for scene in scenes:
         pattern = patterns.get(scene.pattern_id)
-        frames = template_frames(pattern) if pattern else {}
+        frames = template_frames(pattern, ds.slide_size_emu[0] / ds.slide_size_emu[1]) if pattern else {}
         for el in scene.elements:
             if el.type not in _GUIDE_TYPES or on_template(el, frames):
                 continue

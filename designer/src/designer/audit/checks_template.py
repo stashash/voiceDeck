@@ -167,7 +167,7 @@ def check_contrast(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     findings: list[Finding] = []
     for scene in scenes:
         pattern = patterns.get(scene.pattern_id)
-        frames = template_frames(pattern) if pattern else {}
+        frames = template_frames(pattern, ds.slide_size_emu[0] / ds.slide_size_emu[1]) if pattern else {}
         for el in scene.elements:
             if el.type != "text" or not el.text or el.style is None or not el.style.color:
                 continue

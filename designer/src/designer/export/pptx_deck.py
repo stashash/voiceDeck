@@ -18,7 +18,7 @@ from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpe
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
 from designer.layout.capacity import number_caption, split_number
-from designer.layout.units import map_shape_box, place_units
+from designer.layout.units import keeps_aspect, map_shape_box, place_units
 from designer.parse.package import SOURCE_NAME
 from designer.viz.pptx_native import add_chart, add_table
 
@@ -206,13 +206,19 @@ def _next_id(slide):
     return issue
 
 
+def _unit_box(item: _Placed, old_box: Box, new_box: Box, slide_size) -> Box:
+    """Та же геометрия, что у сцены: картинка размера не меняет, кружок остаётся кружком."""
+    keep = item.kind == KEEP_SIZE_KIND
+    aspect = not keep and keeps_aspect(old_box, item.box, slide_size[0] / slide_size[1])
+    return map_shape_box(old_box, new_box, item.box, keep_size=keep, keep_aspect=aspect)
+
+
 def _move_unit(placed, shape_ids, old_box: Box, new_box: Box, slide_size) -> None:
     for shape_id in shape_ids:
         item = _live(placed, shape_id)
         if item is None:
             continue
-        keep = item.kind == KEEP_SIZE_KIND
-        _set_box(item, map_shape_box(old_box, new_box, item.box, keep_size=keep), slide_size)
+        _set_box(item, _unit_box(item, old_box, new_box, slide_size), slide_size)
 
 
 def _copy_unit(placed, shape_ids, unit_map, old_box: Box, new_box: Box, slide_size, issue) -> dict[str, int]:
@@ -229,8 +235,7 @@ def _copy_unit(placed, shape_ids, unit_map, old_box: Box, new_box: Box, slide_si
         parent.append(element)
         new_id = _renumber(element, issue)
         fresh = _Placed(element=element, box=item.box, transform=item.transform, kind=item.kind)
-        keep = item.kind == KEEP_SIZE_KIND
-        _set_box(fresh, map_shape_box(old_box, new_box, item.box, keep_size=keep), slide_size)
+        _set_box(fresh, _unit_box(item, old_box, new_box, slide_size), slide_size)
         placed[new_id] = fresh
         copied[shape_id] = new_id
     return {slot_id: copied[shape_id] for slot_id, shape_id in unit_map.items() if shape_id in copied}
