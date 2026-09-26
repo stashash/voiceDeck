@@ -123,6 +123,17 @@ def test_agents_list_shows_found_stubs_and_missing_real_cli(bridge):
     assert by_id["cursor-agent"]["found"] is False
 
 
+def test_agents_list_does_not_rerun_version_every_time(bridge):
+    # Под нагрузкой запуски `--version` не укладывались в 5 с ожидания designer: версия кешируется.
+    base_url, log_path = bridge
+    httpx.get(f"{base_url}/agents", timeout=5.0)
+    runs = log_path.read_text(encoding="utf-8").count("--version")
+    body = httpx.get(f"{base_url}/agents", timeout=5.0).json()
+
+    assert log_path.read_text(encoding="utf-8").count("--version") == runs
+    assert {item["id"]: item["version"] for item in body["items"]}["claude"] == "9.9.9-stub"
+
+
 def test_check_ok_reports_images_capability_from_help(bridge):
     base_url, _ = bridge
     claude = httpx.post(f"{base_url}/agents/claude/check", json={}, timeout=35.0).json()
