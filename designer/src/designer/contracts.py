@@ -275,6 +275,7 @@ class SlideSpec(BaseModel):
     unit_text: list[dict[str, str]] = Field(default_factory=list, description="по блоку: id слота блока -> текст")
     linked_unit_text: dict[str, list[dict[str, str]]] = Field(default_factory=dict, description="id связанной группы -> тексты её блоков; число блоков то же, что в unit_text")
     fitted_size_pt: dict[str, float] = Field(default_factory=dict, description="id слота или слота блока -> кегль после подгонки; экспорт ставит его фигурам")
+    unit_icons: list[str | None] = Field(default_factory=list, description="по блоку: имя пиктограммы из набора designer/icons вместо значка образца; None оставляет значок образца")
     viz_box: Box | None = Field(default=None, description="рамка диаграммы или таблицы, её выбирает вёрстка")
     remove_shape_ids: list[int] = Field(default_factory=list, description="фигуры образца, которые вёрстка решила убрать: незаполненные группы, образцы в рамке визуализации, заглушки под фото")
     chart: ChartSpec | None = None
@@ -294,6 +295,7 @@ class Element(BaseModel):
     style: TextStyle | None = None
     fill: str | None = None
     asset: str | None = None
+    icon: str | None = Field(default=None, description="пиктограмма набора designer/icons вместо картинки образца")
     source_shape_id: int | None = None
     chart: ChartSpec | None = None
     table: TableSpec | None = None

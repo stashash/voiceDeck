@@ -215,7 +215,10 @@ def _unit_elements(
                 if element is not None:
                     out.append(element)
             elif area is not None:
-                out.append(_picture_element(el_id, area.kind, box, z, raw.get(shape_id), shape_id))
+                element = _picture_element(el_id, area.kind, box, z, raw.get(shape_id), shape_id)
+                if area.kind == "icon" and index < len(spec.unit_icons) and spec.unit_icons[index]:
+                    element.icon = spec.unit_icons[index]
+                out.append(element)
             else:
                 out.append(_decor_element(el_id, info, box, z, raw.get(shape_id), part, theme))
     return out

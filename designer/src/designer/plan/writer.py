@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import uuid
 
+from designer import icons
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
@@ -61,6 +62,7 @@ def fill_slots(intent: SlideIntent, limits: dict[str, int], unit_limits: dict[st
         draft = _apply_fill_response(intent, data, limits, unit_limits)
 
     _fit_item_count(draft, original_items, n_units)
+    _keep_icon_hints(draft, original_items)
     _drop_unknown_numbers(draft, allowed_numbers)
     _enforce_top_limits(draft, limits)
     _enforce_unit_limits(draft.items, unit_limits)
@@ -71,7 +73,7 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     """Фрагмент устной речи в намерение слайда. Пустой title значит «слайд не нужен»."""
     skill = load_skill(_SPEECH_SKILL)
     schema = _speech_schema(kinds)
-    system = skill.render(kinds=", ".join(kind.value for kind in kinds))
+    system = skill.render(kinds=", ".join(kind.value for kind in kinds), icon_names=icons.names_text())
 
     # Распознанная речь несёт числа словами. Модель переводила их сама и ошибалась на времени:
     # «к половине девятого» становилось «6:00». Код переводит их до модели, и числа на слайде
@@ -199,8 +201,9 @@ def _speech_schema(kinds: list[SlideKind]) -> dict:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"heading": {"type": "string"}, "body": {"type": "string"}},
-                    "required": ["heading", "body"],
+                    "properties": {"heading": {"type": "string"}, "body": {"type": "string"},
+                                   "icon_hint": {"type": "string"}},
+                    "required": ["heading", "body", "icon_hint"],
                 },
             },
         },
@@ -260,7 +263,8 @@ def _speech_intent(data: dict, kinds: list[SlideKind]) -> SlideIntent:
     if not title:
         return SlideIntent(id=uuid.uuid4().hex, kind=kind, title="")
     items = [
-        Item(heading=str(raw.get("heading", "")), body=str(raw.get("body", "")))
+        Item(heading=str(raw.get("heading", "")), body=str(raw.get("body", "")),
+             icon_hint=str(raw.get("icon_hint", "")).strip() or None)
         for raw in data.get("items", []) or []
     ]
     return SlideIntent(id=uuid.uuid4().hex, kind=kind, title=title,
@@ -309,6 +313,13 @@ def _violations(draft: SlideIntent, limits: dict[str, int], unit_limits: dict[st
 
 
 # ---------- принудительная нормализация кодом ----------
+
+def _keep_icon_hints(draft: SlideIntent, original_items: list[Item]) -> None:
+    """Переписанный под лимиты пункт сохраняет значок, который план выбрал для него."""
+    for item, original in zip(draft.items, original_items):
+        if not item.icon_hint:
+            item.icon_hint = original.icon_hint
+
 
 def _fit_item_count(draft: SlideIntent, original_items: list[Item], n_units: int) -> None:
     items = draft.items

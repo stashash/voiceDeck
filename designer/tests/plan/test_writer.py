@@ -149,7 +149,7 @@ def test_speech_to_slide_builds_intent_from_fragment():
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     client = _client_returning(payload)
     intent = speech_to_slide("Мы внедрили автоматизацию, и стало меньше ошибок",
@@ -158,6 +158,7 @@ def test_speech_to_slide_builds_intent_from_fragment():
     assert intent.kind == SlideKind.bullets
     assert intent.title == "Автоматизация экономит время"
     assert len(intent.items) == 1
+    assert intent.items[0].icon_hint == "shield-check", "значок пункта модель выбирает из набора"
 
 
 def test_speech_to_slide_drops_number_not_in_fragment():

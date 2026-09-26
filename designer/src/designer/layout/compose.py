@@ -40,6 +40,7 @@ from designer.layout.capacity import (
     unit_count,
     unit_slot_box,
 )
+from designer import icons
 from designer.parse import geometry as geo
 
 _HEAD_ROLES = ("heading", "title")
@@ -579,6 +580,11 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.group_id = group.id
         spec.unit_text = spread[group.id]
         spec.linked_unit_text = {other.id: spread[other.id] for other in linked}
+        # Значок у каждого пункта свой, по подсказке модели; без подсказки остаётся значок образца.
+        if any(area.kind == "icon" for g in (group, *linked) for area in g.unit_areas):
+            picked = [icons.pick(rest[i].icon_hint) if i < len(rest) else None for i in range(n)]
+            if any(picked):
+                spec.unit_icons = picked
         rest = []
 
     if intent.key_message:

@@ -70,7 +70,7 @@ def test_live_slide_returns_scene_with_model_text(client, templates):
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
@@ -254,7 +254,7 @@ def test_live_slide_returns_picture_of_the_slide(client, templates, monkeypatch)
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
@@ -273,7 +273,7 @@ def test_live_slide_without_engine_has_no_picture(client, templates):
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 

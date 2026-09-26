@@ -329,7 +329,7 @@ def _live_client(payload: dict) -> LlmClient:
 _LIVE_PAYLOAD = {
     "kind": "bullets", "title": "Автоматизация экономит время",
     "key_message": "Скрипты забирают рутину.",
-    "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+    "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
 }
 
 

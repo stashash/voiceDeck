@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+from designer import icons
 from designer.contracts import ChartSpec, DeckPlan, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
@@ -14,7 +15,8 @@ _SKILL_NAME = "plan-deck"
 def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, client: LlmClient) -> DeckPlan:
     skill = load_skill(_SKILL_NAME)
     schema = DeckPlan.model_json_schema()
-    system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count))
+    system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count),
+                          icon_names=icons.names_text())
 
     data = client.complete_json(system=system, user=brief, schema=schema, params=skill.params)
     plan = DeckPlan.model_validate(data)

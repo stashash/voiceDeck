@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import io
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
+from designer import icons
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
@@ -389,6 +391,55 @@ def _relayout_if_bare(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem
             break
 
 
+_SVG_BLIP_URI = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"
+
+
+def _set_unit_icons(slide, placed, spec: SlideSpec, pattern: Pattern) -> None:
+    """Картинка-значок каждого блока меняется на значок набора в цвете картинки образца: у пунктов свои значки."""
+    if not any(spec.unit_icons):
+        return
+    main = _group_of(pattern, spec.group_id)
+    if main is None:
+        return
+    groups = {g.id: g for g in pattern.groups}
+    count = len(spec.unit_text)
+    for group in [main, *(groups[g] for g in main.linked_group_ids if g in groups)]:
+        areas = [area for area in group.unit_areas if area.kind == "icon"]
+        if not areas or not group.min_units <= count <= group.max_units:
+            continue
+        limit_w = max(area.box[2] for area in areas) * 1.5
+        limit_h = max(area.box[3] for area in areas) * 1.5
+        for index, unit in enumerate(place_units(group, count)):
+            name = spec.unit_icons[index] if index < len(spec.unit_icons) else None
+            if not name:
+                continue
+            for item in placed.values():
+                if item.dropped or item.kind != KEEP_SIZE_KIND or item.box[2] > limit_w or item.box[3] > limit_h:
+                    continue
+                cx, cy = item.box[0] + item.box[2] / 2, item.box[1] + item.box[3] / 2
+                if unit[0] <= cx <= unit[0] + unit[2] and unit[1] <= cy <= unit[1] + unit[3]:
+                    _replace_picture(slide, item, name)
+
+
+def _replace_picture(slide, item: _Placed, name: str) -> None:
+    blip = item.element.find(".//" + qn("a:blip"))
+    if blip is None:
+        return
+    old_rid = blip.get(qn("r:embed"))
+    color = None
+    if old_rid:
+        try:
+            color = icons.dominant_color(slide.part.related_part(old_rid).blob)
+        except KeyError:
+            color = None
+    _, new_rid = slide.part.get_or_add_image_part(io.BytesIO(icons.icon_png(name, color or "0077FF")))
+    blip.set(qn("r:embed"), new_rid)
+    # Картинка образца в svg: PowerPoint показал бы её вместо нового значка.
+    for ext in blip.findall(qn("a:extLst") + "/" + qn("a:ext")):
+        if ext.get("uri") == _SVG_BLIP_URI:
+            ext.getparent().remove(ext)
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
@@ -396,6 +447,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     _remove_shapes(placed, spec.remove_shape_ids)
     _fill_slots(placed, spec, pattern, ds.slide_size_emu)
     _fill_group(placed, spec, pattern, ds, issue)
+    _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
     _prune_groups(slide)
     if spec.notes:
