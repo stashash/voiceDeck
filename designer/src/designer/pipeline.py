@@ -634,10 +634,11 @@ def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text
         scene, png_path = job
         return audit_slide(scene, png_path.read_bytes(), source_text, client)
 
+    # Запросы с картинкой идут строго по одному, как при описании образцов: в несколько потоков сервер
+    # модели отвечает на ту же картинку иначе (замер 22.09: needs_images true на одном потоке, false на четырёх).
     findings: list[Finding] = []
-    with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
-        for found in pool.map(_one, list(zip(scenes, png_paths))):
-            findings.extend(found)
+    for job in zip(scenes, png_paths):
+        findings.extend(_one(job))
     findings.extend(audit_deck(scenes, client))
     return findings
 
