@@ -65,7 +65,7 @@ def pick(hint: str | None) -> str | None:
 
 
 def dominant_color(image_bytes: bytes) -> str | None:
-    """Главный цвет картинки-значка образца (без прозрачных и почти белых точек), hex без решётки."""
+    """Главный цвет картинки-значка образца (без прозрачных точек, а у картинки без прозрачности без белого фона), hex без решётки."""
     from PIL import Image
 
     try:
@@ -73,9 +73,12 @@ def dominant_color(image_bytes: bytes) -> str | None:
     except Exception:  # noqa: BLE001 - картинка образца может быть в формате, который Pillow не читает (svg, emf)
         return None
     image.thumbnail((64, 64))
+    # Белый значок на прозрачном фоне (белый на синем круге) остаётся белым; у картинки без
+    # прозрачности белое это фон, а не значок.
+    transparent = any(a < 128 for *_, a in image.getdata())
     counts: Counter = Counter()
     for r, g, b, a in image.getdata():
-        if a < 128 or (r > 235 and g > 235 and b > 235):
+        if a < 128 or (not transparent and r > 235 and g > 235 and b > 235):
             continue
         counts[(r // 16 * 16, g // 16 * 16, b // 16 * 16)] += 1
     if not counts:

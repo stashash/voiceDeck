@@ -223,10 +223,18 @@ def _move_unit(placed, shape_ids, old_box: Box, new_box: Box, slide_size) -> Non
         _set_box(item, _unit_box(item, old_box, new_box, slide_size), slide_size)
 
 
+def _layer(placed, shape_id: int) -> int:
+    item = placed.get(shape_id)
+    parent = item.element.getparent() if item is not None else None
+    return parent.index(item.element) if parent is not None else 1 << 30
+
+
 def _copy_unit(placed, shape_ids, unit_map, old_box: Box, new_box: Box, slide_size, issue) -> dict[str, int]:
-    """Новый блок копией фигур образца; возвращает своё соответствие слот -> фигура."""
+    """Новый блок копией фигур образца; возвращает своё соответствие слот -> фигура.
+
+    Фигуры копируются в порядке слоёв слайда: значок внутри цветной фигуры остаётся поверх неё."""
     copied: dict[int, int] = {}
-    for shape_id in shape_ids:
+    for shape_id in sorted(shape_ids, key=lambda sid: _layer(placed, sid)):
         item = _live(placed, shape_id)
         if item is None:
             continue

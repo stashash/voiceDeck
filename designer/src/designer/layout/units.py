@@ -19,14 +19,21 @@ _UNIT_DECOR_KINDS = ("shape", "image", "other")
 
 
 def attach_unit_decor(pattern: Pattern) -> Pattern:
-    """Фигура оформления, которая стоит по одной у каждого блока ряда или столбца, принадлежит блоку.
+    """Фигура, которая стоит по одной у каждого блока ряда или столбца, принадлежит блоку.
 
     Разбор не видит в ней повтора, когда у каждого блока своя фигура (круг, квадрат, щит). Такие фигуры
     оставались на местах образца: у четырёх пунктов было три значка, у таймлайна на три шага лишние точки.
-    Привязанная к блоку фигура переносится, копируется и убирается вместе с ним. Повторный вызов ничего не меняет.
+    Берутся фигуры оформления и картинки образца двух видов: рядом с блоком и не крупнее его, либо вокруг
+    блока (цветная фигура, внутри которой стоит значок) и не шире шага ряда. Привязанная фигура переносится,
+    копируется и убирается вместе с блоком. Повторный вызов ничего не меняет.
     """
-    decor = {d.shape_id: d for d in pattern.decor if d.kind in _UNIT_DECOR_KINDS}
-    if not decor:
+    shapes: dict[int, Box] = {d.shape_id: d.box for d in pattern.decor if d.kind in _UNIT_DECOR_KINDS}
+    area_of: dict[int, str] = {}
+    for area in pattern.areas:
+        if area.kind == "image" and not area.placeholder and area.shape_id is not None:
+            shapes[area.shape_id] = area.box
+            area_of[area.shape_id] = area.id
+    if not shapes:
         return pattern
     taken: set[int] = set()
     groups = []
@@ -36,20 +43,24 @@ def attach_unit_decor(pattern: Pattern) -> Pattern:
             continue
         axis = 0 if group.direction == "row" else 1
         cross = 1 - axis
+        step = group.step[axis]
         low = min(u.box[cross] for u in group.units)
         high = max(u.box[cross] + u.box[cross + 2] for u in group.units)
         band = (high - low) * 0.75  # фигура над блоком или под ним
         per_unit: list[list[int]] = [[] for _ in group.units]
-        for shape_id, shape in decor.items():
+        for shape_id, box in shapes.items():
             if shape_id in taken:
                 continue
-            box = shape.box
             if box[cross] + box[cross + 2] < low - band or box[cross] > high + band:
                 continue
             center = box[axis] + box[axis + 2] / 2
             for i, unit in enumerate(group.units):
                 start, size = unit.box[axis], unit.box[axis + 2]
-                if start <= center <= start + size and box[axis + 2] <= size * 1.1:
+                beside = start <= center <= start + size and box[axis + 2] <= size * 1.1
+                ux, uy = unit.box[0] + unit.box[2] / 2, unit.box[1] + unit.box[3] / 2
+                around = (box[0] <= ux <= box[0] + box[2] and box[1] <= uy <= box[1] + box[3]
+                          and 0 < box[axis + 2] < step and not _same_box(box, unit.box))
+                if beside or around:
                     per_unit[i].append(shape_id)
                     break
         counts = {len(ids) for ids in per_unit}
@@ -61,11 +72,17 @@ def attach_unit_decor(pattern: Pattern) -> Pattern:
         groups.append(group.model_copy(update={"units": units}))
     if not taken:
         return pattern
+    gone_areas = {area_of[s] for s in taken if s in area_of}
     return pattern.model_copy(update={
         "groups": groups,
         "decor_shape_ids": [s for s in pattern.decor_shape_ids if s not in taken],
         "decor": [d for d in pattern.decor if d.shape_id not in taken],
+        "areas": [a for a in pattern.areas if a.id not in gone_areas],
     })
+
+
+def _same_box(a: Box, b: Box) -> bool:
+    return all(abs(a[i] - b[i]) <= 0.005 for i in range(4))
 
 
 def _origin(group: RepeatGroup) -> tuple[float, float]:
@@ -105,7 +122,7 @@ def place_units(group: RepeatGroup, n: int) -> list[Box]:
 SQUARE_TOLERANCE = 0.2
 """Насколько фигура может отличаться от квадрата (по сторонам на слайде), чтобы считаться кружком или квадратиком."""
 CONTAINER_PART = 0.9
-"""Фигура на 90 % блока и больше это подложка блока: она тянется вместе с блоком."""
+"""Фигура размером с блок (от 90 до 111 %) это подложка блока: она тянется вместе с блоком."""
 
 
 def keeps_aspect(unit: Box, shape: Box, slide_ratio: float) -> bool:
@@ -116,7 +133,9 @@ def keeps_aspect(unit: Box, shape: Box, slide_ratio: float) -> bool:
     if not (unit[2] and unit[3] and shape[2] and shape[3]):
         return False
     aspect = shape[2] * slide_ratio / shape[3]
-    container = shape[2] >= unit[2] * CONTAINER_PART and shape[3] >= unit[3] * CONTAINER_PART
+    # Подложка это фигура размером с блок; кружок вокруг маленького значка крупнее блока и формы не теряет.
+    container = (unit[2] * CONTAINER_PART <= shape[2] <= unit[2] / CONTAINER_PART
+                 and unit[3] * CONTAINER_PART <= shape[3] <= unit[3] / CONTAINER_PART)
     return not container and 1 - SQUARE_TOLERANCE <= aspect <= 1 / (1 - SQUARE_TOLERANCE)
 
 

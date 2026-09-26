@@ -474,7 +474,10 @@ def unit_boxes(
     """
     main = place_units(group, n)
     old = group.units[0].box
-    return main, {other.id: [map_shape_box(old, new, other.units[0].box) for new in main]
+    # Ряд значков без текста размера не меняет: значок и фигура вокруг него не сжимаются вместе
+    # с подписями, блок только встаёт над своей подписью.
+    return main, {other.id: [map_shape_box(old, new, other.units[0].box, keep_size=not other.unit_slots)
+                             for new in main]
                   for other in linked}
 
 

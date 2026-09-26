@@ -90,3 +90,14 @@ def test_decor_not_one_per_unit_stays():
     pattern = _pattern_with_row_decor()
     pattern = pattern.model_copy(update={"decor": pattern.decor[:2] + pattern.decor[3:]})
     assert attach_unit_decor(pattern).groups[0].units[0].shape_ids == [0]
+
+
+def test_figure_around_icon_moves_with_its_unit():
+    # Цветная фигура, внутри которой стоит значок блока, едет вместе с блоком и не тянется в овал.
+    group = _group("row", 3, 1, 3, 6, step=(0.305, 0.0), size=(0.037, 0.066))
+    figures = [DecorShape(shape_id=100 + i, box=(0.02 + i * 0.305, 0.21, 0.071, 0.126)) for i in range(3)]
+    pattern = Pattern(id="p", source_slide=1, layout_name="l", kind=SlideKind.cards, kind_confidence=1, theme="light",
+                      groups=[group], decor_shape_ids=[f.shape_id for f in figures], decor=figures)
+    attached = attach_unit_decor(pattern)
+    assert [u.shape_ids for u in attached.groups[0].units] == [[0, 100], [1, 101], [2, 102]]
+    assert keeps_aspect(group.units[0].box, figures[0].box, 16 / 9), "фигура крупнее блока это не подложка"
