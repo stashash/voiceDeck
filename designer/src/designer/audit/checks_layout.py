@@ -2,6 +2,8 @@
 
 Владелец: задача T-03.
 """
+import re
+
 from designer.contracts import Box, DesignSystem, Finding, Scene
 
 # deterministic.py собирает реестр проверок из этого модуля, поэтому его помощники
@@ -64,6 +66,24 @@ def _ink_box(el, slide_w_pt: float, slide_h_pt: float) -> Box | None:
     return (x, y, ink_w, ink_h)
 
 
+def _unit_index(element_id: str) -> str | None:
+    """Номер пункта у элемента повторяющегося блока (id вида u2s881), None у остальных."""
+    match = re.match(r"u(\d+)s\d+$", element_id)
+    return match.group(1) if match else None
+
+
+def _contains(outer: Box, inner: Box) -> bool:
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return ox - _EPS <= ix and oy - _EPS <= iy and ix + iw <= ox + ow + _EPS and iy + ih <= oy + oh + _EPS
+
+
+def _nested_in_unit(a, box_a: Box, b, box_b: Box) -> bool:
+    """Значок внутри своей цветной фигуры: так собран пункт образца, это не наложение."""
+    unit = _unit_index(a.id)
+    return unit is not None and unit == _unit_index(b.id) and (_contains(box_a, box_b) or _contains(box_b, box_a))
+
+
 def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
     from designer.audit.deterministic import describe_element, upper_first
     slide_w_pt, slide_h_pt = _slide_size_pt(ds)
@@ -74,6 +94,8 @@ def check_overlap(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
         for i in range(len(els)):
             for j in range(i + 1, len(els)):
                 (a, box_a), (b, box_b) = els[i], els[j]
+                if _nested_in_unit(a, box_a, b, box_b):
+                    continue
                 smaller = min(box_a[2] * box_a[3], box_b[2] * box_b[3])
                 # Касание краями и перехлёст меньше двадцатой части меньшего блока огрехом не считаем.
                 if smaller > 0 and _intersect_area(box_a, box_b) > 0.05 * smaller:
