@@ -81,6 +81,9 @@ public final class Designer {
             if(title==null&&(role.equals("title")||role.equals("heading")))title=text;
             else if(role.equals("body"))bullets.add(text);
         }
-        return new JsonObject().put("title",title).put("bullets",bullets).put("notes","").put("pattern_id",scene.getString("pattern_id")).put("html",response.getString("html"));
+        JsonObject slide=new JsonObject().put("title",title).put("bullets",bullets).put("notes","").put("pattern_id",scene.getString("pattern_id")).put("html",response.getString("html"));
+        JsonObject timings=response.getJsonObject("timings");
+        if(timings!=null&&!timings.isEmpty())slide.put("timings",timings);
+        return slide;
     }
 }

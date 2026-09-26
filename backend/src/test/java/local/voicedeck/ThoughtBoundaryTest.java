@@ -82,6 +82,30 @@ class ThoughtBoundaryTest {
             assertEquals("<section>слайд</section>",s.slides.get(id).getString("html"));
         }
     }
+    @Test void earlyAnswerSettlesFragmentAtOnce()throws Exception{
+        try(var s=session("live-early")){
+            s.acceptFinal("Начну с проблемы.",0,1500);pause(s);
+            int before=questions.get();
+            s.state.submit(()->s.askEarly("Теперь о результатах пилота",3000)).get();
+            DesignerSlideEventTest.waitUntil(()->!s.judging);
+            assertEquals(before+1,questions.get(),"вопрос задан, пока фраза ещё звучит");
+            s.acceptFinal("Теперь о результатах пилота.",3000,5000);pause(s);
+            assertEquals(before+1,questions.get(),"к закрытию фрагмента ответ уже есть, второй раз модель не спрашивают");
+            assertEquals("confirmed",s.orderedChunks().getFirst().getString("status"),"прежняя мысль ушла в зал");
+            assertEquals(2,s.chunks.size());
+        }
+    }
+    @Test void freshThoughtGetsModelSlideFirst()throws Exception{
+        try(var s=session("live-order")){
+            s.acceptFinal("Начну с проблемы.",0,1500);s.commit("test");
+            s.acceptFinal("Теперь о результатах пилота.",3000,5000);s.commit("test");
+            var ordered=s.orderedChunks();String old=ordered.getFirst().getString("id"),fresh=ordered.getLast().getString("id");
+            s.event("slide",new JsonObject().put("slide",new JsonObject().put("chunk_id",old).put("rev",1).put("title","Черновик").put("bullets",new JsonArray()).put("notes","").put("source","draft")));
+            assertEquals(fresh,s.nextForSlide().getString("id"),"зал смотрит на то, что говорится сейчас");
+            s.inFlight.add(fresh);
+            assertEquals(old,s.nextForSlide().getString("id"),"прежняя мысль получает слайд следом");
+        }
+    }
     @Test void designerDownKeepsFragmentsFlowing()throws Exception{
         server.removeContext("/live/boundary");
         server.createContext("/live/boundary",ex->{ex.sendResponseHeaders(500,-1);ex.close();});

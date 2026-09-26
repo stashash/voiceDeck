@@ -225,7 +225,7 @@ def _fake_slide_images(monkeypatch) -> None:
     monkeypatch.setattr("designer.pipeline.convert.to_pdf",
                          lambda pptx_path, out_path: out_path.write_bytes(b"%PDF-1.4 fake"))
     monkeypatch.setattr("designer.pipeline.render.render_slides",
-                         lambda pptx_path, count, width_px=1600: [PNG] * count)
+                         lambda pptx_path, count, width_px=1600, pdf_path=None: [PNG] * count)
     monkeypatch.setattr("designer.pipeline.render.render_spec",
                          lambda spec, ds, package_dir: PNG)
 
@@ -630,7 +630,8 @@ def test_live_boundary_returns_model_decision(client):
     })
 
     assert response.status_code == 200
-    assert response.json() == {"new_thought": True}
+    assert response.json()["new_thought"] is True
+    assert set(response.json()["timings"]) == {"total_ms", "busy"}
 
 
 def test_live_boundary_reports_model_loading(client):

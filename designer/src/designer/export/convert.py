@@ -131,23 +131,57 @@ def _soffice_pdf_command(soffice: str, pptx_path: Path, out_dir: Path, profile_d
     ]
 
 
+_profile_root: Path | None = None
+_free_profiles: list[Path] = []
+_profiles_lock = threading.Lock()
+
+
+def _take_profile() -> Path:
+    """Профиль LibreOffice из запаса. Новый профиль soffice создаёт 0,6–0,7 с при каждом запуске,
+    готовый стартует за 0,1 с. Один профиль в каждый момент занят одним процессом."""
+    global _profile_root
+    with _profiles_lock:
+        if _free_profiles:
+            return _free_profiles.pop()
+        if _profile_root is None:
+            _profile_root = Path(tempfile.mkdtemp(prefix="designer-soffice-profiles-"))
+            atexit.register(shutil.rmtree, _profile_root, True)
+        return Path(tempfile.mkdtemp(prefix="p-", dir=_profile_root))
+
+
+def _return_profile(profile_dir: Path, healthy: bool) -> None:
+    if not healthy:
+        # Профиль после сбоя soffice может быть испорчен: следующий запуск возьмёт новый.
+        shutil.rmtree(profile_dir, ignore_errors=True)
+        return
+    with _profiles_lock:
+        _free_profiles.append(profile_dir)
+
+
 def _libreoffice_to_pdf(pptx_path: Path, out_path: Path) -> None:
     soffice = _soffice_path()
     if not soffice:
         raise ConverterUnavailable("soffice не найден: задайте PATH или DESIGNER_SOFFICE")
     with tempfile.TemporaryDirectory(prefix="designer-soffice-out-") as out_dir_raw:
         out_dir_tmp = Path(out_dir_raw)
-        profile_dir = Path(tempfile.mkdtemp(prefix="designer-soffice-profile-"))
+        profile_dir = _take_profile()
+        produced = out_dir_tmp / f"{pptx_path.stem}.pdf"
+        result = None
         try:
             cmd = _soffice_pdf_command(soffice, pptx_path, out_dir_tmp, profile_dir)
             result = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT_S, check=False)
         finally:
-            shutil.rmtree(profile_dir, ignore_errors=True)
-        produced = out_dir_tmp / f"{pptx_path.stem}.pdf"
+            _return_profile(profile_dir, healthy=produced.is_file())
         if not produced.is_file():
-            stderr = result.stderr.decode("utf-8", "replace").strip() if result.stderr else ""
+            stderr = result.stderr.decode("utf-8", "replace").strip() if result is not None and result.stderr else ""
             raise ConverterUnavailable(f"soffice не создал pdf: {stderr or 'нет вывода'}")
         shutil.copyfile(produced, out_path)
+
+
+def pdf_pages(pdf_path: Path, width_px: int = DEFAULT_WIDTH_PX) -> list[bytes]:
+    """Картинки страниц готового pdf без повторного запуска движка: колода конвертируется один раз."""
+    with tempfile.TemporaryDirectory(prefix="designer-pdf-pages-") as tmp:
+        return [page.read_bytes() for page in _rasterize_pdf_to_png(Path(pdf_path), Path(tmp), width_px)]
 
 
 def _libreoffice_to_png(pptx_path: Path, out_dir: Path, width_px: int) -> list[Path]:
@@ -377,7 +411,9 @@ class RenderSession:
 
 
 class _LibreOfficeSession(RenderSession):
-    """soffice зовётся по-прежнему на файл целиком; картинки файла держатся до его правки."""
+    """soffice зовётся по-прежнему на файл целиком; картинки файла держатся до его правки.
+
+    Разные файлы конвертируются одновременно: слайд Live не ждёт, пока движок снимает колоду."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -386,14 +422,16 @@ class _LibreOfficeSession(RenderSession):
 
     def png(self, pptx_path: Path, slide_index: int, width_px: int = DEFAULT_WIDTH_PX) -> bytes:
         pptx_path = Path(pptx_path)
+        key = (str(pptx_path.resolve()), pptx_path.stat().st_mtime, width_px)
         with self._lock:
-            key = (str(pptx_path.resolve()), pptx_path.stat().st_mtime, width_px)
-            if key != self._key:
-                self._pages = self._convert(pptx_path, width_px)
-                self._key = key
-            if slide_index < 0 or slide_index >= len(self._pages):
-                raise ConverterUnavailable(f"в файле нет слайда с номером {slide_index + 1}")
-            return self._pages[slide_index]
+            pages = self._pages if key == self._key else None
+        if pages is None:
+            pages = self._convert(pptx_path, width_px)
+            with self._lock:
+                self._key, self._pages = key, pages
+        if slide_index < 0 or slide_index >= len(pages):
+            raise ConverterUnavailable(f"в файле нет слайда с номером {slide_index + 1}")
+        return pages[slide_index]
 
     @staticmethod
     def _convert(pptx_path: Path, width_px: int) -> list[bytes]:

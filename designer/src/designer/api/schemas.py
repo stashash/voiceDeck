@@ -79,6 +79,7 @@ class LiveBoundaryRequest(BaseModel):
 
 class LiveBoundaryResponse(BaseModel):
     new_thought: bool
+    timings: dict[str, int] = Field(default_factory=dict, description="время ответа модели и ожидания, мс")
 
 
 class LiveSlideResponse(BaseModel):
@@ -86,6 +87,8 @@ class LiveSlideResponse(BaseModel):
     html: str
     image_png_base64: str | None = Field(default=None,
                                           description="картинка слайда; None, если движка конвертации нет")
+    timings: dict[str, int] = Field(default_factory=dict,
+                                     description="время этапов слайда, мс: модель, картинка, всего, запросов к модели в работе")
 
 
 class HealthResponse(BaseModel):

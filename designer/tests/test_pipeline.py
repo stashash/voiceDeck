@@ -194,7 +194,7 @@ def _fake_convert(monkeypatch, png_count: int = 5) -> None:
         out_path.write_bytes(b"%PDF-1.4 fake")
         return out_path
 
-    def fake_render_slides(pptx_path, count, width_px=1600):
+    def fake_render_slides(pptx_path, count, width_px=1600, pdf_path=None):
         return [PNG + str(i).encode("ascii") for i in range(png_count)]
 
     monkeypatch.setattr("designer.pipeline.convert.available", lambda: ["fake"])
@@ -370,7 +370,7 @@ def test_deck_keeps_markup_html_when_engine_fails_on_pictures(templates, monkeyp
     client = _mock_client(_plan_json(5))
     _fake_convert(monkeypatch, png_count=5)
 
-    def fail(pptx_path, count, width_px=1600):
+    def fail(pptx_path, count, width_px=1600, pdf_path=None):
         raise pipeline.convert.ConverterUnavailable("движок отказал")
 
     monkeypatch.setattr("designer.pipeline.render.render_slides", fail)

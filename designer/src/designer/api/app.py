@@ -4,7 +4,10 @@ from __future__ import annotations
 import base64
 import json
 import os
+import threading
+import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Response, UploadFile
@@ -73,6 +76,32 @@ def get_llm_client() -> LlmClient:
 def get_live_llm_client() -> LlmClient:
     """Клиент модели живого режима: агент, назначенный на Live, короткое ожидание загрузки."""
     return _client_for("live")
+
+
+def _close(client: object) -> None:
+    """Клиент держит пул соединений к серверу модели: закрывается после запроса, иначе за долгое
+    выступление соединения копятся. Тестовые заглушки без close пропускаются."""
+    close = getattr(client, "close", None)
+    if callable(close):
+        close()
+
+
+_live_lock = threading.Lock()
+_live_busy = 0
+
+
+@contextmanager
+def _live_call() -> Iterator[int]:
+    """Считает запросы Live к модели, идущие одновременно: по этому числу видно очередь в сервере модели."""
+    global _live_busy
+    with _live_lock:
+        _live_busy += 1
+        busy = _live_busy
+    try:
+        yield busy
+    finally:
+        with _live_lock:
+            _live_busy -= 1
 
 
 def _not_found(ds_id_error: bool = False):
@@ -210,6 +239,8 @@ def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed
+        finally:
+            _close(client)
 
     background_tasks.add_task(_run)
     return DeckCreateResponse(deck_id=deck_id)
@@ -312,6 +343,8 @@ def audit_deck_variant(deck_id: str, variant: str,
         raise HTTPException(404, "колода не найдена")
     except RuntimeError as exc:
         raise HTTPException(409, str(exc))
+    finally:
+        _close(client)
     return AuditContextualResponse(findings=new_findings)
 
 
@@ -474,9 +507,10 @@ def put_model_settings(payload: ModelSettingsRequest) -> dict:
 @app.post("/live/slide")
 def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_live_llm_client)):
     try:
-        result = pipeline.live_slide(
-            payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
-        )
+        with _live_call() as busy:
+            result = pipeline.live_slide(
+                payload.design_system_id, payload.chunk_text, payload.used_pattern_ids, client=client,
+            )
     except LookupError as exc:
         raise HTTPException(409, str(exc))
     except (store.InvalidId, FileNotFoundError):
@@ -484,11 +518,16 @@ def live_slide(payload: LiveSlideRequest, client: LlmClient = Depends(get_live_l
     except ModelLoading as exc:
         print(f"живой слайд: {exc}", flush=True)
         raise HTTPException(503, "модель загружается в LM Studio: слайды появятся, когда она будет готова")
+    finally:
+        _close(client)
     if result is None:
         return Response(status_code=204)
 
+    timings = {**result.timings, "busy": busy}
+    print(f"живой слайд: модель {timings.get('model_ms')} мс, картинка {timings.get('image_ms')} мс, "
+          f"всего {timings.get('total_ms')} мс, запросов Live к модели одновременно {busy}", flush=True)
     image = base64.b64encode(result.png).decode("ascii") if result.png else None
-    return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=image)
+    return LiveSlideResponse(scene=result.scene, html=result.html, image_png_base64=image, timings=timings)
 
 
 @app.post("/live/draft", response_model=LiveSlideResponse)
@@ -518,20 +557,29 @@ def live_warm(payload: LiveWarmRequest, background_tasks: BackgroundTasks) -> di
 @app.post("/live/boundary", response_model=LiveBoundaryResponse)
 def live_boundary(payload: LiveBoundaryRequest, client: LlmClient = Depends(get_live_llm_client)):
     """Начинает ли следующее предложение новую мысль: так Live делит речь на слайды."""
+    started = time.monotonic()
     try:
-        new_thought = speech_boundary(payload.thought, payload.next_sentence, client)
+        with _live_call() as busy:
+            new_thought = speech_boundary(payload.thought, payload.next_sentence, client)
     except ModelLoading as exc:
         print(f"граница мысли: {exc}", flush=True)
         raise HTTPException(503, "модель загружается в LM Studio")
-    return LiveBoundaryResponse(new_thought=new_thought)
+    finally:
+        _close(client)
+    timings = {"total_ms": int((time.monotonic() - started) * 1000), "busy": busy}
+    print(f"граница мысли: {timings['total_ms']} мс, запросов Live к модели одновременно {busy}", flush=True)
+    return LiveBoundaryResponse(new_thought=new_thought, timings=timings)
 
 
 # ---------- здоровье ----------
 
 @app.get("/health", response_model=HealthResponse)
 def health(client: LlmClient = Depends(get_llm_client)) -> HealthResponse:
-    return HealthResponse(model_ok=_model_available(client.base_url), converters=convert.available(),
-                           skills=_skill_refs())
+    try:
+        model_ok = _model_available(client.base_url)
+    finally:
+        _close(client)
+    return HealthResponse(model_ok=model_ok, converters=convert.available(), skills=_skill_refs())
 
 
 def _model_available(base_url: str) -> bool:
