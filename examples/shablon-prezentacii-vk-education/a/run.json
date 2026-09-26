@@ -1,13 +1,13 @@
 {
- "run_id": "c0e0752bafd842b8b41d931d0a83234f",
- "started_at": "2026-09-24T22:04:17.295573+00:00",
+ "run_id": "a0205ea342424d0484239955ba221c91",
+ "started_at": "2026-09-26T18:03:37.539874+00:00",
  "model": "qwen/qwen3.8-27b",
  "design_system_id": "shablon-prezentacii-vk-education",
  "skills": [
   {
    "name": "plan-deck",
-   "version": "3",
-   "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+   "version": "5",
+   "sha256": "7d0957afdd93ff7608f02edd90107106f702f6212ec0c75caf24d057128c345f"
   },
   {
    "name": "fill-slots",
@@ -16,13 +16,13 @@
   }
  ],
  "timings_ms": {
-  "plan": 37908,
-  "a-fill-slots": 10765,
-  "a-audit": 1,
-  "a-export-pptx": 734,
-  "a-export-html": 7,
-  "a-convert": 2487,
-  "a-render-slides": 3400,
-  "a-audit-contextual": 62226
+  "plan": 81528,
+  "a-fill-slots": 14012,
+  "a-export-pptx": 1039,
+  "a-convert": 2553,
+  "a-render-slides": 1217,
+  "a-audit": 2,
+  "a-export-html": 36,
+  "a-audit-contextual": 75212
  }
 }
