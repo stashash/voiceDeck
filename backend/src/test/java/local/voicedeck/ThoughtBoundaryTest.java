@@ -95,6 +95,19 @@ class ThoughtBoundaryTest {
             assertEquals(2,s.chunks.size());
         }
     }
+    @Test void heldDraftShowsWhenAnswerIsLate()throws Exception{
+        try(var s=session("live-hold")){
+            s.acceptFinal("Начну с проблемы.",0,1500);s.commit("test");
+            s.acceptFinal("Обращений было сорок тысяч.",3000,5000);s.commit("test");
+            String id=s.orderedChunks().getLast().getString("id");
+            JsonObject draft=new JsonObject().put("chunk_id",id).put("rev",1).put("title","Обращений было сорок тысяч.").put("bullets",new JsonArray()).put("notes","").put("source","draft");
+            long now=System.currentTimeMillis();
+            s.state.submit(()->{s.heldDrafts.put(id,draft);s.heldAt.put(id,now);s.releaseHeldDrafts(now+Session.HOLD_MS-1);}).get();
+            assertNull(s.slides.get(id),"пока ответ ещё может успеть, черновик держится");
+            s.state.submit(()->s.releaseHeldDrafts(now+Session.HOLD_MS)).get();
+            assertEquals("draft",s.slides.get(id).getString("source"),"слайд после фразы успевает за 1,5 с и без ответа модели");
+        }
+    }
     @Test void freshThoughtGetsModelSlideFirst()throws Exception{
         try(var s=session("live-order")){
             s.acceptFinal("Начну с проблемы.",0,1500);s.commit("test");

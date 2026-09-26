@@ -40,6 +40,10 @@ public final class Session implements AutoCloseable {
     long earlyT0=-1;String earlyPrevId;int earlyPrevRev;Boolean earlyVerdict;boolean earlyAsking;
     // Черновик фрагмента, чью связь с предыдущей мыслью модель ещё решает: покажется, если это новая мысль.
     final Map<String,JsonObject> heldDrafts=new HashMap<>();final Set<String> newThoughts=new HashSet<>();
+    // Черновик ждёт ответа не дольше HOLD_MS: слайд после фразы обязан успеть за 1,5 с, даже когда модель занята.
+    static final long HOLD_MS=700;final Map<String,Long> heldAt=new HashMap<>();
+    // Слайды, которые модель пересобирает для выросшей мысли: они занимают не больше одного места из liveSlideParallel.
+    final Set<String> regrowing=new HashSet<>();
     // T-S3/T1b: depth-score EMA state (mutated only on the state worker thread); depth is computed before the EMA update.
     double emaBaseline=0.0,emaDispersion=0.0;long emaCount=0;
     // T1b: stream-level boundary detector state (state worker only): valley-confirmation candidate.
@@ -289,8 +293,16 @@ public final class Session implements AutoCloseable {
             // склейку по смыслу делает модель; без неё ждём 1,2 с, как раньше.
             else if(sincePhraseEnd>=2000||sinceLastFinal>=(modelJudges()?150:1200))commit("deadline");
         }
+        releaseHeldDrafts(now);
         judgeContinuation();
         generate();
+    }
+    /** Ответ о границе не пришёл за HOLD_MS: черновик показывается, окажется продолжением — склеится с мыслью. */
+    void releaseHeldDrafts(long now){
+        for(String id:List.copyOf(heldDrafts.keySet())){
+            if(now-heldAt.getOrDefault(id,now)<HOLD_MS)continue;
+            heldAt.remove(id);emitDraft(heldDrafts.remove(id));
+        }
     }
     /** Слайда нет, есть только черновик или слайд собран по началу мысли, которая с тех пор выросла. */
     boolean needsSlide(JsonObject c){
@@ -364,14 +376,20 @@ public final class Session implements AutoCloseable {
         int words=ids.stream().map(sentences::get).mapToInt(s->Text.words(s.getString("text"))).sum();
         if(fresh||words>models.chunkSizeMax()){ // новая мысль или мысль длиннее слайда
             newThoughts.add(bid);confirmChunk(a);
-            JsonObject held=heldDrafts.remove(bid);if(held!=null)emitDraft(held);
+            heldAt.remove(bid);JsonObject held=heldDrafts.remove(bid);if(held!=null)emitDraft(held);
             return;
         }
         // Продолжение: в колонке остаётся осмысленный слайд мысли, пока модель собирает дополненный.
-        heldDrafts.remove(bid);
+        heldAt.remove(bid);heldDrafts.remove(bid);
         JsonObject merged=chunk(ids,aid,arev+1,"provisional","merge").put("source","model");
         event("chunk_revise",new JsonObject().put("operation","merge").put("source","model")
             .put("replace_ids",new JsonArray().add(aid).add(bid)).put("chunks",new JsonArray().add(merged)));
+    }
+    /** Последний закрытый фрагмент ждёт ответа, новая ли это мысль: без ответа его черновик не показывается. */
+    boolean draftWaitsForJudgement(){
+        var ordered=orderedChunks();if(ordered.isEmpty())return false;
+        String last=ordered.getLast().getString("id");
+        return !judged.contains(last)&&awaitsJudgement(last);
     }
     /** Перед фрагментом стоит незакрытая мысль, и модель ещё не сказала, новая ли это мысль. */
     boolean awaitsJudgement(String id){
@@ -395,7 +413,7 @@ public final class Session implements AutoCloseable {
                 JsonObject current=chunks.get(id);
                 if(current==null||current.getInteger("rev")!=rev)return;
                 s.put("chunk_id",id).put("rev",rev).put("t0",current.getLong("t0")).put("t1",current.getLong("t1")).put("source","draft");
-                if(awaitsJudgement(id))heldDrafts.put(id,s);else emitDraft(s);
+                if(awaitsJudgement(id)){heldDrafts.put(id,s);heldAt.put(id,System.currentTimeMillis());}else emitDraft(s);
             });}catch(Exception e){/* черновик необязателен: слайд модели всё равно придёт */}
         });
     }
@@ -482,10 +500,13 @@ public final class Session implements AutoCloseable {
         if(curating||System.currentTimeMillis()<retryAt)return;
         if(designerMode){
             if(generating&&inFlight.isEmpty())return; // генерация остановлена снаружи
-            // Ответ о границе мысли держит черновик новой мысли: пока он в пути, новые слайды модель не нагружают.
-            if(judging)return;
+            // Закрытый фрагмент ждёт ответа о границе, и его черновик держится: пока ответ в пути, новые слайды
+            // модель не нагружают. Ранние вопросы по частичной фразе слайды не держат, они идут, пока человек говорит.
+            if(judging&&draftWaitsForJudgement())return;
             while(inFlight.size()<models.liveSlideParallel()){
                 JsonObject candidate=nextForSlide();if(candidate==null)return;
+                // Выросшая мысль пересобирается в одном месте: второе всегда свободно для новой мысли.
+                if(hasModelSlide(candidate)&&!regrowing.isEmpty())return;
                 generateDesigner(candidate);
             }
             return;
@@ -515,8 +536,10 @@ public final class Session implements AutoCloseable {
         return waiting.getLast();
     }
     /** T-14: без квоты «раз в 45 с» — designer сам решает, когда слайд не нужен (204). */
+    boolean hasModelSlide(JsonObject c){JsonObject have=slides.get(c.getString("id"));return have!=null&&!"draft".equals(have.getString("source"));}
     void generateDesigner(JsonObject candidate){
         String cid=candidate.getString("id");inFlight.add(cid);generating=true;
+        if(hasModelSlide(candidate))regrowing.add(cid);
         JsonObject c=candidate.copy();List<String> used=new ArrayList<>(recentPatternIds);String dsId=designSystemId;
         long requested=System.currentTimeMillis(),queued=Math.max(0,requested-(epoch+c.getLong("t1")));
         Thread.startVirtualThread(()->{
@@ -531,8 +554,8 @@ public final class Session implements AutoCloseable {
                     event("slide",new JsonObject().put("slide",s));
                     String pid=s.getString("pattern_id");if(pid!=null){recentPatternIds.addLast(pid);while(recentPatternIds.size()>5)recentPatternIds.removeFirst();}
                     if(s.getValue("title")!=null)lastSlideEnd=c.getLong("t0");
-                }}finally{inFlight.remove(cid);generating=!inFlight.isEmpty();}
-            });}catch(Exception e){submit(()->{inFlight.remove(cid);generating=!inFlight.isEmpty();retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
+                }}finally{inFlight.remove(cid);regrowing.remove(cid);generating=!inFlight.isEmpty();}
+            });}catch(Exception e){submit(()->{inFlight.remove(cid);regrowing.remove(cid);generating=!inFlight.isEmpty();retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
         });
     }
     /** T-S11: depth-score dips inside a chunk become curator candidates. */

@@ -1,5 +1,5 @@
 name: speech-boundary
-version: "1"
+version: "2"
 temperature: 0
 max_tokens: 80
 reasoning_effort: none
