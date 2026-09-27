@@ -11,7 +11,7 @@ from designer import edit, store
 from designer.api.app import app
 from designer.api.schemas import ElementActionRequest
 from designer.contracts import (
-    Deck, DeckPlan, DesignSystem, Element, Pattern, Scene, SlideIntent,
+    Deck, DeckPlan, DesignSystem, Element, ElementPosition, Pattern, Scene, SlideIntent,
     SlideKind, SlideSpec, Slot, TableSpec, TextStyle, Tokens,
 )
 
@@ -335,7 +335,8 @@ def test_table_dimensions_remain_exact_with_template_type_scale(deck):
     assert sum(row.height for row in native.table.rows) == native.height
 
 
-def test_grouped_element_can_move_in_front_of_top_level_content(deck):
+@pytest.mark.parametrize("align", [None, "left", "center", "right"])
+def test_grouped_element_can_move_in_front_of_top_level_content(deck, align):
     path = store.design_system_dir("voice-v2") / "source.pptx"
     prs = Presentation(str(path))
     slide = prs.slides[0]
@@ -346,9 +347,11 @@ def test_grouped_element_can_move_in_front_of_top_level_content(deck):
     prs.save(str(path))
     raw = saved(deck)
     raw["scenes"][0]["elements"][0]["box"] = [.1, .1, 1, .1]
+    raw["scenes"][0]["elements"][0]["style"]["align"] = align
     manifest = path.parent / "manifest.json"
     ds = store.read_json_file(manifest)
     ds["patterns"][0]["slots"][0]["box"] = [.1, .1, 1, .1]
+    ds["patterns"][0]["slots"][0]["style"]["align"] = align
     store._write_json(manifest, ds)
     store._write_json(store.deck_variant_state_path(deck.id, "a"), raw)
     post(deck, action="style", element_id="title", width=.6, italic=True)
@@ -359,6 +362,36 @@ def test_grouped_element_can_move_in_front_of_top_level_content(deck):
     assert title.width / prs.slide_width == pytest.approx(.6)
     assert title.left / prs.slide_width == pytest.approx(.1)
     assert title.text_frame.paragraphs[0].runs[0].font.italic
+
+
+@pytest.mark.parametrize("scale", [1.3, 1.7, 2.3])
+@pytest.mark.parametrize("align", [None, "left", "center", "right"])
+def test_margin_normalization_never_deletes_overlapping_decoy(deck, scale, align):
+    from designer.export.pptx_deck import _fill_slide, _walk
+
+    state = edit._load(deck.id, "a")
+    prs = Presentation(str(state.package_dir / "source.pptx"))
+    slide = prs.slides[0]
+    target = slide.shapes[0]
+    target.width = round(.8 * prs.slide_width)
+    group = slide.shapes.add_group_shape([target])
+    group.width = round(group.width * scale)
+    original = _walk(slide.shapes, state.ds.slide_size_emu)[target.shape_id].box
+    pattern = state.ds.patterns[0]
+    pattern.slots[0].box = original
+    pattern.slots[0].style.align = align
+    decoy = slide.shapes.add_textbox(round(.1 * prs.slide_width), round(.1 * prs.slide_height),
+                                    round(.88 * prs.slide_width), round(.1 * prs.slide_height))
+    decoy.text = "Do not delete"
+    pattern.decor_shape_ids.append(decoy.shape_id)
+    spec = state.specs[0]
+    spec.element_positions["title"] = ElementPosition(original_box=original, box=original,
+                                                      source_shape_id=target.shape_id, deleted=True)
+    _fill_slide(slide, spec, pattern, state.ds)
+    remaining = _walk(slide.shapes, state.ds.slide_size_emu)
+    assert target.shape_id not in remaining
+    assert decoy.shape_id in remaining
+    assert decoy.text == "Do not delete"
 
 
 @pytest.mark.parametrize("grouped", [False, True])

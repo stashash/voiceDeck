@@ -1,6 +1,6 @@
 {
-  "run_id": "e5207eeec7ad4298a7b39ea0ff373430",
-  "started_at": "2026-09-27T08:01:45.633417+00:00",
+  "run_id": "069def267dbf47858173bbd2fb05a2b9",
+  "started_at": "2026-09-27T09:15:54.903425+00:00",
   "model": "qwen/qwen3.8-27b",
   "design_system_id": "shablon-prezentacii-vk-education",
   "skills": [
@@ -16,20 +16,20 @@
     }
   ],
   "timings_ms": {
-    "plan": 85401,
-    "a-fill-slots": 10895,
-    "a-export-pptx": 817,
-    "a-convert": 2498,
-    "a-render-slides": 1193,
+    "plan": 37172,
+    "a-fill-slots": 13771,
+    "a-export-pptx": 801,
+    "a-convert": 2722,
+    "a-render-slides": 1212,
     "a-audit": 1,
     "a-export-html": 30,
-    "a-audit-contextual": 60257,
-    "b-fill-slots": 10975,
-    "b-export-pptx": 879,
-    "b-convert": 2449,
-    "b-render-slides": 1068,
-    "b-audit": 2,
-    "b-export-html": 29
+    "a-audit-contextual": 70431,
+    "b-fill-slots": 12711,
+    "b-export-pptx": 811,
+    "b-convert": 2700,
+    "b-render-slides": 1226,
+    "b-audit": 1,
+    "b-export-html": 27
   },
   "axis": "плотнее: соседние слайды с одной мыслью сведены в один, карточек на слайде больше"
 }

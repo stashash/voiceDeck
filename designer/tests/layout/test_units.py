@@ -1,7 +1,7 @@
 import pytest
 
-from designer.contracts import DecorShape, Pattern, RepeatGroup, RepeatUnit, SlideKind
-from designer.layout.units import attach_unit_decor, keeps_aspect, map_shape_box, place_units
+from designer.contracts import DecorShape, Margins, Pattern, RepeatGroup, RepeatUnit, SlideKind
+from designer.layout.units import attach_unit_decor, keeps_aspect, map_shape_box, place_units, text_frame
 
 
 def _group(direction, cols, rows, count, max_units, step=(0.30, 0.32), size=(0.28, 0.30)):
@@ -101,3 +101,13 @@ def test_figure_around_icon_moves_with_its_unit():
     attached = attach_unit_decor(pattern)
     assert [u.shape_ids for u in attached.groups[0].units] == [[0, 100], [1, 101], [2, 102]]
     assert keeps_aspect(group.units[0].box, figures[0].box, 16 / 9), "фигура крупнее блока это не подложка"
+
+
+def test_text_frame_wider_than_slide_stops_at_right_margin():
+    # VK Education, крупное число: рамка подписи в образце кончается на 1,03 ширины слайда.
+    margins = Margins(left=0.051, top=0.1, right=0.035, bottom=0.096)
+    box = text_frame((0.665, 0.467, 0.369, 0.11), margins, "left")
+    assert box[0] == 0.665 and round(box[0] + box[2], 3) == 0.965
+    assert text_frame((0.665, 0.467, 0.369, 0.11), margins, "center") == (0.665, 0.467, 0.369, 0.11)
+    assert text_frame((0.056, 0.1, 0.89, 0.09), margins, None) == (0.056, 0.1, 0.89, 0.09)
+

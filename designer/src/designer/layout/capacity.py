@@ -55,6 +55,9 @@ HEAD_GAP = 0.02
 HEAD_ZONE = 0.4
 """Верхняя часть слайда: ниже неё заголовок уже не шапка."""
 
+ROOM_OVERLAP = 0.1
+"""Доля высоты рамки слота блока, заходящая на слот под ним, с которой перенос считаем наездом."""
+
 MIN_FREE = 0.004
 """Рамка мельче этой доли слайда местом не считается."""
 
@@ -481,6 +484,28 @@ def unit_boxes(
                   for other in linked}
 
 
+def unit_room(group: RepeatGroup, slot: Slot) -> float:
+    """Высота слота блока до ближайшего слота того же блока под ним, доли слайда.
+
+    Рамка заголовка пункта в образце бывает на две строки, а текст пункта стоит сразу под первой
+    (VK WorkSpace, повестка): вторая строка заголовка легла бы на текст. Под слотом ничего нет —
+    место равно высоте рамки.
+    """
+    x, y, w, h = slot.box
+    tops = [other.box[1] for other in group.unit_slots
+            if other.id != slot.id and y + 1e-9 < other.box[1] < y + h
+            and min(x + w, other.box[0] + other.box[2]) - max(x, other.box[0]) > 0]
+    return min([*tops, y + h]) - y
+
+
+def unit_slot_frame(group: RepeatGroup, slot: Slot) -> Box:
+    """Рамка слота блока по высоте места до слота под ним, если рамка заметно на него заходит."""
+    room = unit_room(group, slot)
+    if slot.role == "number" or room >= slot.box[3] * (1 - ROOM_OVERLAP):
+        return slot.box
+    return (slot.box[0], slot.box[1], slot.box[2], room)
+
+
 def unit_slot_box(unit_old: Box, unit_new: Box, slot_box: Box) -> Box:
     """Рамка слота блока после перекладки: слот задан от левого верхнего угла блока."""
     absolute = (unit_old[0] + slot_box[0], unit_old[1] + slot_box[1], slot_box[2], slot_box[3])
@@ -540,9 +565,22 @@ def slot_limits(
     new = place_units(group, unit_count(group, n_units))[0]
     kx = new[2] / old[2] if old[2] else 1.0
     ky = new[3] / old[3] if old[3] else 1.0
-    for slot in group.unit_slots:
-        limits[slot.id] = _scaled(slot_room(slot, scale), slot_lines(slot, scale), kx, ky)
-    for linked in linked_groups(pattern, group):
-        for slot in linked.unit_slots:
-            limits[slot.id] = _scaled(slot_room(slot, scale), slot_lines(slot, scale), kx, ky)
+    for item in (group, *linked_groups(pattern, group)):
+        for slot in item.unit_slots:
+            limits[slot.id] = _unit_limit(item, slot, scale, kx, ky)
     return limits
+
+
+def _unit_limit(group: RepeatGroup, slot: Slot, scale: list[TypeStep] | None, kx: float, ky: float) -> int:
+    """Предел знаков слота блока. Если рамка заходит на слот под ним, предел это строки кегля образца,
+    которые встают до того слота, с запасом набора: иначе писатель рассчитывает на уменьшение кегля
+    и лишний перенос, а переносу некуда встать."""
+    limit = _scaled(slot_room(slot, scale), slot_lines(slot, scale), kx, ky)
+    height, lines_in_frame = slot.box[3], max(slot.max_lines, 1)
+    room = unit_slot_frame(group, slot)[3]
+    # Крупное число считается по ширине своей рамки (number_size), а касание краями рамок наездом не считаем.
+    if height <= 0 or room >= height - 1e-9:
+        return limit
+    lines = min(lines_in_frame, max(1, int(room / (height / lines_in_frame) + 1e-6)))
+    per_line = slot.max_chars / lines_in_frame * kx / FIT_MARGIN
+    return max(1, min(limit, int(per_line * lines)))

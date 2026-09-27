@@ -6,7 +6,7 @@ from designer.contracts import (
 from designer.layout.capacity import (
     box_capacity, content_region, fit_size, free_box, head_top, lead_number, line_capacity,
     linked_groups, main_group, primary_group, size_floor, slide_pt, slot_limits, slot_size,
-    text_lines, title_step, unit_boxes, unit_text_slots, word_size,
+    text_lines, title_step, unit_boxes, unit_slot_frame, unit_text_slots, word_size,
 )
 
 SLIDE = (9144000, 5143500)
@@ -237,3 +237,34 @@ def test_linked_blocks_keep_the_axis_of_the_main_ones():
     assert len(main) == len(linked["g1"]) == 2
     for head, number in zip(main, linked["g1"]):
         assert abs((head[0] + head[2] / 2) - (number[0] + number[2] / 2)) < 0.001
+
+
+def _agenda(heading_box=(0.0, 0.13, 0.28, 0.074), body_box=(0.0, 0.19, 0.28, 0.117)):
+    """Повестка VK WorkSpace: рамка заголовка пункта на две строки, текст пункта сразу под первой."""
+    units = [RepeatUnit(index=i, box=(0.036 + i * 0.322, 0.232, 0.282, 0.306), shape_ids=[200 + i])
+             for i in range(3)]
+    group = RepeatGroup(id="g1", direction="row", cols=3, rows=1, step=(0.322, 0.0), unit_size=(0.282, 0.306),
+                        units=units, max_units=4,
+                        unit_slots=[_slot(201, "number", (0.0, 0.0, 0.055, 0.099), 20),
+                                    _slot(202, "heading", heading_box, 18),
+                                    _slot(203, "body", body_box, 16)])
+    return Pattern(id="p008", source_slide=8, layout_name="повестка", kind=SlideKind.agenda,
+                   kind_confidence=0.9, theme="dark", slots=[], groups=[group])
+
+
+def test_heading_over_body_gets_one_line_at_template_size():
+    # Предел раньше считался на мелкий кегль и две строки: 46 знаков, заголовок шёл в две строки на текст.
+    pattern = _agenda()
+    group = pattern.groups[0]
+    heading = group.unit_slots[1]
+    frame = unit_slot_frame(group, heading)
+    assert frame[3] < heading.box[3], "место заголовка кончается там, где начинается текст пункта"
+    one_line = heading.max_chars / heading.max_lines
+    assert slot_limits(pattern, 3, SCALE)["s202"] <= one_line
+
+
+def test_heading_with_room_keeps_its_limit():
+    roomy = _agenda(body_box=(0.0, 0.21, 0.28, 0.097))
+    assert unit_slot_frame(roomy.groups[0], roomy.groups[0].unit_slots[1]) == roomy.groups[0].unit_slots[1].box
+    assert slot_limits(roomy, 3, SCALE)["s202"] > slot_limits(_agenda(), 3, SCALE)["s202"]
+

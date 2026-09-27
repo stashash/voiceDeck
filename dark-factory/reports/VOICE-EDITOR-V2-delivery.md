@@ -1,6 +1,14 @@
 # Voice Editor V2: Implementation Checkpoint
 
-Status: **REWORK / preview available, not accepted for release**. No merge, ready PR, or factory-branch push. The active plan deliberately stays active. The independent [Judge report](VOICE-EDITOR-V2-judge.md) and [Verifier report](../../scripts/voice-factory-verdict.md) retain the failed voice cases.
+Checkpoint status: **REWORK / preview available, not accepted for release**. At this checkpoint no merge, ready PR, or factory-branch push had occurred. The active plan deliberately stays active. The independent [Judge report](VOICE-EDITOR-V2-judge.md) and [Verifier report](../../scripts/voice-factory-verdict.md) retain the failed voice cases.
+
+## Subsequent User-Authorized Integration
+
+On 2026-09-27 the user explicitly requested commit, push and merge with master after receiving the 5/9 ASR result. Server master at `3eee0b5` is integrated, including layout fixes and refreshed demo data. Its setup/export tooling and ignore rules take priority over older branch deletions. Voice editing and voice-to-slide creation are retained. This Git integration does not change the independent REWORK verdict or certify microphone accuracy; the four known recognition failures remain open.
+
+Integration exposed an incompatibility between older saved editor geometry and the new server margin normalization. The voice override matcher now uses the known template alignment and gives source identity priority only within a tiny coordinate-rounding tolerance, retaining the existing distance bound. Independent review reproduced an overlapping-decoy deletion risk in the first correction; the final correction passes that reproduction, a closer-clone check and an unknown-lineage rejection check.
+
+Merged full-suite run before this final rounding hardening: 711 passed, 28 skipped (`.voice-factory/merge-designer-final-junit.xml`, SHA256 `bc26d4e942e7424dcfaae8884be0a379860c2cb342776657967c4a711c5798d9`). Final export/layout/voice regression suite after hardening: 309 passed, 24 skipped, including 12 overlapping-object cases (`.voice-factory/merge-targeted-junit.xml`, SHA256 `5bbb6b96201265e3b496291eda8a21de9889cbb341ab268ff4cfc6f5b6b86d65`). Frontend rerun: 267 passed, 18 skipped. Reviewer Dirac's bounded integration verdict is PASS. The full suite was not repeated after the final matcher hardening; all modified export and voice-element paths were included in the final focused run. App containers were not restarted for this Git-only integration.
 
 ## Identity And Isolation
 

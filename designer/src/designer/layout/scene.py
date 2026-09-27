@@ -32,7 +32,7 @@ from designer.layout.capacity import (
     unit_boxes,
     unit_count,
 )
-from designer.layout.units import keeps_aspect, map_shape_box
+from designer.layout.units import keeps_aspect, map_shape_box, text_frame
 from designer.parse import geometry as geo
 from designer.parse import patterns as parse
 from designer.parse.package import SOURCE_NAME
@@ -105,7 +105,7 @@ def _text_element(
     size_pt: float | None = None,
 ) -> Element | None:
     """Текстовый элемент с кеглем, который выбрала вёрстка; без него кегль считается тут же."""
-    clipped = _clip(box)
+    clipped = _clip(text_frame(box, ds.tokens.margins, style.align))
     if clipped is None or not text:
         return None
     size = style.size_pt or 0.0
@@ -202,14 +202,16 @@ def _unit_elements(
                 continue
             keep = area.kind in _KEEP_SIZE if area is not None else info.kind == "image"
             aspect = not keep and keeps_aspect(old, info.box, slide[0] / slide[1])
-            box = _clip(map_shape_box(old, new_box, info.box, keep_size=keep, keep_aspect=aspect))
+            placed = map_shape_box(old, new_box, info.box, keep_size=keep, keep_aspect=aspect)
+            box = _clip(placed)
             if box is None:
                 continue
             el_id = f"u{index}s{shape_id}"
             z = order.get(shape_id, 0)
             if slot is not None:
+                # Текст получает рамку до обрезки по краю: рамку шире слайда надо сузить до поля, а не до края.
                 element = _text_element(
-                    el_id, slot.role, box, texts.get(slot.id, ""), slot.style, z, shape_id, ds,
+                    el_id, slot.role, placed, texts.get(slot.id, ""), slot.style, z, shape_id, ds,
                     slide, spec.fitted_size_pt.get(slot.id),
                 )
                 if element is not None:

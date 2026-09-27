@@ -1,6 +1,6 @@
 {
-  "run_id": "af0b3ed2404448879ae5070b9686dc3e",
-  "started_at": "2026-09-27T07:55:48.420568+00:00",
+  "run_id": "2627417f54064985a920651d5761411d",
+  "started_at": "2026-09-27T09:10:57.838704+00:00",
   "model": "qwen/qwen3.8-27b",
   "design_system_id": "vk-workspace-klientskaya-konferenciya-shablon-03",
   "skills": [
@@ -16,20 +16,20 @@
     }
   ],
   "timings_ms": {
-    "plan": 48609,
-    "a-fill-slots": 21826,
-    "a-export-pptx": 539,
-    "a-convert": 2705,
-    "a-render-slides": 10260,
-    "a-audit": 2,
-    "a-export-html": 40,
-    "a-audit-contextual": 97077,
-    "b-fill-slots": 19684,
-    "b-export-pptx": 546,
-    "b-convert": 2716,
-    "b-render-slides": 10361,
-    "b-audit": 2,
-    "b-export-html": 44
+    "plan": 75379,
+    "a-fill-slots": 11853,
+    "a-export-pptx": 472,
+    "a-convert": 1610,
+    "a-render-slides": 1984,
+    "a-audit": 1,
+    "a-export-html": 22,
+    "a-audit-contextual": 62211,
+    "b-fill-slots": 13718,
+    "b-export-pptx": 470,
+    "b-convert": 1128,
+    "b-render-slides": 2015,
+    "b-audit": 1,
+    "b-export-html": 24
   },
   "axis": "плотнее: соседние слайды с одной мыслью сведены в один, карточек на слайде больше"
 }

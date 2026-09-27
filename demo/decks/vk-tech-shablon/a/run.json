@@ -1,6 +1,6 @@
 {
-  "run_id": "1f50116a18c84712a600021070f18265",
-  "started_at": "2026-09-27T07:51:34.170482+00:00",
+  "run_id": "6d9dadfcad8644d4ad43b0939b7b8f0f",
+  "started_at": "2026-09-27T09:05:44.377225+00:00",
   "model": "qwen/qwen3.8-27b",
   "design_system_id": "vk-tech-shablon",
   "skills": [
@@ -16,14 +16,14 @@
     }
   ],
   "timings_ms": {
-    "plan": 79208,
-    "a-fill-slots": 10023,
-    "a-export-pptx": 885,
-    "a-convert": 1600,
-    "a-render-slides": 3417,
+    "plan": 84368,
+    "a-fill-slots": 16051,
+    "a-export-pptx": 853,
+    "a-convert": 2773,
+    "a-render-slides": 6685,
     "a-audit": 2,
-    "a-export-html": 33,
-    "a-audit-contextual": 60109
+    "a-export-html": 38,
+    "a-audit-contextual": 82771
   },
   "axis": "как в шаблоне: план как есть, паттерн подбирается по точному числу блоков"
 }

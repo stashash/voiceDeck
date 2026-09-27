@@ -42,7 +42,9 @@ from designer.layout.capacity import (
     unit_boxes,
     unit_count,
     unit_slot_box,
+    unit_slot_frame,
 )
+from designer.layout.units import text_frame
 from designer import icons
 from designer.parse import geometry as geo
 
@@ -397,11 +399,12 @@ def _fitted(
     slide = slide_pt(ds.slide_size_emu)
     scale = ds.tokens.type_scale
     out: dict[str, float] = {}
+    margins = ds.tokens.margins
     for slot in pattern.slots:
         text, size = texts.get(slot.id, ""), slot.style.size_pt
         if not text or not size:
             continue
-        out[slot.id] = slot_size(text, slot.box, size, slot.role, scale, slide)
+        out[slot.id] = slot_size(text, text_frame(slot.box, margins, slot.style.align), size, slot.role, scale, slide)
 
     group = next((g for g in pattern.groups if g.id == spec.group_id), None)
     if group is None or not n:
@@ -416,10 +419,13 @@ def _fitted(
             size = slot.style.size_pt
             if not size:
                 continue
+            # Место слота до слота под ним и правое поле: вторая строка заголовка пункта не ляжет
+            # на текст пункта, строка подписи не уйдёт за край слайда.
+            frame = unit_slot_frame(item, slot)
             sizes = [
                 slot_size(
                     unit_texts[index][slot.id],
-                    unit_slot_box(old, new, slot.box),
+                    text_frame(unit_slot_box(old, new, frame), margins, slot.style.align),
                     size,
                     slot.role,
                     scale,

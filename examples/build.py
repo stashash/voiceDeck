@@ -55,14 +55,20 @@ def main(brief_path: str) -> None:
     for template in sorted(TEMPLATES.glob("*.pptx")):
         started = time.time()
         ds = _upload(template)
-        log.append(f"{template.name}: импорт {time.time() - started:.0f} с, id {ds['id']}, паттернов {len(ds['patterns'])}")
+        # Образцы модель описывает в фоне после загрузки; презентация строится по описанным,
+        # как на экране, где «Создать презентацию» ждёт конца описания.
+        while ds.get("describe", {}).get("status") in ("pending", "running") and time.time() - started < 900:
+            time.sleep(5)
+            ds = _get(f"/design-systems/{ds['id']}")
+        log.append(f"{template.name}: импорт {time.time() - started:.0f} с, id {ds['id']}, паттернов {len(ds['patterns'])}, "
+                   f"описание {ds.get('describe', {}).get('status')}")
         print(log[-1], flush=True)
         started = time.time()
         payload = {"design_system_id": ds["id"], "brief": brief, "purpose": "Инициатива",
                    "audience": "Директора направлений", "variants": ["a", "b", "c"]}
         deck_id = _post("/decks", json.dumps(payload, ensure_ascii=False).encode("utf-8"))["deck_id"]
         while True:
-            time.sleep(15)
+            time.sleep(3)
             state = _get(f"/decks/{deck_id}")
             statuses = {k: v["status"] for k, v in state["variants"].items()}
             if all(s in ("done", "error") for s in statuses.values()) or time.time() - started > 900:

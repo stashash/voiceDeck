@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from designer.contracts import Box, Pattern, RepeatGroup
+from designer.contracts import Box, Margins, Pattern, RepeatGroup
 
 _UNIT_DECOR_KINDS = ("shape", "image", "other")
 
@@ -160,3 +160,18 @@ def map_shape_box(old_unit: Box, new_unit: Box, shape: Box, keep_size: bool = Fa
         w, h = shape[2] * scale, shape[3] * scale
         return (cx - w / 2, cy - h / 2, w, h)
     return (x, y, shape[2] * kx, shape[3] * ky)
+
+
+def text_frame(box: Box, margins: Margins, align: str | None) -> Box:
+    """Рамка текста не заходит за правое поле, если в образце она шире самого слайда.
+
+    Короткий текст образца в такой рамке стоит внутри слайда, а строка, дописанная до края рамки,
+    уходит за край (VK Education, крупное число с подписью справа). Сужаем только текст, выровненный
+    влево: у центрированного и прижатого вправо от сужения сдвинулась бы ось.
+    """
+    x, y, w, h = box
+    right = 1.0 - margins.right
+    if x + w > 1.0 + 1e-6 and x < right and align in (None, "left"):
+        return (x, y, right - x, h)
+    return box
+
