@@ -296,6 +296,11 @@ export function commitDeckDictation(deckId:string,variant:string,n:number,payloa
  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-text`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>uploadResponse<DeckVariantState>(r));
 }
 
+export type VoiceBatchOperation={element_id:string;box?:Element['box'];style?:TextStyle;fill?:string};
+export function commitVoiceBatch(deckId:string,variant:string,n:number,payload:{expected_revision:string;target_slide_id:string;operations:VoiceBatchOperation[]}):Promise<DeckVariantState>{
+ return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-batch`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},8000).then(r=>uploadResponse<DeckVariantState>(r));
+}
+
 export function rewriteDeckVoice(deckId:string,variant:string,n:number,payload:{request_id:string;element_id:string;instruction:string;constraints?:{preserve_numbers?:boolean;preserve_dates?:boolean}},signal:AbortSignal):Promise<{state?:DeckVariantState;notice:string;elapsed_ms?:number}>{
  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-rewrite`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal},35000).then(r=>uploadResponse(r));
 }

@@ -40,3 +40,4 @@
 .voice-console-heard{max-height:54px;overflow:auto}.voice-console-dictation{color:#f8ce91}
 .voice-console .voice-dictation-draft{width:100%;min-height:80px;max-height:180px;resize:vertical;box-sizing:border-box;background:#101b17;border:1px solid #45574d;border-radius:6px;padding:10px;color:#f0f4f1;font:inherit;font-size:13px;line-height:1.5;letter-spacing:0;overflow-wrap:anywhere}
 @media(max-width:600px){.voice-console{padding:10px 12px}.voice-console-feedback,.voice-console-controls,.voice-console-command{flex-wrap:wrap}.voice-console-selection{white-space:normal}.voice-console-latency{margin-left:0}.voice-console-command form{flex-basis:100%}.voice-console .deck-mic-button{flex:1;min-width:170px}.voice-console-state{flex-basis:100%}}
+.edit-el-box.voice-candidate { border: 2px dashed #b45309; background: #fbbf2414; }

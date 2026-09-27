@@ -32,7 +32,7 @@ vi.mock('react-dom', () => ({flushSync: (action: () => void) => {
 vi.mock('../designer/api', async importOriginal => ({
   ...await importOriginal<typeof import('../designer/api')>(),
   getDeckState: vi.fn(), getSlidePatterns: vi.fn(),
-  commitDeckDictation: vi.fn(), deckElementAction: vi.fn(),
+  commitDeckDictation: vi.fn(), deckElementAction: vi.fn(), commitVoiceBatch:vi.fn(), rewriteDeckVoice:vi.fn(),
 }));
 
 type Slot = {value?: unknown; deps?: DependencyList; cleanup?: () => void};
@@ -199,7 +199,7 @@ function deferred() { let resolve!: () => void; const promise = new Promise<void
 
 type Props = {
   children?: unknown; className?: string; disabled?: boolean; value?: string;
-  'aria-label'?: string; onClick?: () => unknown;
+  'aria-label'?: string; onClick?: (event?:{shiftKey?:boolean;preventDefault?:()=>void}) => unknown;
   onChange?: (event: {target: {value: string}}) => void;
   onSubmit?: (event: {preventDefault: () => void}) => void;
 };
@@ -226,14 +226,14 @@ async function typeCommand(page: HookRunner<unknown>, command: string) {
   form.props.onSubmit!({preventDefault() {}}); await settle();
 }
 function selected(page: HookRunner<unknown>) {
-  return nodes(page.value).find(node => node.props.className === 'edit-el-box active')?.key;
+  return nodes(page.value).find(node => node.props.className?.trim() === 'edit-el-box active')?.key;
 }
 async function pageHarness() {
   const page = new HookRunner(() => EditPage({deckId: 'deck', variant: 'a'}));
   await settle();
-  const first = nodes(page.value).find(node => node.key === 'a' && node.props.className === 'edit-el-box ');
+  const first = nodes(page.value).find(node => node.key === 'a' && node.props.className?.trim() === 'edit-el-box');
   if (!first) throw new Error('Missing first slide element');
-  first.props.onClick!(); await settle(); expect(selected(page)).toBe('a');
+  first.props.onClick!({shiftKey:false}); await settle(); expect(selected(page)).toBe('a');
   return page;
 }
 async function startPageMicrophone(page: HookRunner<unknown>) {
@@ -289,6 +289,10 @@ beforeEach(() => {
     else if (payload.action === 'style') scene.elements.find(el => el.id === payload.element_id)!.style = {size_pt: 24};
     else throw new Error(`Unexpected mutation: ${payload.action}`);
   }));
+  vi.mocked(api.commitVoiceBatch).mockImplementation(async (_deck,_variant,slide,payload)=>{
+    if(payload.expected_revision!==deck.variants.a.revision)throw Object.assign(Error('Stale batch'),{status:409});
+    return mutate(variant=>{for(const op of payload.operations){const el=variant.scenes[slide-1].elements.find(el=>el.id===op.element_id)!;if(op.box)el.box=op.box;if(op.style)el.style={...el.style,...op.style};if(op.fill)el.fill=op.fill;}});
+  });
 });
 
 afterEach(async () => {
@@ -298,6 +302,54 @@ afterEach(async () => {
 });
 
 describe('EditPage voice integration safety', () => {
+  it('semantic group: actual phrase callback applies one guarded batch and keeps the group',async()=>{
+    const page=await pageHarness();await startPageMicrophone(page);
+    await say('Выбери весь текст');
+    await say('Сделай жирным, затем шрифт 28');
+    expect(api.commitVoiceBatch).toHaveBeenCalledExactlyOnceWith('deck','a',1,{
+      expected_revision:'r1',target_slide_id:'slide-1',operations:[
+        {element_id:'a',style:{bold:true,size_pt:28}}, {element_id:'b',style:{bold:true,size_pt:28}},
+      ],
+    });
+    expect(api.rewriteDeckVoice).not.toHaveBeenCalled();
+    expect(deck.variants.a.scenes[0].elements.every(el=>el.style?.bold&&el.style.size_pt===28)).toBe(true);
+    await say('Шрифт 30');
+    expect(api.commitVoiceBatch).toHaveBeenLastCalledWith('deck','a',1,expect.objectContaining({expected_revision:'r2'}));
+  });
+  it('ambiguity: clears old selection so a following command cannot edit it',async()=>{
+    deck.variants.a.scenes[0].elements.forEach(el=>el.text='Одинаковый текст');
+    const page=await pageHarness();
+    await typeCommand(page,'Выбери текст «Одинаковый текст»');
+    expect(selected(page)).toBeUndefined();
+    await typeCommand(page,'Сделай жирным');
+    expect(api.deckElementAction).not.toHaveBeenCalled();expect(api.commitVoiceBatch).not.toHaveBeenCalled();
+  });
+  it('unsupported layout and single-target deletion never fall through to a model or group mutation',async()=>{
+    const page=await pageHarness();
+    await typeCommand(page,'Выбери весь текст');await typeCommand(page,'Удали элемент');
+    await typeCommand(page,'Расположи красиво');
+    expect(api.deckElementAction).not.toHaveBeenCalled();expect(api.commitVoiceBatch).not.toHaveBeenCalled();expect(api.rewriteDeckVoice).not.toHaveBeenCalled();
+  });
+  it('nonliteral creation in an unsupported macro does not execute a successful prefix',async()=>{
+    const page=await pageHarness();await typeCommand(page,'Добавь фигуру затем удали слайд');
+    expect(api.deckElementAction).not.toHaveBeenCalled();expect(api.commitVoiceBatch).not.toHaveBeenCalled();
+  });
+  it('stale atomic batch cancels dependent queued commands',async()=>{
+    const page=await pageHarness(),hold=deferred();
+    vi.mocked(api.commitVoiceBatch).mockImplementationOnce(async()=>{await hold.promise;throw Object.assign(Error('Stale batch'),{status:409});});
+    await typeCommand(page,'Выбери весь текст');await typeCommand(page,'Сделай жирным');
+    await typeCommand(page,'Шрифт 28');hold.resolve();await settle();
+    expect(api.commitVoiceBatch).toHaveBeenCalledTimes(1);
+    expect(deck.variants.a.scenes[0].elements.every(el=>!el.style)).toBe(true);
+  });
+  it('manual target change during a batch preserves the new target after response',async()=>{
+    const page=await pageHarness(),hold=deferred();
+    const apply=vi.mocked(api.commitVoiceBatch).getMockImplementation()!;
+    vi.mocked(api.commitVoiceBatch).mockImplementationOnce(async(...args)=>{await hold.promise;return apply(...args);});
+    await typeCommand(page,'Выбери весь текст');await typeCommand(page,'Сделай жирным');
+    nodes(page.value).find(node=>node.key==='b'&&node.props.className?.includes('edit-el-box'))!.props.onClick!({shiftKey:false});await settle();
+    hold.resolve();await settle();expect(selected(page)).toBe('b');
+  });
   it('typed-order: later typed commands preserve an earlier queued selection', async () => {
     const page = await pageHarness(), hold = deferred();
     const apply = vi.mocked(api.deckElementAction).getMockImplementation()!;

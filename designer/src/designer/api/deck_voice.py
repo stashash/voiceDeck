@@ -3,6 +3,8 @@ import asyncio
 import json
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
 from designer import edit, store
@@ -10,6 +12,7 @@ from designer.api.schemas import DeckVariantState
 from designer.edit_runtime import lock
 from designer.editor_model import editor_model
 from designer.editor_planner import planner
+from designer.voice_batch import VoiceBatch, VoiceBatchConflict, apply_voice_batch
 from designer.voice_preservation import preservation_violations
 
 router = APIRouter()
@@ -35,6 +38,36 @@ class VoiceText(BaseModel):
     text: str = Field(max_length=12000)
     expected_revision: str
     target_slide_id: str = Field(min_length=1, max_length=200, pattern=r'\S')
+
+
+class _VoiceBatchRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def validated(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                # Invalid numeric input may contain NaN/Infinity, which cannot be echoed as JSON.
+                detail = [{key: error[key] for key in ('loc', 'msg', 'type')} for error in exc.errors()]
+                raise HTTPException(422, detail) from exc
+
+        return validated
+
+
+def voice_batch(deck_id: str, variant: str, number: int, payload: VoiceBatch):
+    try:
+        return DeckVariantState(**apply_voice_batch(deck_id, variant, number, payload))
+    except VoiceBatchConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (edit.DeckNotFound, FileNotFoundError) as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+router.add_api_route('/decks/{deck_id}/{variant}/slides/{number}/voice-batch', voice_batch,
+                     methods=['POST'], response_model=DeckVariantState, route_class_override=_VoiceBatchRoute)
 
 
 @router.post('/decks/{deck_id}/{variant}/slides/{number}/voice-text', response_model=DeckVariantState)

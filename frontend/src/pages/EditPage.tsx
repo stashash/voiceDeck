@@ -6,7 +6,9 @@ import {editDictation,type DictationDraft} from '../stage/voiceDictation';
 import {voiceRewriteConstraints} from '../stage/voiceRewriteConstraints';
 import './voiceWorkspace.css';
 import {useVoiceInput} from '../stage/useVoiceInput';
-import {parseDeckVoice} from '../stage/deckVoice';
+import {parseVoiceOperation,VOICE_OPERATIONS} from '../stage/voiceOperations';
+import {resolveVoiceSelection} from '../stage/voiceSelection';
+import {planVoiceBatch} from '../stage/voiceBatch';
 import {executeDeckVoice,deckSelectable,type DeckVoiceResult} from '../stage/deckVoiceExecutor';
 import {deckRewriteTarget} from '../stage/deckVoiceTarget';
 import {editorRequest} from '../stage/editorRequest';
@@ -14,7 +16,7 @@ import {prepareEditorModel} from '../stage/editorModel';
 import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X, Check, TextCursorInput } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation, commitVoiceBatch,
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
 
@@ -30,7 +32,10 @@ const FORMATS: { ext: string; label: string }[] = [
 export default function EditPage({ deckId, variant, onVariantChange }: { deckId: string; variant: string; onVariantChange?: (variant: string) => void }) {
   const [state, setState] = useState<DeckStateResponse | null>(null);
   const [index, setIndex] = useState(0);
-  const [activeEl, setActiveEl] = useState<string | null>(null);
+  const [selectedIds,setSelectedIds]=useState<string[]>([]);
+  const [candidateIds,setCandidateIds]=useState<string[]>([]);
+  const activeEl=selectedIds.length===1?selectedIds[0]:null;
+  function setActiveEl(id:string|null){setSelectedIds(id?[id]:[]);setCandidateIds([]);}
   const [editingEl, setEditingEl] = useState<string | null>(null);
   const [draftText, setDraftText] = useState('');
   const [ask, setAsk] = useState('');
@@ -70,7 +75,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   function cancelModel(){const job=modelJob.current;if(!job)return;modelJob.current=null;job.controller.abort();setThinking(false);void editorRequest(`intent/${job.id}/cancel`,{}, {timeout:2000}).catch(()=>{});}
 
   useEffect(() => {let cancelled=false;setState(null);getDeckState(deckId).then(next=>{if(!cancelled)setState(next);}).catch(e=>{if(!cancelled)setError(String(e));});return()=>{cancelled=true;};}, [deckId]);
-  useEffect(()=>{manualContext.current++;blocked.current=false;setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;longDictation.current=null;setDictationText('');setWaitingText(false);setConfirmDelete(null);lastMove.current=null;return()=>{cancelModel();epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
+  useEffect(()=>{manualContext.current++;blocked.current=false;setSelectedIds([]);setCandidateIds([]);setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;longDictation.current=null;setDictationText('');setWaitingText(false);setConfirmDelete(null);lastMove.current=null;return()=>{cancelModel();epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
 
   const active = state?.variants[variant];
   const scenes = useMemo(() => active?.scenes ?? [], [active]);
@@ -99,7 +104,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   const [patterns, setPatterns] = useState<SlidePatternOption[]>([]);
 
   const planNotes = active?.plan?.slides[index]?.notes ?? '';
-  useEffect(() => { setNotesDraft(planNotes); setActiveEl(id => scene?.elements.some(e => e.id === id) ? id : null); setEditingEl(null); }, [scene?.slide_id, planNotes]);
+  useEffect(() => { setNotesDraft(planNotes); setEditingEl(null); }, [scene?.slide_id, planNotes]);
+  useEffect(()=>{setSelectedIds(ids=>ids.filter(id=>scene?.elements.some(e=>e.id===id)));setCandidateIds([]);},[scene?.slide_id,active?.revision]);
   useEffect(() => {
     if (!scene) return;
     getSlidePatterns(deckId, variant, index + 1).then(setPatterns).catch(() => setPatterns([]));
@@ -107,7 +113,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
 
   async function refresh() { const version=epoch.current;const next=await getDeckState(deckId);if(version!==epoch.current)return;flushSync(()=>{setState(next);setPreviewVersion(v=>v+1);}); }
   function cancelDictation(){dictation.current=null;longDictation.current=null;setDictationText('');setWaitingText(false);}
-  function manualChange(){manualContext.current++;queue.current.clear();cancelModel();cancelDictation();setConfirmDelete(null);lastMove.current=null;}
+  function manualChange(){manualContext.current++;queue.current.clear();cancelModel();cancelDictation();setConfirmDelete(null);setCandidateIds([]);lastMove.current=null;}
   async function recover(){
     if(recovering)return;
     cancelModel();manualContext.current++;voice.invalidate();
@@ -154,7 +160,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     flushSync(()=>{
       if(result.state)setState(previous=>previous?{...previous,variants:{...previous.variants,[variant]:{...result.state!,slide_images:result.state!.slide_images?.length?result.state!.slide_images:previous.variants[variant]?.slide_images}}}:previous);
       if(result.state)setPreviewVersion(v=>v+1);
-      if(result.index!==undefined)setIndex(result.index);
+      if(result.index!==undefined){setIndex(result.index);if(result.index!==index&&result.selectedId===undefined)setActiveEl(null);}
       if(result.selectedId!==undefined)setActiveEl(result.selectedId);
       if(result.dictate){const target=scenes[result.dictate.slide-1];if(target){dictation.current={...result.dictate,slideId:target.slide_id,revision:active?.revision??''};setWaitingText(true);}}
       if(result.confirmDelete!==undefined){const n=result.confirmDelete;const slide=scenes[n-1];if(slide)setConfirmDelete({deckId,variant,revision:active?.revision??'',slideId:slide.slide_id,index:n,expiresAt:performance.now()+10000});}
@@ -219,12 +225,47 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       }
       if(/^(нет|отмена|стоп)[.!]?$/i.test(raw.trim()))return;
     }
-    let resolved=parseDeckVoice(raw);setVoiceNotice(raw);
+    const selection=resolveVoiceSelection(raw,scene,selectedIds);
+    if(selection){
+      cancelModel();lastMove.current=null;
+      flushSync(()=>{setSelectedIds(selection.kind==='selection'?selection.ids:[]);setCandidateIds(selection.kind==='clarify'?selection.candidateIds:[]);});
+      setVoiceNotice(selection.notice);return;
+    }
+    let resolved=parseVoiceOperation(raw);setVoiceNotice(raw);
     if(resolved.kind==='repeat'){if(!lastMove.current){setVoiceNotice('Сначала переместите выбранный объект.');return;}resolved={kind:'move',...lastMove.current,dx:lastMove.current.dx*resolved.factor,dy:lastMove.current.dy*resolved.factor};}
     const a=resolved;
     if(a.kind==='cancel'){cancelModel();setConfirmDelete(null);return;}
+    if(a.kind==='unsupported'){setVoiceNotice(a.text);return;}
+    if(VOICE_OPERATIONS[a.kind].target==='single'&&selectedIds.length>1&&(!('elementNumber' in a)||a.elementNumber===undefined)){
+      setVoiceNotice('Для этой команды выберите один объект');return;
+    }
     if(a.kind==='ask'){void modelRewrite(a.text,a.slide);return;}
     if(a.kind==='unknown'){setVoiceNotice('Команда не распознана. Документ не изменён.');return;}
+    const batchSteps=a.kind==='macro'?a.steps:a.kind==='layout'?[a]:(a.kind==='style'||a.kind==='move')&&selectedIds.length>1&&a.elementNumber===undefined?[a]:null;
+    if(batchSteps){
+      if('slide' in a&&a.slide!==undefined){setVoiceNotice('Групповая правка ограничена текущим слайдом');return;}
+      const plan=planVoiceBatch(scene,selectedIds,batchSteps);
+      if('notice' in plan){setVoiceNotice(plan.notice);return;}
+      cancelModel();
+      const version=epoch.current,context=commandContextKey();
+      await mutations.current.enqueue(async()=>{
+        if(version!==epoch.current||blocked.current||context!==commandContextKey())return;
+        setBusy(true);setError('');
+        try{
+          const next=await commitVoiceBatch(deckId,variant,index+1,{expected_revision:active?.revision??'',target_slide_id:scene.slide_id,operations:plan.operations});
+          if(version!==epoch.current)return;
+          applyVoiceResult({state:next,notice:context===commandContextKey()?`Сохранено объектов: ${plan.operations.length}`:undefined});
+          if(context===commandContextKey())lastMove.current=a.kind==='move'?{dx:a.dx,dy:a.dy,align:a.align}:null;
+        }catch(e){
+          if(version!==epoch.current)return;
+          const status=(e as {status?:number}).status;
+          if(status&&status>=400&&status<500){queue.current.clear();setVoiceNotice(String(e));return;}
+          blocked.current=true;setNeedsRecovery(true);queue.current.clear();setError(`Не удалось подтвердить сохранение: ${String(e)}`);
+        }finally{if(version===epoch.current)setBusy(false);}
+      });
+      return;
+    }
+    if(a.kind==='layout'||a.kind==='macro')return;
     cancelModel();
     const version=epoch.current,context=commandContextKey();
     await mutations.current.enqueue(async()=>{
@@ -290,7 +331,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       </div>
       <div className="voice-console-feedback">
         <span className="deck-voice-status" aria-live="polite"><i className={`deck-connection-dot ${voice.recording?'live':''}`}/>{voice.error||voice.partial||voiceNotice}</span>
-        <span className="voice-console-selection">Слайд {index+1}/{scenes.length} · {activeEl?`Элемент ${selectable(scene).findIndex(e=>e.id===activeEl)+1}`:'Нет выделения'}</span>
+        <span className="voice-console-selection">Слайд {index+1}/{scenes.length} · {selectedIds.length>1?`Выбрано: ${selectedIds.length}`:activeEl?`Элемент ${selectable(scene).findIndex(e=>e.id===activeEl)+1}`:'Нет выделения'}</span>
       </div>
       {waitingText&&<div className="voice-console-dictation"><span role="status">{longDictation.current?'Черновик диктовки':'Ожидается новый текст'}</span>{longDictation.current&&<button className="button-icon" title="Сохранить диктовку" aria-label="Сохранить диктовку" disabled={!dictationText.trim()||busy} onClick={()=>void manualVoiceCommand('Готово')}><Check size={16}/></button>}<button className="button-icon" title="Отменить диктовку" aria-label="Отменить диктовку" onClick={()=>{manualChange();setVoiceNotice('Ввод текста отменён');}}><X size={16}/></button></div>}
       {longDictation.current&&<textarea className="voice-dictation-draft" aria-label="Черновик диктовки" maxLength={12000} value={dictationText} onChange={e=>{if(longDictation.current){longDictation.current.text=e.target.value;setDictationText(e.target.value);}}}/>}
@@ -309,7 +350,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           const hasError = fs.some(f => f.severity === 'error');
           return <a key={s.slide_id} className={`edit-thumb-row ${i === index ? 'current' : ''}`}
             aria-label={`Слайд ${i + 1}`} aria-current={i === index ? 'true' : undefined}
-            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); manualChange();setIndex(i); }}>
+            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); manualChange();setActiveEl(null);setIndex(i); }}>
             <span className="edit-thumb-num">{i + 1}</span>
             <span className="edit-thumb-wrap">
               {active?.slide_images?.[i] ? <img className="edit-thumb" src={freshImage(active.slide_images[i])} alt=""/> : <div className="edit-thumb"/>}
@@ -333,8 +374,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           {selectable(scene).map((el,elementIndex) => {
             const [x, y, w, h] = el.box;
             const style: React.CSSProperties = { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` };
-            return <div key={el.id} className={`edit-el-box ${activeEl === el.id ? 'active' : ''}`} style={style}
-              onClick={() => {manualChange();setActiveEl(el.id);}}>
+            return <div key={el.id} className={`edit-el-box ${selectedIds.includes(el.id) ? 'active' : ''} ${candidateIds.includes(el.id)?'voice-candidate':''}`} style={style}
+              onClick={event => {manualChange();if(event.shiftKey){setSelectedIds(ids=>ids.includes(el.id)?ids.filter(id=>id!==el.id):[...ids,el.id]);}else setActiveEl(el.id);}}>
               <span style={{position:'absolute',top:y>.04?-22:0,left:x>.04?-22:0,background:'var(--accent)',color:'white',padding:'2px 6px',borderRadius:4}}>{elementIndex+1}</span>
               {activeEl === el.id && editingEl !== el.id && <div className="edit-el-toolbar" role="toolbar" aria-label="Текст на слайде"
                 style={{ left: 0, top: '100%', marginTop: 4 }}>
