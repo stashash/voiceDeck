@@ -1,13 +1,13 @@
 {
-  "run_id": "c0e0752bafd842b8b41d931d0a83234f",
-  "started_at": "2026-09-24T22:04:17.295573+00:00",
+  "run_id": "e5207eeec7ad4298a7b39ea0ff373430",
+  "started_at": "2026-09-27T08:01:45.633417+00:00",
   "model": "qwen/qwen3.8-27b",
   "design_system_id": "shablon-prezentacii-vk-education",
   "skills": [
     {
       "name": "plan-deck",
-      "version": "3",
-      "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+      "version": "5",
+      "sha256": "7d0957afdd93ff7608f02edd90107106f702f6212ec0c75caf24d057128c345f"
     },
     {
       "name": "fill-slots",
@@ -16,26 +16,26 @@
     }
   ],
   "timings_ms": {
-    "plan": 37908,
-    "a-fill-slots": 10765,
+    "plan": 85401,
+    "a-fill-slots": 10895,
+    "a-export-pptx": 817,
+    "a-convert": 2498,
+    "a-render-slides": 1193,
     "a-audit": 1,
-    "a-export-pptx": 734,
-    "a-export-html": 7,
-    "a-convert": 2487,
-    "a-render-slides": 3400,
-    "a-audit-contextual": 62226,
-    "b-fill-slots": 11183,
-    "b-audit": 1,
-    "b-export-pptx": 730,
-    "b-export-html": 5,
-    "b-convert": 2537,
-    "b-render-slides": 3501,
-    "c-fill-slots": 12155,
+    "a-export-html": 30,
+    "a-audit-contextual": 60257,
+    "b-fill-slots": 10975,
+    "b-export-pptx": 879,
+    "b-convert": 2449,
+    "b-render-slides": 1068,
+    "b-audit": 2,
+    "b-export-html": 29,
+    "c-fill-slots": 11003,
+    "c-export-pptx": 726,
+    "c-convert": 1525,
+    "c-render-slides": 942,
     "c-audit": 1,
-    "c-export-pptx": 714,
-    "c-export-html": 0,
-    "c-convert": 2157,
-    "c-render-slides": 3060
+    "c-export-html": 0
   },
   "axis": "данные вперёд: числа становятся крупной цифрой, диаграммой или таблицей раньше текста"
 }

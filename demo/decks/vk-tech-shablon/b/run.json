@@ -1,13 +1,13 @@
 {
-  "run_id": "8eb8d529706b46db8671529e5ba383d1",
-  "started_at": "2026-09-24T21:51:59.890851+00:00",
+  "run_id": "1f50116a18c84712a600021070f18265",
+  "started_at": "2026-09-27T07:51:34.170482+00:00",
   "model": "qwen/qwen3.8-27b",
   "design_system_id": "vk-tech-shablon",
   "skills": [
     {
       "name": "plan-deck",
-      "version": "3",
-      "sha256": "334a9b2a14486fb20b0680104384d2389da594cff46fbe3d879782ae1fbfbd11"
+      "version": "5",
+      "sha256": "7d0957afdd93ff7608f02edd90107106f702f6212ec0c75caf24d057128c345f"
     },
     {
       "name": "fill-slots",
@@ -16,20 +16,20 @@
     }
   ],
   "timings_ms": {
-    "plan": 35784,
-    "a-fill-slots": 12071,
+    "plan": 79208,
+    "a-fill-slots": 10023,
+    "a-export-pptx": 885,
+    "a-convert": 1600,
+    "a-render-slides": 3417,
     "a-audit": 2,
-    "a-export-pptx": 797,
-    "a-export-html": 22,
-    "a-convert": 3337,
-    "a-render-slides": 10259,
-    "a-audit-contextual": 61424,
-    "b-fill-slots": 13780,
+    "a-export-html": 33,
+    "a-audit-contextual": 60109,
+    "b-fill-slots": 11943,
+    "b-export-pptx": 812,
+    "b-convert": 1117,
+    "b-render-slides": 3381,
     "b-audit": 1,
-    "b-export-pptx": 779,
-    "b-export-html": 19,
-    "b-convert": 3239,
-    "b-render-slides": 10263
+    "b-export-html": 54
   },
   "axis": "плотнее: соседние слайды с одной мыслью сведены в один, карточек на слайде больше"
 }
