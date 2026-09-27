@@ -2,37 +2,27 @@ import type {VoiceEditor} from './voiceEditor';
 import {applyPlan} from './editorOperations';
 import {localCreation,ambiguousContent} from './localCreation';
 import {localEdits} from './localEdits';
-import {voiceNumber as number} from './voiceVocabulary';
+import {normalizeVoice,voiceNumber as number} from './voiceVocabulary';
 
 /** Strict local matches only; free-form instructions remain the planner's responsibility. */
 export function quickVoice(e:VoiceEditor,raw:string):boolean{
- const c=raw.toLowerCase().replace(/ё/g,'е').trim();
+ const c=normalizeVoice(raw).replace(/[.!?]+$/,'').trim();
  if(/^(покажи|скрой|убери) номера$/.test(c)){e.showNumbers=c.startsWith('покажи');e.notice=e.showNumbers?'Номера показаны. Скажите «Выбери номер семь»':'Номера скрыты';return true;}
  if(/^сними выделение$/.test(c)){e.selectMany([]);return true;}
  const creation=localCreation(raw);
  if(creation){applyPlan(e,{operations:creation,clarification:'',summary:'Элементы созданы'});return true;}
- if(/^(?:новый|следующий|предыдущий) слайд$/.test(c)){e.command(raw);return true;}
- const slide=c.match(/^(?:открой|выбери) слайд (.+)$/);
- if(slide&&number(slide[1])){applyPlan(e,{operations:[{op:'slide_select',index:number(slide[1])}],clarification:'',summary:'Слайд выбран'});return true;}
- if(c==='удали слайд'||c==='дублируй слайд'){applyPlan(e,{operations:[{op:c==='удали слайд'?'slide_delete':'slide_duplicate'}],clarification:'',summary:'Слайды обновлены'});return true;}
- const cell=raw.match(/^ячейка (\d+)\s*[, ]\s*(\d+)\s*[:=]\s*(.*)$/i);
- if(cell){applyPlan(e,{operations:[{op:'table_cell',row:Number(cell[1]),column:Number(cell[2]),value:cell[3]}],clarification:'',summary:'Ячейка изменена'});return true;}
- const row=c.match(/^(добавь|удали) (строку|столбец)(?: (\d+))?$/);
- if(row){applyPlan(e,{operations:[{op:`table_${row[2]==='строку'?'row':'column'}_${row[1]==='добавь'?'add':'delete'}`,index:row[3]?Number(row[3]):undefined}],clarification:'',summary:'Таблица изменена'});return true;}
+ if(c==='новый слайд'){e.command(raw);return true;}
  const exact:Record<string,object>={'жирный':{bold:true},'обычный':{bold:false,italic:false},'курсив':{italic:true},'заблокируй':{locked:true},'разблокируй':{locked:false},'впиши изображение':{fit:'contain'},'заполни изображением':{fit:'cover'}};
- const scalar=c.match(/^(поворот|прозрачность|скругление) (\d+)$/);
- if(exact[c]||scalar){applyPlan(e,{operations:[{op:'update',props:exact[c]??{[scalar![1]==='поворот'?'rotation':scalar![1]==='прозрачность'?'opacity':'radius']:Number(scalar![2])/(scalar![1]==='прозрачность'?100:1)}}],clarification:'',summary:'Свойства изменены'});return true;}
+ if(exact[c]){applyPlan(e,{operations:[{op:'update',props:exact[c]}],clarification:'',summary:'Свойства изменены'});return true;}
  const replacement=raw.match(/^(?:замени текст на|напиши|запиши)\s+(.+)$/i);
  if(replacement&&e.selected&&!ambiguousContent(replacement[1])){applyPlan(e,{operations:[{op:'update',props:{text:replacement[1].replace(/^[«"]|[»"]$/g,'')}}],clarification:'',summary:'Текст изменён'});return true;}
- const size=c.match(/^(ширина|высота|размер текста) (\d+)$/);
- if(size){applyPlan(e,{operations:[{op:'update',props:{[size[1]==='ширина'?'width':size[1]==='высота'?'height':'size']:Number(size[2])}}],clarification:'',summary:'Размер изменён'});return true;}
  const style=c.match(/^(?:сделай |цвет |заливка )?(красным|красный|синим|синий|белым|белый|черным|черный|акцентным|акцентный)$/);
  if(style){const color=style[1].startsWith('крас')?'#dc2626':style[1].startsWith('син')?'#2563eb':style[1].startsWith('бел')?'#ffffff':style[1].startsWith('чер')?'#17141f':e.color('accent','#7654ff');applyPlan(e,{operations:e.selectedIds.map(id=>({op:'update',targets:[id],props:e.current.components.find(c=>c.id===id)?.kind==='card'||e.current.components.find(c=>c.id===id)?.kind==='shape'?{fill:color}:{color}})),clarification:'',summary:'Цвет изменён'});return true;}
- const actions:Record<string,{op:string;value?:string}>={'сгруппируй':{op:'group'},'разгруппируй':{op:'ungroup'},'на передний план':{op:'layer',value:'front'},'на задний план':{op:'layer',value:'back'},'выровняй по центру':{op:'align',value:'center'},'выровняй по верхнему краю':{op:'align',value:'top'},'распредели по горизонтали':{op:'align',value:'distribute-horizontal'}};
+ const actions:Record<string,{op:string;value?:string}>={'сгруппируй':{op:'group'},'разгруппируй':{op:'ungroup'}};
  if(actions[c]){applyPlan(e,{operations:[actions[c]],clarification:'',summary:'Расположение изменено'});return true;}
  if(c==='одинаковая высота'||c==='одинаковая ширина'){const key=c==='одинаковая высота'?'height':'width';if(!e.selected){e.notice='Выберите объекты';return true;}applyPlan(e,{operations:[{op:'update',props:{[key]:e.selected[key]}}],clarification:'',summary:'Размеры выровнены'});return true;}
  const selection=c.match(/^вы(?:бери|дели) (.+)$/);
- if(selection){
+ if(selection&&!/^(?:слайд(?: |$)|.+ слайд$)/.test(selection[1])){
   const value=selection[1];
   if(value==='все'||value==='все элементы'){e.selectMany(e.current.components.map(x=>x.id));return true;}
   const list=value.replace(/^(?:номера?|элементы?|объекты?)\s+/,'').replace(/№\s*/g,'').split(/\s+и\s+|\s*,\s*/).map(number);

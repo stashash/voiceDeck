@@ -3,6 +3,7 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+ARG VITE_DESIGNER_URL=http://localhost:8090
 RUN npm run build
 FROM maven:3.9.9-eclipse-temurin-21 AS backend
 WORKDIR /app

@@ -4,15 +4,18 @@ import {VoiceCommandQueue} from '../stage/voiceCommandQueue';
 import './voiceWorkspace.css';
 import {useVoiceInput} from '../stage/useVoiceInput';
 import {parseDeckVoice} from '../stage/deckVoice';
-import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle } from 'lucide-react';
+import {executeDeckVoice,deckSelectable,type DeckVoiceResult} from '../stage/deckVoiceExecutor';
+import {deckRewriteTarget} from '../stage/deckVoiceTarget';
+import {editorRequest} from '../stage/editorRequest';
+import {prepareEditorModel} from '../stage/editorModel';
+import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, moveDeckElement, deckElementAction, recoverEditor,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice,
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
-import type {Scene} from '../designer/api';
 
-const selectable=(scene:Scene)=>[...scene.elements.filter(e=>e.type==='text'),...scene.elements.filter(e=>e.type!=='text')];
+const selectable=deckSelectable;
 
 const ASK_CHIPS = ['Короче', 'Сделай диаграммой', 'Вынести вывод в заголовок'];
 const FORMATS: { ext: string; label: string }[] = [
@@ -51,11 +54,14 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   const [livePreview,setLivePreview]=useState<{key:string;html:string}|null>(null);
   const [previewError,setPreviewError]=useState('');
   const [previewLoaded,setPreviewLoaded]=useState('');
-  const [voiceNotice,setVoiceNotice]=useState('Выберите текст на слайде или скажите «Выбери элемент два».');
+  const [voiceNotice,setVoiceNotice]=useState('Ожидание команды');
   const [confirmDelete,setConfirmDelete]=useState<number|null>(null);
+  const [thinking,setThinking]=useState(false);
+  const modelJob=useRef<{id:string;controller:AbortController}|null>(null);
+  function cancelModel(){const job=modelJob.current;if(!job)return;modelJob.current=null;job.controller.abort();setThinking(false);void editorRequest(`intent/${job.id}/cancel`,{}, {timeout:2000}).catch(()=>{});}
 
   useEffect(() => { getDeckState(deckId).then(setState).catch(e => setError(String(e))); }, [deckId]);
-  useEffect(()=>{blocked.current=false;setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;lastMove.current=null;return()=>{epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
+  useEffect(()=>{blocked.current=false;setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;lastMove.current=null;return()=>{cancelModel();epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
 
   const active = state?.variants[variant];
   const scenes = useMemo(() => active?.scenes ?? [], [active]);
@@ -91,6 +97,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   async function refresh() { const version=epoch.current;const next=await getDeckState(deckId);if(version!==epoch.current)return;flushSync(()=>{setState(next);setPreviewVersion(v=>v+1);}); }
   async function recover(){
     if(recovering)return;
+    cancelModel();
     epoch.current++;blocked.current=true;setRecovering(true);setNeedsRecovery(true);
     queue.current.reset();mutations.current.reset();dictation.current=null;lastMove.current=null;
     setWaitingText(false);setConfirmDelete(null);setBusy(false);operation.current=false;
@@ -102,6 +109,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     finally{setRecovering(false);}
   }
   async function guard(fn: () => Promise<unknown>) {
+    cancelModel();
     const version=epoch.current;
     if(blocked.current)return false;
     let saved=false;
@@ -123,6 +131,34 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     return queue.current.enqueue(async()=>{const started=performance.now();await commandHandler.current(raw);if(version===epoch.current)setLatency(Math.round(performance.now()-started));}).catch(e=>{if(version===epoch.current)setError(String(e));});
   }
   const [latency,setLatency]=useState<number|null>(null);
+  function applyVoiceResult(result:DeckVoiceResult){
+    flushSync(()=>{
+      if(result.state)setState(previous=>previous?{...previous,variants:{...previous.variants,[variant]:{...result.state!,slide_images:result.state!.slide_images?.length?result.state!.slide_images:previous.variants[variant]?.slide_images}}}:previous);
+      if(result.state)setPreviewVersion(v=>v+1);
+      if(result.index!==undefined)setIndex(result.index);
+      if(result.selectedId!==undefined)setActiveEl(result.selectedId);
+      if(result.dictate){dictation.current=result.dictate;setWaitingText(true);}
+      if(result.confirmDelete!==undefined)setConfirmDelete(result.confirmDelete);
+    });
+    if(result.movement)lastMove.current=result.movement;
+    else if(result.selectedId!==undefined||result.index!==undefined)lastMove.current=null;
+    if(result.notice)setVoiceNotice(result.notice);
+  }
+  async function modelRewrite(instruction:string,explicitSlide?:number){
+    if(modelJob.current){setVoiceNotice('Локальная модель занята. Быстрые команды доступны.');return;}
+    const target=deckRewriteTarget(instruction,scenes,index,activeEl,explicitSlide);
+    if('notice' in target){setVoiceNotice(target.notice);return;}
+    const job={id:crypto.randomUUID(),controller:new AbortController()};modelJob.current=job;
+    const version=epoch.current,started=performance.now();setThinking(true);setVoiceNotice('Локальная модель редактирует текст…');
+    try{
+      await prepareEditorModel(job.controller.signal,status=>{if(modelJob.current===job)setVoiceNotice(status.state==='ready'?'Локальная модель редактирует текст…':status.message??'Загрузка локальной модели…');});
+      if(modelJob.current!==job||version!==epoch.current)return;
+      const result=await rewriteDeckVoice(deckId,variant,target.slide,{request_id:job.id,element_id:target.id,instruction},job.controller.signal);
+      if(modelJob.current!==job||version!==epoch.current)return;
+      applyVoiceResult(result);setLatency(Math.round(performance.now()-started));
+    }catch(e){if(modelJob.current===job&&!job.controller.signal.aborted)setVoiceNotice(String(e));}
+    finally{if(modelJob.current===job){modelJob.current=null;setThinking(false);}}
+  }
   async function executeVoice(raw:string){
     if(!scene)return;
     if(dictation.current){
@@ -136,43 +172,18 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     let resolved=parseDeckVoice(raw);setVoiceNotice(raw);
     if(resolved.kind==='repeat'){if(!lastMove.current){setVoiceNotice('Сначала переместите выбранный объект.');return;}resolved={kind:'move',...lastMove.current,dx:lastMove.current.dx*resolved.factor,dy:lastMove.current.dy*resolved.factor};}
     const a=resolved;
-    if(a.kind==='cancel'){setVoiceNotice(busy?'Правка уже сохраняется на сервере. После завершения её можно отменить.':'Ожидание команды');setConfirmDelete(null);return;}
-    if(a.kind==='unknown'){setVoiceNotice('Не понял выбор. Скажите «Выбери один», «Выбери заголовок» или «Слайд два».');return;}
-    if(a.kind==='next'||a.kind==='previous'||a.kind==='select'){const next=a.kind==='select'?a.number-1:index+(a.kind==='next'?1:-1);if(next<0||next>=scenes.length){setVoiceNotice(`В презентации ${scenes.length} слайдов. Сейчас слайд ${index+1}.`);return;}lastMove.current=null;flushSync(()=>{setActiveEl(null);setIndex(next);});setVoiceNotice(`Открыт слайд ${next+1} из ${scenes.length}.`);return;}
-    const target=a.slide??index+1;
-    if(target<1||target>scenes.length){setVoiceNotice(`Слайда ${target} нет. В презентации ${scenes.length} слайдов.`);return;}
-    const targetScene=scenes[target-1];
-    if(a.kind==='deleteElement'||a.kind==='duplicateElement'||a.kind==='style'){
-      if(!activeEl||!targetScene.elements.some(e=>e.id===activeEl)){setVoiceNotice('Сначала выберите объект по номеру.');return;}
-      const action=a.kind==='style'?'style':a.kind==='deleteElement'?'delete':'duplicate';
-      const saved=await guard(()=>deckElementAction(deckId,variant,target,{action,element_id:activeEl,...(a.kind==='style'?{scale:a.scale,size_pt:a.size_pt,color:a.color}:{})}));
-      if(saved&&action==='delete'){lastMove.current=null;flushSync(()=>setActiveEl(null));}return;
-    }
-    if(a.kind==='move'){
-      if(!activeEl||!targetScene.elements.some(e=>e.id===activeEl)){setVoiceNotice('Выберите элемент: «Выбери один», затем «Вправо на двадцать».');return;}
-      const movement=a;const saved=await guard(()=>moveDeckElement(deckId,variant,target,activeEl,movement.dx,movement.dy,movement.align));if(saved)lastMove.current=movement;return;
-    }
-    if(a.slide)flushSync(()=>setIndex(target-1));
-    if(a.kind==='element'||a.kind==='title'){const elements=selectable(targetScene);const el=a.kind==='title'?elements.find(e=>/title|heading|заголовок/i.test(e.role)):elements[a.number-1];if(el){lastMove.current=null;flushSync(()=>setActiveEl(el.id));setVoiceNotice(`Слайд ${target}: выбран элемент ${elements.indexOf(el)+1}.`);}else setVoiceNotice(`Слайд ${target}: ${a.kind==='title'?'заголовок не найден':`элемента ${a.number} нет`}.`);return;}
-    if(a.kind==='addElement'){
-      const type=a.elementType??'text';
-      if(type!=='title'&&type!=='text'&&type!=='shape'){setVoiceNotice('Прямое добавление пока поддерживает текст, заголовок и фигуру. Для картинки, таблицы и диаграммы используйте генерацию слайда.');return;}
-      let addedId:string|undefined;
-      const saved=await guard(async()=>{const result=await deckElementAction(deckId,variant,target,{action:'add',element_type:type,text:a.text||'Новый текст'});addedId=result.scenes[target-1].elements.at(-1)?.id;});
-      if(saved&&addedId){flushSync(()=>setActiveEl(addedId!));lastMove.current=null;}return;
-    }
-    if(a.kind==='delete'){setConfirmDelete(index+1);setVoiceNotice('Удалить текущий слайд? Скажите «Да» или «Нет».');return;}
-    if(a.kind==='text'||a.kind==='appendText'||a.kind==='textStart'){
-      const el=a.elementNumber!==undefined?selectable(targetScene)[a.elementNumber-1]:targetScene.elements.find(e=>e.id===activeEl&&e.type==='text');
-      if(!el||el.type!=='text'){setVoiceNotice('Сначала выберите текстовый элемент: «Выбери один».');return;}
-      flushSync(()=>setActiveEl(el.id));
-      if(a.kind==='textStart'){dictation.current={slide:target,id:el.id};setWaitingText(true);setVoiceNotice('Скажите новый текст одной фразой. «Стоп» — отменить.');return;}
-      await guard(()=>patchSlideText(deckId,variant,target,el.id,a.kind==='appendText'?`${el.text.trimEnd()} ${a.text}`:a.text));return;
-    }
-    if(a.kind==='pattern'){const p=patterns[a.number-1];if(p)await guard(()=>setSlidePattern(deckId,variant,index+1,p.pattern_id));else setVoiceNotice('Такого образца нет');return;}
-    if(a.kind==='undo'){await guard(()=>revertVariant(deckId,variant));return;}
-    if(a.kind==='add'||a.kind==='copy'){const action=a.kind;await guard(()=>slidesAction(deckId,variant,{action,index:index+1}));return;}
-    if(a.kind==='ask')await guard(()=>askSlide(deckId,variant,index+1,a.text));
+    if(a.kind==='cancel'){cancelModel();setConfirmDelete(null);return;}
+    if(a.kind==='ask'){void modelRewrite(a.text,a.slide);return;}
+    if(a.kind==='unknown'){setVoiceNotice('Команда не распознана. Документ не изменён.');return;}
+    cancelModel();
+    const version=epoch.current;
+    await mutations.current.enqueue(async()=>{
+      if(version!==epoch.current||blocked.current)return;
+      setBusy(true);setError('');
+      try{const result=await executeDeckVoice(a,{deckId,variant,scenes,index,selectedId:activeEl,patterns});if(version===epoch.current)applyVoiceResult(result);}
+      catch(e){if(version!==epoch.current)return;const status=(e as {status?:number}).status;if(status&&status>=400&&status<500){setVoiceNotice(String(e));return;}blocked.current=true;setNeedsRecovery(true);queue.current.clear();setError(`Не удалось подтвердить сохранение: ${String(e)}`);}
+      finally{if(version===epoch.current)setBusy(false);}
+    });
   }
   commandHandler.current=executeVoice;
   const voice=useVoiceInput(raw=>void voiceCommand(raw));
@@ -215,24 +226,30 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       </div>
     </div>
     {error && <div className="notice" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
-    <div className="deck-voice-bar">
-      <div style={{display:'flex',alignItems:'center',gap:12}}>
-        <button className="button" disabled={recovering} onClick={()=>void recover()}>{recovering?'Восстанавливаю…':pending?'Остановить и восстановить':'Восстановить управление'}</button>
-        <button className="button" disabled={voice.starting} onClick={()=>void voice.restart()}>Переподключить микрофон</button>
-        <span role="status">{recovering?'Проверяю состояние сервера':needsRecovery?'Нужна проверка последней правки':pending?`Обработка · ${elapsed} с${elapsed>=5?' · можно остановить кнопкой слева':''}`:'Очередь свободна'}</span>
+    <section className="deck-voice-bar voice-console" aria-label="Голосовое редактирование">
+      <div className="voice-console-controls">
+        <button className={`button deck-mic-button ${voice.recording?'is-recording':''}`} disabled={voice.starting} onClick={()=>void(voice.recording?voice.stop():voice.start())}>
+          {voice.recording?<Square size={18}/>:<Mic size={18}/>}{voice.starting?'Подключение…':voice.recording?'Микрофон включён':'Включить микрофон'}
+        </button>
+        <button className="button-icon" title="Переподключить микрофон" aria-label="Переподключить микрофон" disabled={voice.starting} onClick={()=>void voice.restart()}><RefreshCw size={18}/></button>
+        <button className="button-icon" title="Остановить команды и сверить документ" aria-label="Остановить команды и сверить документ" disabled={recovering} onClick={()=>void recover()}><Square size={18}/></button>
+        <button className="button-icon" title="Отменить последнюю правку" aria-label="Отменить последнюю правку" disabled={busy||waitingText} onClick={()=>void voiceCommand('Отмени')}><Undo2 size={18}/></button>
+        <span className="voice-console-state" role="status">{recovering?'Сверка документа':needsRecovery?'Сохранение не подтверждено':thinking?'Локальная модель':pending?`Сохранение · ${elapsed} с`:'Готово'}</span>
+        {latency!==null&&<output className="voice-console-latency">{latency} мс</output>}
       </div>
-      {waitingText && <div role="status">Диктуйте новый текст выбранного элемента. <button className="button" onClick={()=>{dictation.current=null;setWaitingText(false);setVoiceNotice('Ввод текста отменён');}}>Отменить диктовку</button></div>}
-      <div aria-live="polite">Слайд {index+1} из {scenes.length} · {activeEl ? `Выбран элемент ${selectable(scene).findIndex(e=>e.id===activeEl)+1}` : 'Элемент не выбран'} · {pending ? `Команд в обработке: ${pending}` : 'Готов к команде'}{latency!==null&&` · Последняя команда: ${latency} мс`}</div>
-      {voice.recording && <div>Микрофон: {voice.device} · <meter aria-label="Уровень микрофона" min={0} max={100} value={voice.level}/> {voice.level>1?'Звук поступает':'Тихо — проверьте выбранный микрофон'}</div>}
-      {voice.heard && <div>Распознано: «{voice.heard}»</div>}
-      {activeEl && <div className="component-toolbar" aria-label="Перемещение выбранного элемента">{[['←','Влево'],['↑','Вверх'],['↓','Вниз'],['→','Вправо'],['В центр','В центр']].map(([label,command])=><button key={command} className="button" disabled={busy||waitingText} aria-label={`Переместить ${command.toLowerCase()}`} onClick={()=>void voiceCommand(command)}>{label}</button>)}<span>Шаг 20 пикселей · голосом: «Вправо на двадцать», «В центр»</span></div>}
-      <div className="deck-voice-row">
-      <button className={`button deck-mic-button ${voice.recording ? 'is-recording' : ''}`} disabled={voice.starting} onClick={()=>void(voice.recording?voice.stop():voice.start())}>{voice.recording ? <Square size={16}/> : <Mic size={16}/>}{voice.recording?'Остановить микрофон':'Редактировать голосом'}</button>
-      <span className="deck-voice-status" aria-live="polite"><i className={`deck-connection-dot ${voice.recording ? 'live' : ''}`}/>{voice.error||voice.partial||voiceNotice}{voice.connection ? ` · ${voice.connection}` : ''}</span></div>
-      <details><summary>Что можно сказать?</summary><p>«Следующий слайд» · «Выбери элемент два» · «Замени текст на …» · «Сократи заголовок» · «Выбери образец два» · «Добавь слайд» · «Отмени»</p></details>
-      <form onSubmit={e=>{e.preventDefault();if(commandDraft.trim()){void voiceCommand(commandDraft);setCommandDraft('');}}} style={{display:'flex',gap:8}}><input aria-label="Команда редактирования" value={commandDraft} onChange={e=>setCommandDraft(e.target.value)} placeholder="Команду можно ввести текстом"/><button className="button">Выполнить</button></form>
-      {confirmDelete!==null&&<div>Удалить слайд {confirmDelete}? <button className="button" onClick={()=>void voiceCommand('да')}>Да, удалить слайд</button><button className="button" onClick={()=>setConfirmDelete(null)}>Нет</button></div>}
-    </div>
+      <div className="voice-console-feedback">
+        <span className="deck-voice-status" aria-live="polite"><i className={`deck-connection-dot ${voice.recording?'live':''}`}/>{voice.error||voice.partial||voiceNotice}</span>
+        <span className="voice-console-selection">Слайд {index+1}/{scenes.length} · {activeEl?`Элемент ${selectable(scene).findIndex(e=>e.id===activeEl)+1}`:'Нет выделения'}</span>
+      </div>
+      {waitingText&&<div role="status" className="voice-console-dictation">Ожидается новый текст<button className="button-icon" title="Отменить диктовку" aria-label="Отменить диктовку" onClick={()=>{dictation.current=null;setWaitingText(false);setVoiceNotice('Ввод текста отменён');}}><X size={16}/></button></div>}
+      {voice.recording&&<div className="voice-console-device"><meter aria-label="Уровень микрофона" min={0} max={100} value={voice.level}/><span>{voice.device}</span><span>{voice.connection}</span></div>}
+      {voice.heard&&<div className="voice-console-heard">Распознано: «{voice.heard}»</div>}
+      <div className="voice-console-command">
+        <form onSubmit={e=>{e.preventDefault();if(commandDraft.trim()){void voiceCommand(commandDraft);setCommandDraft('');}}}><input aria-label="Команда редактирования" value={commandDraft} onChange={e=>setCommandDraft(e.target.value)} placeholder="Команда редактирования"/><button className="button-icon" title="Выполнить команду" aria-label="Выполнить команду" disabled={!commandDraft.trim()}><Send size={18}/></button></form>
+        {activeEl&&<div className="voice-console-arrows" aria-label="Перемещение выбранного элемента">{[[ArrowLeft,'Влево'],[ArrowUp,'Вверх'],[ArrowDown,'Вниз'],[ArrowRight,'Вправо'],[AlignCenter,'В центр']].map(([Icon,command])=>{const Symbol=Icon as typeof ArrowLeft;return <button key={command as string} className="button-icon" disabled={busy||waitingText} title={command as string} aria-label={`Переместить ${(command as string).toLowerCase()}`} onClick={()=>void voiceCommand(command as string)}><Symbol size={18}/></button>;})}</div>}
+      </div>
+      {confirmDelete!==null&&<div>Удалить слайд {confirmDelete}? <button className="button" onClick={()=>void voiceCommand('да')}>Удалить</button><button className="button" onClick={()=>setConfirmDelete(null)}>Отмена</button></div>}
+    </section>
     <div className="edit-body">
       <aside className="edit-rail" aria-label="Слайды">
         {scenes.map((s, i) => {
@@ -240,7 +257,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           const hasError = fs.some(f => f.severity === 'error');
           return <a key={s.slide_id} className={`edit-thumb-row ${i === index ? 'current' : ''}`}
             aria-label={`Слайд ${i + 1}`} aria-current={i === index ? 'true' : undefined}
-            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); setIndex(i); }}>
+            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); cancelModel();setIndex(i); }}>
             <span className="edit-thumb-num">{i + 1}</span>
             <span className="edit-thumb-wrap">
               {active?.slide_images?.[i] ? <img className="edit-thumb" src={freshImage(active.slide_images[i])} alt=""/> : <div className="edit-thumb"/>}
@@ -265,8 +282,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
             const [x, y, w, h] = el.box;
             const style: React.CSSProperties = { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` };
             return <div key={el.id} className={`edit-el-box ${activeEl === el.id ? 'active' : ''}`} style={style}
-              onClick={() => setActiveEl(el.id)}>
-              <span style={{position:'absolute',top:0,left:0,background:'var(--accent)',color:'white',padding:'2px 6px',borderRadius:4}}>{elementIndex+1}</span>
+              onClick={() => {cancelModel();setActiveEl(el.id);}}>
+              <span style={{position:'absolute',top:y>.04?-22:0,left:x>.04?-22:0,background:'var(--accent)',color:'white',padding:'2px 6px',borderRadius:4}}>{elementIndex+1}</span>
               {activeEl === el.id && editingEl !== el.id && <div className="edit-el-toolbar" role="toolbar" aria-label="Текст на слайде"
                 style={{ left: 0, top: '100%', marginTop: 4 }}>
                 {el.type==='text'&&<button type="button" className="button-icon" aria-label="Править текст" title="Править текст"

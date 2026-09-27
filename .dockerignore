@@ -12,3 +12,5 @@ test-results
 .serena
 artifacts
 dark-factory
+.voice-factory
+scripts/voice-factory-output

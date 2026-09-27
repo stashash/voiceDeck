@@ -89,7 +89,7 @@ export class VoiceEditor{
   if(/^ещ[её] варианты$/i.test(c)){this.imageOffset+=6;void this.images(this.imagePrompt,false,changed,true);return;}
   const choose=c.match(/^(?:возьми|выбери)\s+(первую|вторую|третью|четвертую|пятую|шестую|[1-6])$/i);
   if(choose&&this.imageResults.length){this.pickImage(Number(choose[1])||['первую','вторую','третью','четвертую','пятую','шестую'].indexOf(choose[1].toLowerCase())+1);this.save();changed();return;}
-  if(quickVoice(this,c)){this.pendingQuestion='';this.save();changed();return;}
+  if(quickVoice(this,raw.trim().replace(/^команда\s*[:,.]?\s*/i,''))){this.pendingQuestion='';this.save();changed();return;}
   // Only unambiguous transport actions bypass planning. Content instructions all use the document model.
   if(/^(отмени|отмена|верни|повтори|покажи залу)$/i.test(c)){this.command(c);this.save();changed();return;}
   if(this.queue.length>=4){this.notice='Очередь заполнена. Дождитесь ответа или скажите «Стоп».';changed();return;}

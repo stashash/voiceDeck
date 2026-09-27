@@ -10,7 +10,8 @@ const base=process.env.VITE_BASE||'/';
 // живёт на отдельном порту vite, proxy пробрасывает те же пути тем же способом, что /api и /ws —
 // запрос уходит с сервера vite, а не из браузера, поэтому CORS designer не мешает.
 const designer=process.env.DESIGNER_PROXY_URL||'http://localhost:8090';
+const app=process.env.APP_PROXY_URL||'http://localhost:8088';
 export default defineConfig({base,plugins:[react()],server:{proxy:{
- '/api':'http://localhost:8088','/health':'http://localhost:8088','/ws':{target:'ws://localhost:8088',ws:true},
+ '/api':app,'/health':app,'/ws':{target:app.replace(/^http/,'ws'),ws:true},
  '/design-systems':designer,'/decks':designer,'/agents':designer,'/settings/agents':designer,'/editor':designer,'/library':designer,
 }}});

@@ -35,8 +35,8 @@ it('routes commands without a model',()=>{
  expect(parseDeckVoice('создай слайд')).toEqual({kind:'add'});
  expect(parseDeckVoice('выбери один')).toEqual({kind:'element',number:1});
  expect(parseDeckVoice('покажи 3')).toEqual({kind:'element',number:3});
- expect(parseDeckVoice('добавь заголовок План запуска')).toEqual({kind:'addElement',elementType:'title',text:'план запуска'});
- expect(parseDeckVoice('на слайде 3 добавь текст Результат')).toEqual({kind:'addElement',elementType:'text',text:'результат',slide:3});
+ expect(parseDeckVoice('добавь заголовок План запуска')).toEqual({kind:'addElement',elementType:'title',text:'План запуска'});
+ expect(parseDeckVoice('на слайде 3 добавь текст Результат')).toEqual({kind:'addElement',elementType:'text',text:'Результат',slide:3});
 });
 it.each([
  ['Выбери один',{kind:'element',number:1}],

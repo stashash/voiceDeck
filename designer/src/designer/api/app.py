@@ -65,6 +65,8 @@ from designer.api.editor import router as editor_router
 
 app = FastAPI(title="Цифровой дизайнер презентаций")
 app.include_router(editor_router)
+from designer.api.deck_voice import router as deck_voice_router
+app.include_router(deck_voice_router)
 from designer.api.editor_documents import router as editor_documents_router
 app.include_router(editor_documents_router)
 from designer.api.library import router as library_router
@@ -419,9 +421,11 @@ def patch_element_position(deck_id: str, variant: str, number: int, payload: Sli
 @app.post("/decks/{deck_id}/{variant}/slides/{number}/elements", response_model=DeckVariantState)
 def post_element_action(deck_id: str, variant: str, number: int, payload: ElementActionRequest):
     try:
-        edit.element_action(deck_id, variant, number, **payload.model_dump())
-    except (*_EDIT_NOT_FOUND, ValueError) as exc:
+        edit.element_action(deck_id, variant, number, **payload.model_dump(exclude_unset=True))
+    except _EDIT_NOT_FOUND as exc:
         raise _edit_error(exc)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     return _variant_state(deck_id, variant)
 
 

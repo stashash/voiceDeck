@@ -272,6 +272,8 @@ class ElementPosition(BaseModel):
     deleted: bool = False
     text: str | None = None
     style: TextStyle | None = None
+    fill: str | None = None
+    z: int | None = None
 
 
 class SlideSpec(BaseModel):
@@ -282,6 +284,7 @@ class SlideSpec(BaseModel):
     slot_text: dict[str, str] = Field(default_factory=dict, description="id слота паттерна -> текст")
     element_positions: dict[str, ElementPosition] = Field(default_factory=dict)
     added_elements: list[Element] = Field(default_factory=list)
+    background_color: str | None = None
     group_id: str | None = None
     unit_text: list[dict[str, str]] = Field(default_factory=list, description="по блоку: id слота блока -> текст")
     linked_unit_text: dict[str, list[dict[str, str]]] = Field(default_factory=dict, description="id связанной группы -> тексты её блоков; число блоков то же, что в unit_text")

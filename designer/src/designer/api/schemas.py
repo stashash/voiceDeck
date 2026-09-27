@@ -1,11 +1,11 @@
 """Схемы запросов и ответов HTTP API. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from designer.contracts import DeckPlan, Finding, Scene, SkillRef, SlideSpec
+from designer.contracts import DeckPlan, Finding, Scene, SkillRef, SlideSpec, TableSpec
 
 
 class DeckCreateRequest(BaseModel):
@@ -147,14 +147,87 @@ class SlideMoveElementRequest(BaseModel):
     align: Literal['left', 'right', 'top', 'bottom', 'center'] | None = None
 
 
+_CellText = Annotated[str, Field(strict=True, max_length=10000)]
+
+
+class ElementTableRequest(TableSpec):
+    model_config = ConfigDict(extra='forbid')
+    columns: list[_CellText] = Field(min_length=1, max_length=5)
+    rows: list[list[_CellText]] = Field(max_length=7)
+
+    @model_validator(mode='after')
+    def rectangular(self) -> ElementTableRequest:
+        if any(len(row) != len(self.columns) for row in self.rows):
+            raise ValueError('Every table row must match the number of columns')
+        return self
+
+
 class ElementActionRequest(BaseModel):
-    action: Literal['add', 'delete', 'duplicate', 'style']
-    element_id: str | None = None
-    element_type: Literal['text', 'title', 'shape'] = 'text'
-    text: str = Field(default='', max_length=10000)
-    scale: float = Field(default=1, ge=.25, le=4, allow_inf_nan=False)
-    size_pt: float | None = Field(default=None, ge=6, le=144, allow_inf_nan=False)
+    model_config = ConfigDict(extra='forbid')
+    action: Literal['add', 'delete', 'duplicate', 'style', 'background', 'z_order',
+                    'table_cell', 'table_row_add', 'table_row_delete',
+                    'table_column_add', 'table_column_delete']
+    element_id: str | None = Field(default=None, min_length=1, max_length=200, pattern=r'\S')
+    element_type: Literal['text', 'title', 'shape', 'card', 'table'] = 'text'
+    text: _CellText = ''
+    scale: float = Field(default=1, ge=.25, le=4, allow_inf_nan=False, strict=True)
+    size_pt: float | None = Field(default=None, ge=6, le=144, allow_inf_nan=False, strict=True)
     color: str | None = Field(default=None, pattern=r'^[0-9A-Fa-f]{6}$')
+    bold: bool | None = Field(default=None, strict=True)
+    italic: bool | None = Field(default=None, strict=True)
+    text_align: Literal['left', 'center', 'right'] | None = None
+    fill: str | None = Field(default=None, pattern=r'^[0-9A-Fa-f]{6}$')
+    width: float | None = Field(default=None, gt=0, le=1, allow_inf_nan=False, strict=True)
+    height: float | None = Field(default=None, gt=0, le=1, allow_inf_nan=False, strict=True)
+    order: Literal['front', 'back'] | None = None
+    table: ElementTableRequest | None = None
+    row: int | None = Field(default=None, ge=0, le=8, strict=True)
+    column: int | None = Field(default=None, ge=1, le=6, strict=True)
+    values: list[_CellText] | None = Field(default=None, max_length=7)
+
+    @model_validator(mode='after')
+    def action_fields(self) -> ElementActionRequest:
+        allowed = {
+            'add': {'element_type', 'text', 'width', 'height', 'fill', 'table'},
+            'delete': set(), 'duplicate': set(),
+            'style': {'size_pt', 'scale', 'color', 'bold', 'italic', 'text_align', 'fill', 'width', 'height'},
+            'background': {'color'}, 'z_order': {'order'},
+            'table_cell': {'row', 'column', 'text'},
+            'table_row_add': {'row', 'values'}, 'table_row_delete': {'row'},
+            'table_column_add': {'column', 'text', 'values'}, 'table_column_delete': {'column'},
+        }[self.action]
+        required = {
+            'background': {'color'}, 'z_order': {'order'},
+            'table_cell': {'row', 'column', 'text'},
+            'table_row_delete': {'row'}, 'table_column_delete': {'column'},
+        }.get(self.action, set())
+        supplied = self.model_fields_set - {'action', 'element_id'}
+        if supplied - allowed:
+            raise ValueError(f'Unsupported fields for {self.action}: {sorted(supplied - allowed)}')
+        if required - supplied:
+            raise ValueError(f'Missing fields for {self.action}: {sorted(required - supplied)}')
+        if any(getattr(self, key) is None for key in self.model_fields_set):
+            raise ValueError('Omit unused fields; explicit null values are not supported')
+        if self.action in ('add', 'background'):
+            if self.element_id is not None:
+                raise ValueError(f'{self.action} does not accept an element target')
+        elif not self.element_id:
+            raise ValueError('element_id is required')
+        if self.action == 'style':
+            if not supplied:
+                raise ValueError('style requires at least one property')
+            if {'size_pt', 'scale'} <= supplied:
+                raise ValueError('Use either size_pt or scale')
+        if self.action == 'add':
+            if 'table' in supplied and self.element_type != 'table':
+                raise ValueError('table data requires element_type table')
+            if 'fill' in supplied and self.element_type not in ('shape', 'card'):
+                raise ValueError('fill is supported only for shapes and cards')
+            if 'text' in supplied and self.element_type not in ('text', 'title', 'card'):
+                raise ValueError('text is supported only for text, titles and cards')
+        if self.action in ('table_row_add', 'table_row_delete') and self.row == 0:
+            raise ValueError('Body row indices start at 1')
+        return self
 
 
 class SlidePatternRequest(BaseModel):

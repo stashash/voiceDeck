@@ -23,3 +23,19 @@
 @media(max-width:950px){.voice-workspace{grid-template-columns:190px minmax(0,1fr)}.vw-library{padding:16px 10px;gap:14px}.vw-brand{gap:7px}.vw-brand strong{font-size:13px}.vw-brand small{font-size:9px}.voice-workspace .edit-body{overflow:auto;flex-wrap:wrap}.voice-workspace .edit-panel{width:100%;overflow:visible}.voice-workspace .edit-canvas{width:calc(100% - 112px)}.voice-workspace .edit-rail{max-height:420px}.voice-workspace .pattern-grid{grid-template-columns:repeat(4,1fr)}.vw-header{flex-wrap:wrap}.deck-voice-row{flex-wrap:wrap}.voice-workspace .component-editor{grid-template-columns:1fr}}
 @media(max-width:600px){.voice-workspace{height:auto;min-height:calc(100dvh - 56px);grid-template-columns:1fr;overflow:visible}.vw-library{max-height:370px}.vw-documents{flex-direction:row;min-height:130px}.vw-document{width:170px}.vw-library-footer{display:flex}.vw-library-footer button{flex:1}.vw-preview{display:none}.vw-brand{display:none}.vw-section-label{margin:0}.vw-content{overflow:visible}.voice-workspace .edit-shell{height:auto}.vw-form-wrap{margin:24px auto}.vw-header .vw-eyebrow{display:none}}
 .deck-connection-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#777b88;margin-right:7px}.deck-connection-dot.live{background:#78d6a0;box-shadow:0 0 0 3px #78d6a022}
+.voice-console{background:#182323;border-color:#354441;padding:12px 20px;gap:8px;letter-spacing:0}
+.voice-console-controls,.voice-console-feedback,.voice-console-command,.voice-console-device,.voice-console-dictation{display:flex;align-items:center;gap:10px;min-width:0}
+.voice-console .button-icon{width:36px;height:36px;flex:0 0 36px;color:#d7e6e0;border:1px solid #45544f;border-radius:6px;background:#222e2b}
+.voice-console .button-icon:hover{background:#34423c}
+.voice-console .deck-mic-button{background:#b9e2ca!important;color:#162a20!important;border-color:#b9e2ca!important;border-radius:6px!important;height:38px;font-size:13px}
+.voice-console .deck-mic-button.is-recording{background:#f8ce91!important;border-color:#f8ce91!important}
+.voice-console-state{font-size:12px;color:#d4e3db;overflow-wrap:anywhere}
+.voice-console-latency{margin-left:auto;font:12px 'JetBrains Mono',monospace;white-space:nowrap;color:#a9c1b3}
+.voice-console-feedback{justify-content:space-between;align-items:flex-start}
+.voice-console .deck-voice-status{color:#dce7df;flex:1}
+.voice-console-selection{font-size:12px;color:#a7bcb3;white-space:nowrap}
+.voice-console-command form{flex:1;min-width:120px}.voice-console input{background:#101b17;border-color:#45574d;color:#f0f4f1;border-radius:6px}
+.voice-console-arrows{display:flex;gap:5px}.voice-console-device,.voice-console-heard,.voice-console-dictation{font-size:12px;color:#cedbd5;overflow-wrap:anywhere}
+.voice-console-device span{min-width:0;overflow-wrap:anywhere}.voice-console-device meter{width:90px;flex:0 0 90px}
+.voice-console-heard{max-height:54px;overflow:auto}.voice-console-dictation{color:#f8ce91}
+@media(max-width:600px){.voice-console{padding:10px 12px}.voice-console-feedback,.voice-console-controls,.voice-console-command{flex-wrap:wrap}.voice-console-selection{white-space:normal}.voice-console-latency{margin-left:0}.voice-console-command form{flex-basis:100%}.voice-console .deck-mic-button{flex:1;min-width:170px}.voice-console-state{flex-basis:100%}}

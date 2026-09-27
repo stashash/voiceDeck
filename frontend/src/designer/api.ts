@@ -95,7 +95,7 @@ export function errorText(e: unknown): string {
 }
 
 async function asJson<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`Сервис дизайнера ответил ${res.status}`);
+  if (!res.ok) return uploadResponse<T>(res);
   return res.json() as Promise<T>;
 }
 
@@ -125,7 +125,7 @@ async function uploadResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = `Сервис дизайнера ответил ${res.status}`;
     try { const body = await res.json(); if (body?.detail) detail = body.detail; } catch { /* тело не JSON */ }
-    throw new Error(detail);
+    throw Object.assign(new Error(typeof detail==='string'?detail:JSON.stringify(detail)),{status:res.status});
   }
   return res.json() as Promise<T>;
 }
@@ -249,8 +249,15 @@ export function moveDeckElement(deckId:string,variant:string,n:number,elementId:
   return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/position`),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({element_id:elementId,dx,dy,align})}).then(r=>uploadResponse<DeckVariantState>(r));
 }
 
-export function deckElementAction(deckId:string,variant:string,n:number,payload:{action:'add'|'delete'|'duplicate'|'style';element_id?:string;element_type?:'text'|'title'|'shape';text?:string;scale?:number;size_pt?:number;color?:string}):Promise<DeckVariantState>{
-  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/elements`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>asJson<DeckVariantState>(r));
+export type DeckElementPayload={
+ action:'add'|'delete'|'duplicate'|'style'|'background'|'z_order'|'table_cell'|'table_row_add'|'table_row_delete'|'table_column_add'|'table_column_delete';
+ element_id?:string;element_type?:'text'|'title'|'shape'|'card'|'table';text?:string;
+ scale?:number;size_pt?:number;color?:string;bold?:boolean;italic?:boolean;text_align?:'left'|'center'|'right';
+ fill?:string;width?:number;height?:number;order?:'front'|'back';row?:number;column?:number;values?:string[];
+ table?:{columns:string[];rows:string[][]};
+};
+export function deckElementAction(deckId:string,variant:string,n:number,payload:DeckElementPayload):Promise<DeckVariantState>{
+  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/elements`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>uploadResponse<DeckVariantState>(r));
 }
 
 export type SlidesAction = { action: 'add' | 'copy' | 'delete' | 'move'; index: number; to?: number };
@@ -282,6 +289,10 @@ export function revertVariant(deckId: string, variant: string): Promise<DeckVari
 
 export function recoverEditor(deckId:string,variant:string):Promise<DeckVariantState>{
   return fetch(url(`/decks/${deckId}/${variant}/recover`),{method:'POST'}).then(r=>asJson<DeckVariantState>(r));
+}
+
+export function rewriteDeckVoice(deckId:string,variant:string,n:number,payload:{request_id:string;element_id:string;instruction:string},signal:AbortSignal):Promise<{state?:DeckVariantState;notice:string;elapsed_ms?:number}>{
+ return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-rewrite`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal},35000).then(r=>uploadResponse(r));
 }
 
 // ---------- агенты ----------

@@ -12,6 +12,7 @@ agent_hook._client_for("deck") — тот же приём, что и в pipeline
 """
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from pathlib import Path
@@ -33,6 +34,7 @@ from designer.contracts import (
     SlideIntent,
     SlideKind,
     SlideSpec,
+    TableSpec,
     TextStyle,
 )
 from designer.export import convert, render
@@ -141,8 +143,13 @@ def _persist(state: _State, findings: list[Finding]) -> None:
 def live_slide(deck_id: str, variant: str, number: int) -> str:
     state = _load(deck_id, variant)
     index = _slide_index(state, number)
+    scene = state.scenes[index].model_copy(deep=True)
+    if scene.theme == 'dark':
+        for element in scene.elements:
+            if element.type == 'text' and (element.style is None or element.style.color is None):
+                element.style = (element.style or TextStyle()).model_copy(update={'color': 'FFFFFF'})
     deck = Deck(id=deck_id, design_system_id=state.ds_id, variant=variant,
-                plan=state.plan, specs=[state.specs[index]], scenes=[state.scenes[index]])
+                plan=state.plan, specs=[state.specs[index]], scenes=[scene])
     return render_deck(deck, state.ds, state.package_dir).split("<script>")[0] + "</body></html>"
 
 
@@ -150,7 +157,14 @@ def _export_files(state: _State, files_dir: Path) -> None:
     deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
                 plan=state.plan, specs=state.specs, scenes=state.scenes)
     pptx_path = files_dir / "deck.pptx"
-    export_pptx(state.specs, state.ds, state.package_dir, pptx_path)
+    # Native tables can have content-fitted heights, so their editor geometry is
+    # applied after export instead of the template-shape proximity matcher.
+    export_specs = [spec.model_copy(deep=True) for spec in state.specs]
+    for spec in export_specs:
+        if spec.table is not None:
+            spec.element_positions.pop(spec.viz_area_id or "viz", None)
+    export_pptx(export_specs, state.ds, state.package_dir, pptx_path)
+    _export_element_overrides(state, pptx_path)
     markup_html = render_deck(deck, state.ds, state.package_dir)
     (files_dir / "deck.markup.html").write_text(markup_html, encoding="utf-8")
     (files_dir / "deck.html").write_text(markup_html, encoding="utf-8")
@@ -171,6 +185,125 @@ def _export_files(state: _State, files_dir: Path) -> None:
                 (slides_dir / f"slide-{index:03d}.png").write_bytes(png)
             html_text = render_deck_images(deck, state.ds, pngs)
             (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
+
+
+def _export_element_overrides(state: _State, pptx_path: Path) -> None:
+    """Complete editor-only properties without changing the generation exporter."""
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+    from pptx.enum.text import PP_ALIGN
+    from pptx.shapes.shapetree import BaseShapeFactory
+
+    from designer.export.pptx_deck import _prune_groups, _set_box, _walk
+    from designer.viz.pptx_native import add_table
+
+    def table_box(shape, box):
+        sw, sh = state.ds.slide_size_emu
+        shape.left, shape.top, shape.width = round(box[0] * sw), round(box[1] * sh), round(box[2] * sw)
+        height = round(box[3] * sh)
+        rows = list(shape.table.rows)
+        for i, row in enumerate(rows):
+            row.height = height // len(rows) + (1 if i < height % len(rows) else 0)
+
+    prs = Presentation(str(pptx_path))
+    for slide, spec, scene in zip(prs.slides, state.specs, state.scenes):
+        tree = slide.shapes._spTree
+        layers = []
+        native_added = [el for el in spec.added_elements if el.type in ("text", "shape")]
+        added_shapes = list(slide.shapes)[-len(native_added):] if native_added else []
+        added_ids = {shape.shape_id for shape in added_shapes}
+        placed = _walk(slide.shapes, state.ds.slide_size_emu)
+        used = set(added_ids)
+
+        def text_style(shape, style):
+            if style is None or not shape.has_text_frame:
+                return
+            for paragraph in shape.text_frame.paragraphs:
+                if style.align is not None:
+                    paragraph.alignment = {"left": PP_ALIGN.LEFT, "center": PP_ALIGN.CENTER,
+                                           "right": PP_ALIGN.RIGHT}[style.align]
+                for run in paragraph.runs:
+                    run.font.italic = style.italic
+
+        for element_id, position in spec.element_positions.items():
+            is_table = spec.table is not None and element_id == (spec.viz_area_id or "viz")
+            if is_table:
+                tables = [shape for shape in slide.shapes if shape.has_table and shape.shape_id not in used]
+                if not tables:
+                    raise ValueError("Edited table was not found in PowerPoint")
+                shape = tables[-1]
+                item = placed[shape.shape_id]
+                if position.deleted:
+                    used.add(shape.shape_id)
+                    tree.remove(shape._element)
+                    continue
+                table_box(shape, position.box)
+            else:
+                if position.deleted or (position.style is None and position.fill is None and position.z is None):
+                    continue
+                candidates = [(sid, item) for sid, item in placed.items()
+                              if sid not in used and item.element.getparent() is not None]
+                candidates.sort(key=lambda pair: (
+                    sum(abs(a - b) for a, b in zip(pair[1].box, position.box)),
+                    pair[0] != position.source_shape_id))
+                if not candidates or sum(abs(a - b) for a, b in zip(candidates[0][1].box, position.box)) > .04:
+                    raise ValueError("Edited element was not found in PowerPoint")
+                sid, item = candidates[0]
+                shape = BaseShapeFactory(item.element, slide.shapes)
+            used.add(shape.shape_id)
+            text_style(shape, position.style)
+            if position.fill is not None:
+                shape.fill.solid()
+                shape.fill.fore_color.rgb = RGBColor.from_string(position.fill)
+            if position.z is not None:
+                # A selected child may cross group boundaries when brought forward.
+                if item.element.getparent() is not tree:
+                    item.element.getparent().remove(item.element)
+                    tree.insert_element_before(item.element, "p:extLst")
+                    item.transform = (1.0, 1.0, 0.0, 0.0)
+                    _set_box(item, position.box, state.ds.slide_size_emu)
+                layers.append((position.z, item.element))
+
+        for element, shape in zip(native_added, added_shapes):
+            text_style(shape, element.style)
+            layers.append((element.z, shape._element))
+        for element in spec.added_elements:
+            if element.type == "table":
+                shape = add_table(slide, element.table, element.box, state.ds.slide_size_emu,
+                                  state.ds.tokens, scene.theme)
+                table_box(shape, element.box)
+                layers.append((element.z, shape._element))
+
+        background = None
+        if spec.background_color is not None:
+            pattern = next((p for p in state.ds.patterns if p.id == spec.pattern_id), None)
+            for item in _walk(slide.shapes, state.ds.slide_size_emu).values():
+                shape = BaseShapeFactory(item.element, slide.shapes)
+                if (pattern and pattern.background_asset and shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+                        and shape.image.sha1.startswith(pattern.background_asset)
+                        and item.box[2] >= .95 and item.box[3] >= .95):
+                    item.element.getparent().remove(item.element)
+            slide.background.fill.solid()
+            slide.background.fill.fore_color.rgb = RGBColor.from_string(spec.background_color)
+            # This also covers inherited master/layout pictures behind slide content.
+            shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, prs.slide_width, prs.slide_height)
+            shape.name = "VoiceDeck background"
+            shape.fill.solid()
+            shape.fill.fore_color.rgb = RGBColor.from_string(spec.background_color)
+            shape.line.fill.background()
+            background = shape._element
+            tree.remove(background)
+            tree.insert(2, background)
+
+        for _, node in sorted((pair for pair in layers if pair[0] < 0), key=lambda pair: pair[0], reverse=True):
+            tree.remove(node)
+            tree.insert(3 if background is not None else 2, node)
+        for _, node in sorted((pair for pair in layers if pair[0] >= 0), key=lambda pair: pair[0]):
+            tree.remove(node)
+            tree.insert_element_before(node, "p:extLst")
+        _prune_groups(slide)
+    prs.save(str(pptx_path))
 
 
 
@@ -295,62 +428,196 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
 
 # ---------- образец слайда ----------
 
+def _element_box(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    x, y, w, h = box
+    if (not all(math.isfinite(value) for value in box) or min(x, y) < 0 or min(w, h) <= 0
+            or x + w > 1 + 1e-9 or y + h > 1 + 1e-9):
+        raise ValueError("Element dimensions must be positive and fit inside the slide")
+    return box
+
+
+def _element_override(spec: SlideSpec, el: Element) -> ElementPosition:
+    return spec.element_positions.setdefault(el.id, ElementPosition(
+        original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
+
+
+def _save_element(scene: Scene, spec: SlideSpec, old: Element, new: Element) -> None:
+    for i, added in enumerate(spec.added_elements):
+        if added.id == old.id:
+            spec.added_elements[i] = new.model_copy(deep=True)
+            break
+    else:
+        if any(getattr(old, field) != getattr(new, field) for field in ("box", "style", "fill", "z")):
+            override = _element_override(spec, old)
+            override.box = new.box
+            if new.style != old.style:
+                override.style = new.style.model_copy(deep=True) if new.style else None
+            if new.fill != old.fill:
+                override.fill = new.fill
+            if new.z != old.z:
+                override.z = new.z
+    scene.elements = [new if item.id == old.id else item for item in scene.elements]
+
+
+def _edited_table(table: TableSpec, request) -> TableSpec:
+    from designer.api.schemas import ElementTableRequest
+
+    result = ElementTableRequest.model_validate(table.model_dump()).model_copy(deep=True)
+    row, column = request.row, request.column
+    if request.action == "table_cell":
+        if row > len(result.rows) or column > len(result.columns):
+            raise ValueError("Table cell is outside the table")
+        cells = result.columns if row == 0 else result.rows[row - 1]
+        cells[column - 1] = request.text
+    elif request.action == "table_row_add":
+        row = row if row is not None else len(result.rows) + 1
+        values = request.values if request.values is not None else [""] * len(result.columns)
+        if row > len(result.rows) + 1 or len(values) != len(result.columns):
+            raise ValueError("Invalid row insertion index or number of cells")
+        result.rows.insert(row - 1, list(values))
+    elif request.action == "table_row_delete":
+        if row > len(result.rows):
+            raise ValueError("Table row is outside the table")
+        del result.rows[row - 1]
+    elif request.action == "table_column_add":
+        column = column if column is not None else len(result.columns) + 1
+        values = request.values if request.values is not None else [""] * len(result.rows)
+        if column > len(result.columns) + 1 or len(values) != len(result.rows):
+            raise ValueError("Invalid column insertion index or number of cells")
+        result.columns.insert(column - 1, request.text)
+        for cells, value in zip(result.rows, values):
+            cells.insert(column - 1, value)
+    elif request.action == "table_column_delete":
+        if column > len(result.columns) or len(result.columns) == 1:
+            raise ValueError("Column must exist and the table must retain at least one column")
+        del result.columns[column - 1]
+        for cells in result.rows:
+            del cells[column - 1]
+    return TableSpec.model_validate(ElementTableRequest.model_validate(result.model_dump()).model_dump())
+
+
 @serialized
 def element_action(deck_id: str, variant: str, number: int, action: str,
-                   element_id: str | None = None, element_type: str = "text",
-                   text: str = "", scale: float = 1, size_pt: float | None = None,
-                   color: str | None = None) -> None:
+                   element_id: str | None = None, **properties) -> None:
+    """Validate a deterministic edit completely before writing history or state."""
+    from designer.api.schemas import ElementActionRequest, ElementTableRequest
+    from designer.viz.palette import contrast_text_color
+
+    target = {"element_id": element_id} if element_id is not None else {}
+    request = ElementActionRequest(action=action, **target, **properties)
+    supplied = request.model_fields_set
     state = _load(deck_id, variant)
     index = _slide_index(state, number)
     scene, spec = state.scenes[index], state.specs[index]
     el = next((e for e in scene.elements if e.id == element_id), None)
-    if action != "add" and el is None:
-        raise ElementNotFound("Сначала выберите объект")
-    if action == "style" and el.type != "text":
-        raise ValueError("Размер шрифта и цвет текста доступны текстовым объектам")
-    if action == "duplicate" and el.type not in ("text", "shape"):
-        raise ValueError("Копирование этого типа объекта пока не поддерживается")
-    _snapshot(state)
+    if action not in ("add", "background") and el is None:
+        raise ElementNotFound("Selected element was not found on this slide")
+    if el is not None and el.source_shape_id is not None and action in ("style", "delete", "z_order"):
+        if any(other.id != el.id and other.source_shape_id == el.source_shape_id
+               and (other.id == el.id + "c" or el.id == other.id + "c") for other in scene.elements):
+            raise ValueError("This number and caption share one native shape; edit a separate text element")
+
     if action in ("add", "duplicate"):
         if action == "duplicate":
+            if el.type not in ("text", "shape", "table") or (el.type == "table" and el.table is None):
+                raise ValueError("Duplicating this element type is not supported")
             new = el.model_copy(deep=True)
-            x,y,w,h = new.box
-            new.box = (min(1-w,x+.02), min(1-h,y+.02),w,h)
+            if new.table is not None:
+                new.table = ElementTableRequest.model_validate(new.table.model_dump())
+            x, y, w, h = _element_box(new.box)
+            new.box = _element_box((min(1 - w, x + .02), min(1 - h, y + .02), w, h))
+            additions = [new]
         else:
-            if element_type not in ("text", "title", "shape"):
-                raise ValueError("Для прямого добавления доступны текст, заголовок и фигура")
-            color_token = next((e.style.color for e in scene.elements if e.type == "text" and e.style and e.style.color),
-                next((c.hex for c in state.ds.tokens.colors if c.role == "text"), "FFFFFF" if scene.theme == "dark" else "222222"))
-            family = next((f.family for f in state.ds.tokens.fonts), None)
-            new = Element(id="new", type="shape" if element_type == "shape" else "text",
-                role="title" if element_type == "title" else "body", box=(.1,.15,.5,.15), text=text,
-                style=TextStyle(size_pt=32 if element_type == "title" else 24, family=family, color=color_token), fill="D9D9D9" if element_type == "shape" else None)
-        new.id = "custom-" + uuid.uuid4().hex
-        new.source_shape_id = None
-        new.z = max((e.z for e in scene.elements), default=0)+1
-        spec.added_elements.append(new.model_copy(deep=True))
-        scene.elements.append(new)
+            kind = request.element_type
+            default_height = .4 if kind == "table" else .3 if kind == "card" else .15
+            box = _element_box((.1, .15, request.width or .5, request.height or default_height))
+            color = next((e.style.color for e in scene.elements if e.type == "text" and e.style and e.style.color),
+                         next((c.hex for c in state.ds.tokens.colors if c.role == "text"),
+                              "FFFFFF" if scene.theme == "dark" else "222222"))
+            style = TextStyle(size_pt=32 if kind == "title" else 24,
+                              family=next((f.family for f in state.ds.tokens.fonts), None), color=color)
+            if kind == "table":
+                table = request.table or TableSpec(columns=["Column 1", "Column 2"], rows=[["", ""], ["", ""]])
+                additions = [Element(id="new", type="table", role="viz", box=box, table=table)]
+            elif kind in ("shape", "card"):
+                additions = [Element(id="new", type="shape", role="card" if kind == "card" else "other",
+                                     box=box, fill=(request.fill or "D9D9D9").upper())]
+                if kind == "card":
+                    x, y, w, h = box
+                    padding = min(w, h) * .08
+                    additions.append(Element(id="new", type="text", role="body", text=request.text,
+                                             box=(x + padding, y + padding, w - 2 * padding, h - 2 * padding),
+                                             style=style.model_copy(update={
+                                                 "color": contrast_text_color(additions[0].fill)})))
+            else:
+                additions = [Element(id="new", type="text", role="title" if kind == "title" else "body",
+                                     box=box, text=request.text, style=style)]
+        z = max((e.z for e in scene.elements), default=0)
+        for offset, new in enumerate(additions, start=1):
+            new.id = "custom-" + uuid.uuid4().hex
+            new.source_shape_id = None
+            new.z = z + offset
+            spec.added_elements.append(new.model_copy(deep=True))
+            scene.elements.append(new)
     elif action == "delete":
         if any(e.id == el.id for e in spec.added_elements):
             spec.added_elements = [e for e in spec.added_elements if e.id != el.id]
         else:
-            override = spec.element_positions.setdefault(el.id, ElementPosition(original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
-            override.deleted = True
+            _element_override(spec, el).deleted = True
         scene.elements = [e for e in scene.elements if e.id != el.id]
     elif action == "style":
-        style = (el.style or TextStyle(size_pt=24)).model_copy(deep=True)
-        style.size_pt = max(6,min(144,size_pt if size_pt is not None else (style.size_pt or 24)*scale))
-        if color is not None: style.color = color
-        el.style = style
-        added = next((e for e in spec.added_elements if e.id == el.id), None)
-        if added is not None:
-            added.style = style.model_copy(deep=True)
-        else:
-            override = spec.element_positions.setdefault(el.id, ElementPosition(original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
-            override.style = style
-    else:
-        raise ValueError("Неизвестная операция")
-    _persist(state, _checks(state, {spec.slide_id}))
+        text_fields = supplied & {"size_pt", "scale", "color", "bold", "italic", "text_align"}
+        if text_fields and el.type != "text":
+            raise ValueError("Font properties are supported only for text elements")
+        if request.fill is not None and el.type != "shape":
+            raise ValueError("fill is supported only for shape elements")
+        new = el.model_copy(deep=True)
+        if request.width is not None or request.height is not None:
+            x, y, w, h = new.box
+            new.box = _element_box((x, y, request.width or w, request.height or h))
+        if text_fields:
+            style = (el.style or TextStyle()).model_copy(deep=True)
+            if "size_pt" in supplied or "scale" in supplied:
+                size = request.size_pt if request.size_pt is not None else (style.size_pt or 24) * request.scale
+                if not math.isfinite(size) or not 6 <= size <= 144:
+                    raise ValueError("Resulting font size must be between 6 and 144 pt")
+                style.size_pt = size
+            for field in ("bold", "italic"):
+                if field in supplied:
+                    setattr(style, field, getattr(request, field))
+            if request.color is not None:
+                style.color = request.color.upper()
+            if request.text_align is not None:
+                style.align = request.text_align
+            new.style = style
+        if request.fill is not None:
+            new.fill = request.fill.upper()
+        _save_element(scene, spec, el, new)
+    elif action == "background":
+        spec.background_color = request.color.upper()
+        scene.background_color = spec.background_color
+        scene.background_asset = None
+    elif action == "z_order":
+        new = el.model_copy(deep=True)
+        levels = [0, *(item.z for item in scene.elements)]
+        new.z = max(levels) + 1 if request.order == "front" else min(levels) - 1
+        _save_element(scene, spec, el, new)
+    elif action.startswith("table_"):
+        if el.type != "table" or el.table is None:
+            raise ValueError("Select an editable table")
+        added = any(item.id == el.id for item in spec.added_elements)
+        if not added and (spec.table is None or el.id != (spec.viz_area_id or "viz")):
+            raise ValueError("This template table is not editable")
+        new = el.model_copy(deep=True)
+        new.table = _edited_table(el.table, request)
+        if not added:
+            spec.table = new.table.model_copy(deep=True)
+            state.plan.slides[index].table = new.table.model_copy(deep=True)
+        _save_element(scene, spec, el, new)
+
+    findings = _checks(state, {spec.slide_id})
+    _snapshot(state)
+    _persist(state, findings)
 
 
 @serialized
