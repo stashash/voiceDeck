@@ -279,6 +279,15 @@ def test_audit_finds_no_out_of_bounds_and_no_overlap_inside_groups(decks):
         assert not overlaps, f"{name}: {[f.message for f in overlaps[:3]]}"
 
 
+def test_left_text_does_not_run_to_the_slide_edge(decks):
+    # VK Education, крупное число: рамка подписи в образце шире слайда, строка уходила за край.
+    for name, ds, deck in decks:
+        for scene in _scenes(deck):
+            for el in scene.elements:
+                if el.type == "text" and el.style.align in (None, "left"):
+                    assert el.box[0] + el.box[2] < 1.0 - 1e-6, f"{name}, слайд {scene.slide_id}: {el.text[:30]}"
+
+
 # ---------- качество вёрстки на выданных шаблонах ----------
 
 def test_no_slide_stands_on_a_pattern_that_holds_on_photos(decks):

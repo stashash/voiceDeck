@@ -20,7 +20,7 @@ from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpe
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
 from designer.layout.capacity import number_caption, split_number, unit_boxes
-from designer.layout.units import keeps_aspect, map_shape_box, place_units
+from designer.layout.units import keeps_aspect, map_shape_box, place_units, text_frame
 from designer.parse.package import SOURCE_NAME
 from designer.viz.pptx_native import add_chart, add_table
 
@@ -126,6 +126,13 @@ def _set_box(item: _Placed, box: Box, slide_size: tuple[int, int]) -> None:
     item.box = box
 
 
+def _keep_in_margins(item: _Placed, ds: DesignSystem, align: str | None) -> None:
+    """Рамка текста, которая в образце шире слайда, сужается до правого поля, как в сцене."""
+    framed = text_frame(item.box, ds.tokens.margins, align)
+    if framed != item.box:
+        _set_box(item, framed, ds.slide_size_emu)
+
+
 def _drop(item: _Placed | None) -> None:
     if item is None or item.dropped:
         return
@@ -142,7 +149,8 @@ def _live(placed: dict[int, _Placed], shape_id: int) -> _Placed | None:
 
 # ---------- заполнение слайда ----------
 
-def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern, slide_size: tuple[int, int]) -> None:
+def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
+    slide_size = ds.slide_size_emu
     slots = {slot.id: slot for slot in pattern.slots}
     for slot_id, text in spec.slot_text.items():
         slot = slots.get(slot_id)
@@ -153,6 +161,7 @@ def _fill_slots(placed: dict[int, _Placed], spec: SlideSpec, pattern: Pattern, s
             if abs(item.box[2] - slot.box[2]) > 0.005 or abs(item.box[3] - slot.box[3]) > 0.005:
                 # Разбор сузил слот до картинки макета или укоротил до плашки: текст туда не заходит.
                 _set_box(item, slot.box, slide_size)
+            _keep_in_margins(item, ds, slot.style.align)
             # Число с подписью в одной фигуре: подписи нужен перенос, каждой строке своё оформление.
             captioned = number_caption(slot) and bool(split_number(text)[1])
             set_text(item.element, text, spec.fitted_size_pt.get(slot_id),
@@ -285,10 +294,12 @@ def _fill_repeat_group(
                 boxes[kept - 1], boxes[i], ds.slide_size_emu, issue,
             )
         )
+    aligns = {slot.id: slot.style.align for slot in group.unit_slots}
     for unit_text, unit_map in zip(unit_texts, maps):
         for slot_id, text in unit_text.items():
             item = _live(placed, unit_map.get(slot_id, -1))
             if item is not None:
+                _keep_in_margins(item, ds, aligns.get(slot_id))
                 set_text(item.element, text, fitted_size_pt.get(slot_id))
 
 
@@ -465,7 +476,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     issue = _next_id(slide)
     _relayout_if_bare(slide, spec, pattern, ds)
     _remove_shapes(placed, spec.remove_shape_ids)
-    _fill_slots(placed, spec, pattern, ds.slide_size_emu)
+    _fill_slots(placed, spec, pattern, ds)
     _fill_group(placed, spec, pattern, ds, issue)
     _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
