@@ -10,6 +10,25 @@ from designer.llm.client import LlmClient, LlmResponseError
 SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
 
 
+def test_native_ollama_shares_context_and_preserves_schema_images(monkeypatch):
+    monkeypatch.setenv('DESIGNER_LLM_PROTOCOL', 'ollama')
+    monkeypatch.setenv('DESIGNER_LLM_NUM_CTX', '8192')
+    def handler(request):
+        assert request.url.path == '/api/chat'
+        body = json.loads(request.content)
+        assert body['format'] == SCHEMA
+        assert body['think'] is False
+        assert body['options'] == {'num_ctx': 8192, 'temperature': .4, 'num_predict': 8000}
+        assert body['messages'][1] == {'role': 'user', 'content': 'brief', 'images': ['cG5n']}
+        return httpx.Response(200, json={'message': {'content': '{"ok":true}'}})
+    with_client = LlmClient('http://test/v1', 'model', transport=httpx.MockTransport(handler))
+    try:
+        assert with_client.complete_json('system', 'brief', SCHEMA, [b'png'],
+                                         params={'temperature': .4, 'max_tokens': 8000}) == {'ok': True}
+    finally:
+        with_client.close()
+
+
 def _ok_response(content: str) -> httpx.Response:
     return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 

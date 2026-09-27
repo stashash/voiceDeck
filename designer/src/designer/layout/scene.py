@@ -346,6 +346,16 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
             table=spec.table,
         ))
 
+    for element in elements:
+        if element.id in spec.element_positions:
+            override = spec.element_positions[element.id]
+            element.box = override.box
+            if override.text is not None:
+                element.text = override.text
+            if override.style is not None:
+                element.style = override.style
+    elements = [el for el in elements if not (el.id in spec.element_positions and spec.element_positions[el.id].deleted)]
+    elements.extend(el.model_copy(deep=True) for el in spec.added_elements)
     elements.sort(key=lambda el: el.z)
     return Scene(
         slide_id=spec.slide_id,

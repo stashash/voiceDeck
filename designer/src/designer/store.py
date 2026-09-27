@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -58,19 +59,24 @@ def seed_demo() -> list[str]:
     raw = os.environ.get(DEMO_DIR_ENV, "")
     source = Path(raw) if raw else None
     mark = data_dir() / _DEMO_MARK
-    if source is None or not source.is_dir() or mark.is_file():
+    if source is None or not source.is_dir() or (mark.is_file() and mark.read_text(encoding="utf-8").strip()):
         return []
     copied: list[str] = []
+    discovered: list[str] = []
     for kind, target_root in (("design-systems", design_systems_root()), ("decks", decks_root())):
         source_root = source / kind
         if not source_root.is_dir():
             continue
         for item in sorted(source_root.iterdir()):
-            if not item.is_dir() or not _ID_RE.match(item.name) or (target_root / item.name).exists():
+            if not item.is_dir() or not _ID_RE.match(item.name):
+                continue
+            discovered.append(f"{kind}/{item.name}")
+            if (target_root / item.name).exists():
                 continue
             shutil.copytree(item, target_root / item.name)
             copied.append(f"{kind}/{item.name}")
-    mark.write_text("\n".join(copied) + "\n", encoding="utf-8")
+    if discovered:
+        write_text_atomic(mark, "\n".join(discovered) + "\n")
     return copied
 
 
@@ -280,6 +286,20 @@ def mark_deck_failed(deck_id: str, message: str, variant: str = _DEFAULT_VARIANT
     _write_json(deck_variant_state_path(deck_id, variant), state)
 
 
+def recover_interrupted_decks() -> list[str]:
+    """Called before this single-process server accepts new generation requests."""
+    recovered: list[str] = []
+    for deck_id in list_deck_ids():
+        for variant in deck_variants(deck_id):
+            state = load_deck_state(deck_id, variant)
+            if state and state.get("status") == "running":
+                message = "Генерация прервана перезапуском сервиса. Повторите создание презентации."
+                mark_deck_failed(deck_id, message, variant)
+                append_event(deck_id, {"step": "error", "variant": variant, "error": message})
+                recovered.append(f"{deck_id}/{variant}")
+    return recovered
+
+
 def request_deck_cancel(deck_id: str) -> None:
     """Автор нажал «Остановить»: конвейер проверяет флаг между шагами."""
     path = decks_root() / _check_id(deck_id)
@@ -362,7 +382,16 @@ def write_text_atomic(path: Path, text: str) -> None:
     try:
         with handle:
             handle.write(text)
-        os.replace(handle.name, path)
+        deadline = time.monotonic() + .25
+        while True:
+            try:
+                os.replace(handle.name, path)
+                break
+            except PermissionError as error:
+                # Windows readers can briefly hold a destination without FILE_SHARE_DELETE.
+                if getattr(error, 'winerror', None) not in (5, 32) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.005)
     except BaseException:
         Path(handle.name).unlink(missing_ok=True)
         raise

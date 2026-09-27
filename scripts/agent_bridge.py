@@ -116,19 +116,21 @@ def _codex_argv(exe: str, system: str, user: str, model: str | None,
                  image_paths: list[Path], workdir: Path) -> tuple[list[str], Path | None]:
     # Codex CLI на машине разработки не установлен (нет в PATH), поэтому команда взята не из
     # локального --help, а из официальной документации: https://learn.chatgpt.com/docs/developer-commands?surface=cli
-    # (открыта 2026-09-24). `codex exec PROMPT` — неинтерактивный запуск; --image/-i PATH[,PATH]
-    # — картинки первым сообщением (через запятую); --output-last-message/-o PATH — записать
-    # финальный ответ в файл (используем вместо разбора stdout); --sandbox read-only и
-    # --ask-for-approval never — только чтение и без вопросов; --skip-git-repo-check — запуск во
-    # временном каталоге вне репозитория. Отдельного флага системной подсказки документация не называет,
-    # соединяем текст сами.
+    # `codex exec PROMPT` — неинтерактивный запуск; --image/-i PATH — картинки первым
+    # сообщением; --output-last-message/-o PATH — записать финальный ответ в файл
+    # (используем вместо разбора stdout); --sandbox read-only — только чтение.
+    # Установленный codex-cli 0.155.0-alpha.16.4 больше не принимает старый флаг
+    # --ask-for-approval, поэтому режим без интерактивных разрешений задаём песочницей.
+    # --skip-git-repo-check и --cd нужны для запуска во временном каталоге вне репозитория.
+    # Отдельного флага системной подсказки CLI не называет, соединяем текст сами.
     prompt = f"{system}\n\n{user}" if system else user
     out_file = workdir / "codex-output.txt"
-    argv = [exe, "exec", "--sandbox", "read-only", "--ask-for-approval", "never", "--skip-git-repo-check", "--output-last-message", str(out_file)]
+    argv = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check", "--cd", str(workdir),
+            "--output-last-message", str(out_file)]
     if model:
         argv += ["--model", model]
-    if image_paths:
-        argv += ["--image", ",".join(str(path) for path in image_paths)]
+    for path in image_paths:
+        argv += ["--image", str(path)]
     argv.append(prompt)
     return argv, out_file
 

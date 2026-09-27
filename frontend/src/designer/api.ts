@@ -1,4 +1,5 @@
-// Клиент сервиса designer. Пути и схемы сверены с api/app.py и api/schemas.py, contracts.py.
+import {request as fetch} from './request';
+// Клиент сервиса designer. Пути и схеммы сверены с api/app.py и api/schemas.py, contracts.py.
 // import.meta.env типизирован через vite/client, которого в проекте нет: берём мягкой приведением типа.
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
 // Пустая строка — осознанный выбор (адрес того же источника, что и приложение; см. vite.config.ts proxy
@@ -15,9 +16,9 @@ export type TypeStep = { size_pt: number; role: string; share: number };
 export type Margins = { left: number; top: number; right: number; bottom: number };
 export type Tokens = { colors: ColorToken[]; fonts: FontToken[]; type_scale: TypeStep[]; margins: Margins };
 export type Asset = { id: string; path: string; kind: string; width_px: number; height_px: number; used_on: number[] };
-export type PatternSlot = { id: string; role: string; box: Box };
+export type PatternSlot = { id: string; role: string; box: Box; style?: {family?:string;size_pt?:number;bold?:boolean;color?:string} };
 export type PatternUnit = { index: number; box: Box };
-export type PatternGroup = { min_units: number; max_units: number; unit_slots: { role: string }[]; units: PatternUnit[] };
+export type PatternGroup = { id?:string; linked_group_ids?:string[]; min_units: number; max_units: number; unit_slots: { role: string }[]; units: PatternUnit[] };
 export type Pattern = {
   id: string; source_slide?: number; kind: string; kind_confidence: number; theme: 'light' | 'dark';
   purpose: string; needs_images: boolean; background_asset?: string | null; preview?: string | null;
@@ -213,6 +214,11 @@ export function listDecks(): Promise<DeckListItem[]> {
   return fetch(url('/decks')).then(r => asJson<{ items: DeckListItem[] }>(r)).then(r => r.items ?? []);
 }
 
+export function libraryAction(id:string,action:'delete'|'restore'|'copy'):Promise<{deck_id?:string}>{
+ return fetch(url(`/library/${encodeURIComponent(id)}/${action}`),{method:'POST'}).then(r=>asJson<{deck_id?:string}>(r));
+}
+export function listTrash():Promise<DeckListItem[]>{return fetch(url('/library/trash')).then(r=>asJson<{items:DeckListItem[]}>(r)).then(r=>r.items);}
+
 // ---------- правка варианта ----------
 export function patchSlideText(deckId: string, variant: string, n: number, elementId: string, text: string): Promise<DeckVariantState> {
   return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/text`), {
@@ -237,6 +243,14 @@ export function askSlide(deckId: string, variant: string, n: number, instruction
   return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/ask`), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
   }).then(r => asJson<DeckVariantState>(r));
+}
+
+export function moveDeckElement(deckId:string,variant:string,n:number,elementId:string,dx:number,dy:number,align?:string):Promise<DeckVariantState>{
+  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/position`),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({element_id:elementId,dx,dy,align})}).then(r=>uploadResponse<DeckVariantState>(r));
+}
+
+export function deckElementAction(deckId:string,variant:string,n:number,payload:{action:'add'|'delete'|'duplicate'|'style';element_id?:string;element_type?:'text'|'title'|'shape';text?:string;scale?:number;size_pt?:number;color?:string}):Promise<DeckVariantState>{
+  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/elements`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>asJson<DeckVariantState>(r));
 }
 
 export type SlidesAction = { action: 'add' | 'copy' | 'delete' | 'move'; index: number; to?: number };
@@ -264,6 +278,10 @@ export function renameDeck(deckId: string, title: string): Promise<{ title: stri
 
 export function revertVariant(deckId: string, variant: string): Promise<DeckVariantState> {
   return fetch(url(`/decks/${deckId}/${variant}/revert`), { method: 'POST' }).then(r => asJson<DeckVariantState>(r));
+}
+
+export function recoverEditor(deckId:string,variant:string):Promise<DeckVariantState>{
+  return fetch(url(`/decks/${deckId}/${variant}/recover`),{method:'POST'}).then(r=>asJson<DeckVariantState>(r));
 }
 
 // ---------- агенты ----------

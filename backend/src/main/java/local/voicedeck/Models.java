@@ -5,12 +5,14 @@ import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer;
 import io.vertx.core.json.JsonObject;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.lang.reflect.*;
 
 /** Local-only models. Native sherpa jars are supplied alongside the application. */
 public final class Models implements AutoCloseable {
     private final JsonObject config;
     private final Object partial, finals;
+    private final BoundedInference asr = new BoundedInference();
     private final OrtEnvironment ort;
     private final OrtSession frida;
     private final HuggingFaceTokenizer tokenizer;
@@ -47,7 +49,7 @@ public final class Models implements AutoCloseable {
         }
         // Fail readiness on missing/incompatible files, including VAD, before accepting a microphone.
         Object vad=newVad();call(vad,"acceptWaveform",new float[512]);call(vad,"release");
-        for(int i=0;i<2;i++){decode(new float[16000],false);decode(new float[16000],true);}
+        for(int i=0;i<2;i++){asr.call(() -> decodeNative(new float[16000],false),30000);asr.call(() -> decodeNative(new float[16000],true),30000);}
         // Эмбеддинги по HTTP живут на хосте (LM Studio): без них сервис стартует, смысловые границы идут
         // по паузам и дедлайну, пока сервер не ответит. Локальные ONNX-файлы проверяются строго.
         if("ollama".equals(embeddingBackend)){
@@ -91,7 +93,12 @@ public final class Models implements AutoCloseable {
         Object vc=build("VadModelConfig",Map.of("SileroVadModelConfig",sc,"SampleRate",16000,"NumThreads",1,"Provider","cpu","Debug",false));
         return Class.forName("com.k2fsa.sherpa.onnx.Vad").getConstructor(vc.getClass()).newInstance(vc);
     }
-    public synchronized String decode(float[] samples,boolean fin) throws Exception {
+    public String decode(float[] samples,boolean fin) throws Exception {
+        long started=System.nanoTime();
+        try{return asr.call(() -> decodeNative(samples, fin), fin ? 5000 : 1500);}
+        finally{Metrics.observe(fin?"asr_final":"asr_partial",TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started));}
+    }
+    private String decodeNative(float[] samples,boolean fin) throws Exception {
         Object recognizer=fin?finals:partial, stream=call(recognizer,"createStream");
         try{call(stream,"acceptWaveform",samples,16000);call(recognizer,"decode",stream);return (String)call(call(recognizer,"getResult",stream),"getText");}
         finally{call(stream,"release");}
@@ -169,7 +176,9 @@ public final class Models implements AutoCloseable {
     // Вместе с вопросом о границе мысли это 3 запроса из 4 слотов LM Studio (start-models.ps1 --parallel 4).
     public int liveSlideParallel(){return Math.max(1,config.getInteger("liveSlideParallel",2));}
     public void close() throws Exception {
-        if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");
+        asr.close();
+        // Never free a recognizer underneath a native call that ignored interruption.
+        if(asr.idle()) {if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");}
         if(frida!=null)frida.close();if(tokenizer!=null)tokenizer.close();
         if(embeddingHttp!=null)embeddingHttp.close();
     }

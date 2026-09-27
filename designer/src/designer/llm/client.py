@@ -46,6 +46,8 @@ class LlmClient:
         self.model = model
         self.timeout_s = timeout_s
         self.load_wait_s = load_wait_s
+        configured_url = os.environ.get("DESIGNER_LLM_URL", self.base_url).rstrip("/")
+        self.native_ollama = os.environ.get("DESIGNER_LLM_PROTOCOL") == "ollama" and configured_url == self.base_url
         self._client = httpx.Client(timeout=timeout_s, transport=transport, headers=auth_headers())
         self.call_durations_ms: list[int] = []
 
@@ -126,7 +128,11 @@ class LlmClient:
         deadline = started + self.load_wait_s
         while True:
             try:
-                response = self._client.post(f"{self.base_url}/chat/completions", json=payload)
+                if self.native_ollama:
+                    response = self._client.post(
+                        f"{self.base_url.removesuffix('/v1')}/api/chat", json=self._ollama_payload(payload))
+                else:
+                    response = self._client.post(f"{self.base_url}/chat/completions", json=payload)
             except httpx.ConnectError as error:
                 if time.monotonic() >= deadline:
                     raise ModelLoading(f"сервер модели {self.base_url} не отвечает") from error
@@ -146,7 +152,27 @@ class LlmClient:
         response.raise_for_status()
         self.call_durations_ms.append(int((time.monotonic() - started) * 1000))
         body = response.json()
+        if self.native_ollama:
+            return body["message"]["content"]
         return body["choices"][0]["message"]["content"]
+
+    @staticmethod
+    def _ollama_payload(payload: dict) -> dict:
+        messages = []
+        for source in payload["messages"]:
+            message = dict(source)
+            if isinstance(source["content"], list):
+                message["content"] = "\n".join(p["text"] for p in source["content"] if p["type"] == "text")
+                message["images"] = [p["image_url"]["url"].split(",", 1)[1]
+                                     for p in source["content"] if p["type"] == "image_url"]
+            messages.append(message)
+        options = {"num_ctx": int(os.environ.get("DESIGNER_LLM_NUM_CTX", "8192"))}
+        for source, target in (("temperature", "temperature"), ("max_tokens", "num_predict"), ("top_p", "top_p")):
+            if source in payload:
+                options[target] = payload[source]
+        return {"model": payload["model"], "messages": messages, "stream": False, "think": False,
+                "format": payload["response_format"]["json_schema"]["schema"],
+                "options": options, "keep_alive": "30m"}
 
 
 def _strip_think(text: str) -> str:

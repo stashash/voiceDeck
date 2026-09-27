@@ -1,7 +1,7 @@
 import React from 'react';
 import { Settings } from 'lucide-react';
 
-const TABS: [string, string][] = [['', 'Презентации'], ['design-systems', 'Дизайн-системы'], ['live', 'Live-режим']];
+const TABS: [string, string][] = [['', 'Презентации'], ['design-systems', 'Дизайн-системы'], ['live', 'Live-режим'], ['voice-editor', 'Голосовой редактор']];
 
 /** Верхняя шапка разделов, общая для всех экранов кроме окна зала. Холст: Home.dc.html. */
 export default function Nav({ route }: { route: string }) {
@@ -15,3 +15,4 @@ export default function Nav({ route }: { route: string }) {
     </a>
   </nav>;
 }
+

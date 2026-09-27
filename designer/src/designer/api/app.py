@@ -12,7 +12,8 @@ from contextlib import contextmanager
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
+from designer.edit_runtime import ensure_export
 
 from designer import edit, pipeline, store
 from designer.agent_hook import AgentCheckUnavailable, _client_for
@@ -47,6 +48,8 @@ from designer.api.schemas import (
     SlidePatternRequest,
     SlidePatternsResponse,
     SlideTextRequest,
+    SlideMoveElementRequest,
+    ElementActionRequest,
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
@@ -58,7 +61,14 @@ from designer.plan.writer import speech_boundary
 _ORIGINS_ENV = "DESIGNER_ALLOWED_ORIGINS"
 _HEALTH_SKILLS = ("plan-deck", "fill-slots", "speech-to-slide", "speech-boundary", "audit-slide", "audit-deck")
 
+from designer.api.editor import router as editor_router
+
 app = FastAPI(title="Цифровой дизайнер презентаций")
+app.include_router(editor_router)
+from designer.api.editor_documents import router as editor_documents_router
+app.include_router(editor_documents_router)
+from designer.api.library import router as library_router
+app.include_router(library_router)
 
 _origins = [origin.strip() for origin in os.environ.get(_ORIGINS_ENV, "").split(",") if origin.strip()]
 # Приложение открывают и по localhost, и по 127.0.0.1: второй адрес пускается так же, как в Java-сервисе,
@@ -117,6 +127,7 @@ def _not_found(ds_id_error: bool = False):
 def _upgrade_legacy_design_systems() -> None:
     # Готовые данные из репозитория кладутся до приёма запросов: список систем не видит их наполовину.
     store.seed_demo()
+    store.recover_interrupted_decks()
     # Превью старых пакетов строятся движком конвертации: в фоне, чтобы сервис поднялся сразу.
     import threading
     threading.Thread(target=pipeline.upgrade_legacy_packages, daemon=True).start()
@@ -220,7 +231,7 @@ def get_design_system_asset(ds_id: str, name: str) -> FileResponse:
 
 @app.get("/decks", response_model=DeckListResponse)
 def list_decks() -> DeckListResponse:
-    return DeckListResponse(items=pipeline.list_decks())
+    return DeckListResponse(items=[d for d in pipeline.list_decks() if not (store.deck_dir(d['id']) / '.deleted').exists()])
 
 
 @app.post("/decks", response_model=DeckCreateResponse)
@@ -305,6 +316,7 @@ def get_deck_file(deck_id: str, name: str) -> FileResponse:
     path = store.deck_file_path(deck_id, name)
     if path is None:
         raise HTTPException(400, "недопустимое имя файла")
+    ensure_export(deck_id, "a")
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
     return FileResponse(str(path))
@@ -318,9 +330,21 @@ def get_deck_variant_file(deck_id: str, variant: str, name: str) -> FileResponse
         raise HTTPException(400, "недопустимое имя файла")
     if path is None:
         raise HTTPException(400, "недопустимое имя файла")
+    try:
+        ensure_export(deck_id, variant)
+    except Exception as exc:
+        raise HTTPException(503, "Не удалось подготовить актуальный экспорт. Повторите скачивание.") from exc
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
     return FileResponse(str(path))
+
+
+@app.get("/decks/{deck_id}/{variant}/slides/{number}/live", response_class=HTMLResponse)
+def get_live_slide(deck_id: str, variant: str, number: int):
+    try:
+        return HTMLResponse(edit.live_slide(deck_id, variant, number), headers={"Cache-Control": "no-store"})
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.get("/decks/{deck_id}/{variant}/slides/{number}.png")
@@ -379,6 +403,24 @@ def patch_slide_text(deck_id: str, variant: str, number: int, payload: SlideText
     try:
         edit.set_slide_text(deck_id, variant, number, payload.element_id, payload.text)
     except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.patch("/decks/{deck_id}/{variant}/slides/{number}/position", response_model=DeckVariantState)
+def patch_element_position(deck_id: str, variant: str, number: int, payload: SlideMoveElementRequest) -> DeckVariantState:
+    try:
+        edit.move_element(deck_id, variant, number, payload.element_id, payload.dx, payload.dy, payload.align)
+    except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/slides/{number}/elements", response_model=DeckVariantState)
+def post_element_action(deck_id: str, variant: str, number: int, payload: ElementActionRequest):
+    try:
+        edit.element_action(deck_id, variant, number, **payload.model_dump())
+    except (*_EDIT_NOT_FOUND, ValueError) as exc:
         raise _edit_error(exc)
     return _variant_state(deck_id, variant)
 
@@ -454,6 +496,15 @@ def post_revert(deck_id: str, variant: str) -> DeckVariantState:
     try:
         edit.revert(deck_id, variant)
     except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
+        raise _edit_error(exc)
+    return _variant_state(deck_id, variant)
+
+
+@app.post("/decks/{deck_id}/{variant}/recover", response_model=DeckVariantState)
+def recover_voice_editor(deck_id: str, variant: str):
+    try:
+        edit.recover_editor(deck_id, variant)
+    except (*_EDIT_NOT_FOUND, ValueError) as exc:
         raise _edit_error(exc)
     return _variant_state(deck_id, variant)
 

@@ -26,6 +26,10 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("designer.pipeline.convert.available", lambda: [])
     with TestClient(app) as test_client:
         yield test_client
+    # Workers must finish before the temporary store and monkeypatches go away.
+    from designer.edit_runtime import _jobs
+    for _, future in list(_jobs.values()):
+        future.result()
     app.dependency_overrides.clear()
 
 
@@ -443,6 +447,53 @@ def test_patch_slide_text_updates_scene_and_pptx(client, templates):
     assert updated["text"] == "Новый текст слайда"
     # история правки сохранена, откат возможен
     assert client.post(f"/decks/{deck_id}/a/revert").status_code == 200
+
+
+def test_live_commands_and_export_use_the_same_document(client, tmp_path):
+    from pptx import Presentation
+    from pptx.util import Inches
+    from io import BytesIO
+    template = tmp_path / 'editable.pptx'
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    slide.shapes.add_textbox(Inches(1), Inches(.5), Inches(8), Inches(1)).text = 'Заголовок'
+    slide.shapes.add_textbox(Inches(1), Inches(2), Inches(8), Inches(3)).text = 'Основной текст'
+    presentation.save(template)
+    deck_id = _create_deck_with_variants(client, [template], ['a'])
+    base = f'/decks/{deck_id}/a/slides/1'
+    existing = _first_text_element(client.get(f'/decks/{deck_id}').json()['scenes'][0])
+    assert client.patch(base+'/position',json={'element_id':existing['id'],'dx':.01}).status_code == 200
+    assert client.post(base+'/elements',json={'action':'style','element_id':existing['id'],'size_pt':28}).status_code == 200
+    assert client.get(f'/decks/{deck_id}/a/files/deck.pptx').status_code == 200
+    assert client.post(base+'/elements',json={'action':'delete','element_id':existing['id']}).status_code == 200
+    assert client.get(f'/decks/{deck_id}/a/files/deck.pptx').status_code == 200
+    assert client.post(f'/decks/{deck_id}/a/revert').status_code == 200
+    added = client.post(base+'/elements', json={'action':'add','element_type':'text','text':'Новый объект'})
+    assert added.status_code == 200, added.text
+    element = added.json()['scenes'][0]['elements'][-1]
+    eid = element['id']
+    assert client.patch(base+'/text',json={'element_id':eid,'text':'Точное содержание'}).status_code == 200
+    moved = client.patch(base+'/position',json={'element_id':eid,'dx':.05,'dy':.02})
+    assert moved.status_code == 200, moved.text
+    changed = next(e for e in moved.json()['scenes'][0]['elements'] if e['id']==eid)
+    assert changed['box'][0] == pytest.approx(element['box'][0]+.05)
+    styled = client.post(base+'/elements',json={'action':'style','element_id':eid,'size_pt':36})
+    assert styled.status_code == 200, styled.text
+    preview = client.get(base+'/live')
+    assert preview.status_code == 200
+    assert 'Точное содержание' in preview.text
+    download = client.get(f'/decks/{deck_id}/a/files/deck.pptx')
+    assert download.status_code == 200, download.text if download.status_code != 200 else ''
+    result = Presentation(BytesIO(download.content))
+    exported = next(s for s in result.slides[0].shapes if s.has_text_frame and s.text=='Точное содержание')
+    assert exported.left / result.slide_width == pytest.approx(.15, abs=1e-5)
+    assert exported.text_frame.paragraphs[0].runs[0].font.size.pt == 36
+    deleted = client.post(base+'/elements',json={'action':'delete','element_id':eid})
+    assert deleted.status_code == 200
+    assert eid not in [e['id'] for e in deleted.json()['scenes'][0]['elements']]
+    restored = client.post(f'/decks/{deck_id}/a/revert')
+    assert restored.status_code == 200
+    assert eid in [e['id'] for e in restored.json()['scenes'][0]['elements']]
 
 
 def test_patch_slide_text_unknown_element_is_404(client, templates):

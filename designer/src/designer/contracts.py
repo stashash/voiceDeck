@@ -265,12 +265,23 @@ class DeckPlan(BaseModel):
 
 # ---------- Вёрстка ----------
 
+class ElementPosition(BaseModel):
+    original_box: Box
+    box: Box
+    source_shape_id: int | None = None
+    deleted: bool = False
+    text: str | None = None
+    style: TextStyle | None = None
+
+
 class SlideSpec(BaseModel):
     """Инструкция сборки слайда на паттерне: какой образец клонировать и чем заполнить."""
     slide_id: str
     pattern_id: str
     variant: str = "a"
     slot_text: dict[str, str] = Field(default_factory=dict, description="id слота паттерна -> текст")
+    element_positions: dict[str, ElementPosition] = Field(default_factory=dict)
+    added_elements: list[Element] = Field(default_factory=list)
     group_id: str | None = None
     unit_text: list[dict[str, str]] = Field(default_factory=list, description="по блоку: id слота блока -> текст")
     linked_unit_text: dict[str, list[dict[str, str]]] = Field(default_factory=dict, description="id связанной группы -> тексты её блоков; число блоков то же, что в unit_text")
@@ -299,6 +310,10 @@ class Element(BaseModel):
     source_shape_id: int | None = None
     chart: ChartSpec | None = None
     table: TableSpec | None = None
+
+
+# Resolve Element before request threads can trigger concurrent lazy rebuilds.
+SlideSpec.model_rebuild()
 
 
 class Scene(BaseModel):

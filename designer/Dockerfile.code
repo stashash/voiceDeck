@@ -1,0 +1,7 @@
+# Code-only update; use the full Dockerfile when dependencies change.
+FROM voicedeck-designer:code-base
+USER root
+COPY src/designer /usr/local/lib/python3.12/site-packages/designer
+COPY src /app/src
+COPY skills /app/skills
+USER designer

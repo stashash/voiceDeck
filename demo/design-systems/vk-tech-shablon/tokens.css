@@ -1,0 +1,27 @@
+:root {
+  --color-text: #000000;
+  --color-text_muted: #8F8F8F;
+  --color-accent: #0077FF;
+  --color-text-muted-1: #798492;
+  --color-accent_alt: #00D3E6;
+  --color-surface: #FFFFFF;
+  --color-text-muted-2: #151515;
+  --color-text-muted-3: #FF6C6C;
+  --color-text-muted-4: #19191A;
+  --color-background: #FAFCFF;
+  --color-text-muted-5: #FFD91D;
+  --color-text-muted-6: #0563C1;
+  --font-body: "Play";
+  --font-mono: "Consolas";
+  --font-other: "Arial";
+  --size-display: 24.0pt;
+  --size-display-1: 14.0pt;
+  --size-title: 12.0pt;
+  --size-heading: 9.0pt;
+  --size-body: 8.0pt;
+  --size-caption: 7.0pt;
+  --margin-left: 0.0312;
+  --margin-top: 0.1192;
+  --margin-right: 0.0313;
+  --margin-bottom: 0.0581;
+}

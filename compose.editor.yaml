@@ -1,0 +1,20 @@
+# Dedicated interactive route; does not change generation or research agents.
+services:
+  app:
+    image: voicedeck-app:editor
+    environment:
+      SLIDE_MODE: designer
+      EMBEDDING_URL: ${EMBEDDING_URL:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3-embed}
+  designer:
+    image: voicedeck-designer:editor
+    environment:
+      DESIGNER_LLM_URL: http://host.docker.internal:11434/v1
+      DESIGNER_LLM_MODEL: qwen3.8:27b
+      DESIGNER_LLM_PROTOCOL: ollama
+      DESIGNER_LLM_NUM_CTX: ${DESIGNER_EDITOR_NUM_CTX:-8192}
+      DESIGNER_EDITOR_LLM_URL: ${DESIGNER_EDITOR_LLM_URL:-http://host.docker.internal:11434/v1}
+      DESIGNER_EDITOR_LLM_MODEL: ${DESIGNER_EDITOR_LLM_MODEL:-qwen3.8:27b}
+      DESIGNER_EDITOR_LLM_PROTOCOL: ollama
+      DESIGNER_EDITOR_NUM_CTX: ${DESIGNER_EDITOR_NUM_CTX:-8192}
+      DESIGNER_EDITOR_DEADLINE_S: ${DESIGNER_EDITOR_DEADLINE_S:-30}

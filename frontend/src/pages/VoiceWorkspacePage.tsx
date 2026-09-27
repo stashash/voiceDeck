@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createDeck, listDecks, listTrash, libraryAction, listDesignSystemItems, getDeckState, DeckListItem, DesignSystemListItem } from '../designer/api';
 import EditPage from './EditPage';
-import VoiceEditorPage from './VoiceEditorPage';
+import VoiceEditorPage from './FullEditorPage';
 import { Plus, Search, Trash2, Copy, RefreshCw, FileText, Mic, ArrowLeft, LayoutTemplate, ArchiveRestore } from 'lucide-react';
 import { absoluteUrl } from '../designer/api';
 import './voiceWorkspace.css';
@@ -13,7 +13,7 @@ export default function VoiceWorkspacePage() {
   const [selected, setSelected] = useState(() => localStorage.getItem('voice-workspace-selected') ?? '');
   const [search, setSearch] = useState('');
   const [variant, setVariant] = useState('a');
-  const [view, setView] = useState<'deck' | 'new' | 'local' | 'trash'>('deck');
+  const [view, setView] = useState<'deck' | 'new' | 'local' | 'trash' | 'full'>('deck');
   const [brief, setBrief] = useState('');
   const [design, setDesign] = useState('');
   const [count, setCount] = useState(8);
@@ -91,12 +91,12 @@ export default function VoiceWorkspacePage() {
         </button>)}
       </div>
       <div className="vw-library-footer">
-        <button className={view === 'local' ? 'is-active' : ''} onClick={() => setView('local')}><FileText size={17}/><span>Локальный черновик<small>Сохранён в этом браузере</small></span></button>
+        <button className={view === 'local' ? 'is-active' : ''} onClick={() => setView('local')}><FileText size={17}/><span>Редактор элементов</span></button>
         <button className={view === 'trash' ? 'is-active' : ''} onClick={() => { setView('trash'); void reload().catch(e => setError(String(e))); }}><Trash2 size={17}/>Корзина<span className="vw-count">{trash.length}</span></button>
       </div>
     </aside>
     <main className="vw-main">
-      <header className="vw-header"><div><span className="vw-eyebrow">ГОЛОСОВАЯ СТУДИЯ</span><h1>{view === 'new' ? 'Создать презентацию' : view === 'trash' ? 'Корзина' : view === 'local' ? 'Локальный черновик' : 'Редактор презентации'}</h1></div>
+      <header className="vw-header"><div><span className="vw-eyebrow">ГОЛОСОВАЯ СТУДИЯ</span><h1>{view === 'new' ? 'Создать презентацию' : view === 'trash' ? 'Корзина' : view === 'local'||view === 'full' ? 'Редактор элементов' : 'Редактор презентации'}</h1></div>
         {view === 'deck' && current && <div className="vw-actions"><button className="button" disabled={busy || current.status === 'running'} onClick={() => void manage(current.id, 'copy')}><Copy size={16}/>Создать копию</button><button className="button vw-delete" disabled={busy || current.status === 'running'} onClick={() => setDeleting(current)}><Trash2 size={16}/>Удалить</button></div>}
         {view !== 'deck' && selected && <button className="button" onClick={() => setView('deck')}><ArrowLeft size={16}/>К презентации</button>}
       </header>
@@ -109,7 +109,9 @@ export default function VoiceWorkspacePage() {
           <button className="vw-create" disabled={busy || !design || !brief.trim()}><Plus size={18}/>{busy ? 'Запускаем создание…' : 'Создать презентацию'}</button><small className="vw-muted">После генерации редактор откроется автоматически.</small>
         </form></div>}
         {view === 'trash' && <section className="vw-trash"><h2>Удалённые презентации</h2><p className="vw-muted">Восстановите документ, чтобы продолжить работу.</p>{!trash.length && <div className="vw-empty"><Trash2 size={36}/><h3>Корзина пуста</h3><p>Удалённые презентации появятся здесь.</p></div>}{trash.map(d => <div className="vw-trash-row" key={d.id}><FileText size={22}/><strong>{d.title}</strong><button className="button" disabled={busy} onClick={() => void manage(d.id, 'restore')}><ArchiveRestore size={16}/>Восстановить</button></div>)}</section>}
-        {view === 'local' && <><div className="vw-draft-note"><FileText size={18}/><span>Это отдельный черновик в браузере. Для работы с готовой презентацией выберите её карточку слева.</span></div><VoiceEditorPage/></>}
+        {view === 'local' && <VoiceEditorPage key="documents"/>}
+        {view === 'full' && <VoiceEditorPage key={selected+variant} source={{deckId:selected,variant}}/>}
+        {view === 'deck' && selected && ready && <div className="component-toolbar"><button className="button" onClick={()=>setView('full')}><LayoutTemplate size={18}/>Редактировать все элементы</button></div>}
         {view === 'deck' && (selected ? ready ? <EditPage key={selected + variant} deckId={selected} variant={variant} onVariantChange={setVariant}/> : <div className="vw-empty"><LayoutTemplate size={36}/><p role="status">{status}</p><a href={`#/decks/${selected}`}>Подробности генерации</a></div> : <div className="vw-empty"><LayoutTemplate size={40}/><h2>{loading ? 'Загрузка…' : 'Место для вашей следующей идеи'}</h2><p>Создайте презентацию, чтобы начать редактирование.</p><button className="vw-create" onClick={() => setView('new')}><Plus size={18}/>Новая презентация</button></div>)}
       </div>
     </main>

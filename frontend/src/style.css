@@ -38,6 +38,7 @@ p{margin:0}
 /* ---------- навигация ---------- */
 .nav{flex-shrink:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border)}
 .nav-tabs{display:flex;gap:28px}
+@media(max-width:650px){.nav{padding:0 12px;gap:10px}.nav-tabs{min-width:0;overflow-x:auto;gap:14px}.nav-tab{flex-shrink:0;font-size:12px}}
 .nav-tab{display:flex;align-items:center;height:56px;padding:0 4px;font-size:14px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent}
 .nav-tab.active{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
 .page-shell{position:relative;min-height:100vh;box-sizing:border-box;background:var(--bg);color:var(--text);font-family:var(--font);display:flex;flex-direction:column}
@@ -126,6 +127,9 @@ p{margin:0}
 
 /* ---------- правка ---------- */
 .edit-shell{min-height:100vh}
+.edit-shell .deck-voice-bar{grid-template-columns:minmax(0,1fr);min-width:0}
+.edit-shell .deck-voice-bar>div{min-width:0;flex-wrap:wrap}
+.edit-shell .deck-voice-status{min-width:0;overflow-wrap:anywhere}
 .edit-topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid var(--border)}
 .edit-title-row{display:flex;gap:8px;align-items:center;min-width:0}
 .edit-title{margin:0;font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -155,6 +159,25 @@ p{margin:0}
 .edit-notes label{font-size:12px;color:var(--text-muted)}
 .edit-notes textarea{box-sizing:border-box;width:100%;resize:none;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;padding:10px 12px}
 .edit-panel{width:360px;flex-shrink:0;box-sizing:border-box;border-left:1px solid var(--border);background:var(--surface);padding:20px 24px;display:flex;flex-direction:column;gap:24px;overflow:auto}
+@media(max-width:1100px){
+ .edit-shell:not(.voice-workspace *) .edit-body{display:grid;grid-template-columns:144px minmax(0,1fr);align-items:start}
+ .edit-shell:not(.voice-workspace *) .edit-rail{width:144px;max-height:560px;padding:16px 8px;min-width:0}
+ .edit-shell:not(.voice-workspace *) .edit-thumb{width:100px;height:auto;aspect-ratio:16/9}
+ .edit-shell:not(.voice-workspace *) .edit-canvas{padding:24px 16px;min-width:0}
+ .edit-shell:not(.voice-workspace *) .edit-panel{grid-column:1/-1;width:100%;border-left:0;border-top:1px solid var(--border)}
+ .edit-shell:not(.voice-workspace *) .pattern-grid{grid-template-columns:repeat(auto-fit,minmax(120px,148px))}
+ .edit-shell:not(.voice-workspace *) .edit-topbar{flex-wrap:wrap;padding:12px 16px}
+ .edit-shell:not(.voice-workspace *) .edit-title-row{flex:1 1 100%}
+}
+@media(max-width:600px){
+ .edit-shell:not(.voice-workspace *) .edit-body{grid-template-columns:minmax(0,1fr)}
+ .edit-shell:not(.voice-workspace *) .edit-canvas{grid-row:1;padding:16px 12px}
+ .edit-shell:not(.voice-workspace *) .edit-rail{width:100%;max-height:160px;flex-direction:row;border-right:0;border-top:1px solid var(--border)}
+ .edit-shell:not(.voice-workspace *) .edit-thumb-row{flex-shrink:0}
+ .edit-shell:not(.voice-workspace *) .edit-add-slide{min-width:90px;margin-left:0;flex-shrink:0}
+ .edit-shell:not(.voice-workspace *) .edit-el-edit textarea{min-width:0;width:100%}
+ .edit-shell:not(.voice-workspace *) .edit-variant-tab{padding:0 8px}
+}
 .edit-panel-head{display:flex;justify-content:space-between;align-items:center}
 .edit-panel-head-actions{display:flex;gap:2px}
 .panel-section-head{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:16px;margin-bottom:10px}
@@ -332,3 +355,4 @@ p{margin:0}
 .live-select select{background:transparent;border:0;color:var(--text);font-family:var(--font);font-size:13px;outline:none;cursor:pointer}
 .live-select select option{background:var(--surface);color:var(--text)}
 .visually-hidden{position:absolute;left:-9999px}
+.recent-card > a{display:flex;flex-direction:column;gap:10px;min-width:0}.home-main [role="dialog"]{position:fixed;z-index:100;top:30%;left:50%;transform:translateX(-50%);width:min(520px,90vw);padding:24px;background:var(--surface);border:1px solid var(--border);box-shadow:0 12px 70px #0006}

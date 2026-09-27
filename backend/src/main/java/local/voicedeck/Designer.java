@@ -34,8 +34,8 @@ public final class Designer {
     public JsonObject slide(String designSystemId,String chunkText,List<String> usedPatternIds)throws Exception {
         if(!enabled)throw new IllegalStateException("Designer disabled");
         var body=new JsonObject().put("design_system_id",designSystemId).put("chunk_text",chunkText).put("used_pattern_ids",new JsonArray(usedPatternIds));
-        // Слайд из речи на Qwen идёт 4–5 с; когда модель занята сборкой колоды, дольше. 8 с обрывали такие слайды.
-        var req=HttpRequest.newBuilder(URI.create(url+"/live/slide")).timeout(Duration.ofSeconds(15)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        // Cold prompt evaluation plus rendering can exceed 15s; the draft stays visible while waiting.
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/slide")).timeout(Duration.ofSeconds(30)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
         var res=http.send(req,HttpResponse.BodyHandlers.ofString());
         if(res.statusCode()==204)return null;
         if(res.statusCode()==503)throw new ModelLoading();

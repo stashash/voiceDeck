@@ -14,6 +14,8 @@ public final class Session implements AutoCloseable {
     final Llm llm;
     final Designer designer;
     final boolean sketch=Main.env("SLIDE_MODE","sketch").equals("sketch");
+    // Kept as a session-level switch for the editor WebSocket/test contract.
+    volatile boolean editorMode;
     boolean designerMode=Main.env("SLIDE_MODE","sketch").equals("designer");
     String designSystemId=Main.env("DESIGNER_DESIGN_SYSTEM_ID","");
     final ArrayDeque<String> recentPatternIds=new ArrayDeque<>();
@@ -122,6 +124,7 @@ public final class Session implements AutoCloseable {
             wire(new JsonObject().put("type","partial").put("text",text));
             acceptFinal(text,t0,t1);return;
         }
+        if(type.equals("editor_mode")){editorMode=true;pending.clear();return;}
         if(type.equals("flush")){flush(false);return;}
         if(type.equals("stop")){flush(true);return;}
         if(type.equals("revise")) {revise(message);return;}
@@ -143,7 +146,7 @@ public final class Session implements AutoCloseable {
             lastAccess=System.currentTimeMillis();
             if(p.seq()<=audioSeq){wire(new JsonObject().put("type","audio_ack").put("audio_seq",audioSeq));return;}
             if(p.seq()!=audioSeq+1||p.offset()!=audioOffset){wire(new JsonObject().put("type","audio_resync").put("audio_seq",audioSeq).put("audio_offset",audioOffset));return;}
-            if(audioWorker.getQueue().remainingCapacity()==0){warning("Аудиобуфер заполнен; запись приостановлена");if(socket!=null)socket.close((short)1013,"Audio backpressure");return;}
+            if(audioWorker.getQueue().remainingCapacity()==0||(editorMode&&audioWorker.getQueue().size()>=64)){warning("Аудиобуфер заполнен; запись приостановлена");if(socket!=null)socket.close((short)1013,"Audio backpressure");return;}
             if(stopped||audioSeq==0){epoch=System.currentTimeMillis()-p.offset()/16;stopped=false;}
             audioSeq=p.seq();audioOffset=p.offset()+512;
             audioWorker.execute(()->{
@@ -153,6 +156,7 @@ public final class Session implements AutoCloseable {
                         public void finish(String text,long t0,long t1){submit(()->acceptFinal(text,t0,t1));}
                         public void warning(String text){submit(()->Session.this.warning(text));}
                     });
+                    audio.editorMode(editorMode);
                     audio.accept(p);
                     submit(()->wire(new JsonObject().put("type","audio_ack").put("audio_seq",p.seq())));
                 }catch(Exception e){submit(()->warning("Ошибка аудиомодели: "+e.getMessage()));}
@@ -162,6 +166,7 @@ public final class Session implements AutoCloseable {
     void acceptFinal(String text,long t0,long t1){
         Metrics.observe("final_latency",System.currentTimeMillis()-epoch-t1);
         if(sentences.size()>=20000)throw new IllegalStateException("Лимит сессии достигнут; начните новую");
+        if(editorMode){if(!text.isBlank())event("editor_utterance",new JsonObject().put("text",text).put("utterance_id",UUID.randomUUID().toString()));return;}
         askEarly(text,t0,1);
         List<String> list=Text.sentences(text);long total=Math.max(1,text.length()),cursor=t0;
         for(int i=0;i<list.size();i++){
@@ -279,6 +284,7 @@ public final class Session implements AutoCloseable {
         return true;
     }
     void tick(){
+        if(editorMode)return;
         long now=System.currentTimeMillis();
         if(!pending.isEmpty()) {
             long end=sentences.get(pending.getLast()).getLong("t1");
@@ -325,6 +331,7 @@ public final class Session implements AutoCloseable {
     void askEarly(String text,long t0){askEarly(text,t0,EARLY_WORDS);}
     /** Короткая фраза («Что дальше») спрашивается по финалу распознавания, до закрытия фрагмента. */
     void askEarly(String text,long t0,int minWords){
+        if(editorMode)return;
         if(!modelJudges()||judging||stopped||!pending.isEmpty())return;
         if(earlyT0>=0&&Math.abs(t0-earlyT0)<2000&&(earlyAsking||earlyVerdict!=null))return; // эту фразу уже спросили
         if(Text.words(text)<minWords)return;

@@ -244,7 +244,7 @@ html, body {{ margin: 0; padding: 0; height: 100%; background: #1a1a1a; }}
 #deck {{ height: 100%; display: flex; align-items: center; justify-content: center; }}
 .slide {{
   position: relative;
-  width: min(100vw, {aspect:.6f} * 100vh);
+  width: min(100vw, {aspect * 100:.6f}vh);
   aspect-ratio: {aspect:.6f};
   container-type: inline-size;
   overflow: hidden;

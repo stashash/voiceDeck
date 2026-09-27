@@ -469,6 +469,60 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     _fill_group(placed, spec, pattern, ds, issue)
     _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
+    if spec.element_positions:
+        final_shapes = _walk(slide.shapes, ds.slide_size_emu)
+        used = set()
+        for position in spec.element_positions.values():
+            candidates = [(sid, item) for sid, item in final_shapes.items() if sid not in used]
+            def distance(pair):
+                return sum(abs(a-b) for a, b in zip(pair[1].box, position.original_box))
+            candidates.sort(key=lambda pair: (distance(pair), pair[0] != position.source_shape_id))
+            if not candidates or distance(candidates[0]) > 0.04:
+                raise ValueError("Не найдена фигура для сохранения перемещения в PowerPoint")
+            sid, item = candidates[0]
+            used.add(sid)
+            if position.deleted:
+                item.element.getparent().remove(item.element)
+                continue
+            _set_box(item, position.box, ds.slide_size_emu)
+            from pptx.shapes.shapetree import BaseShapeFactory
+            shape = BaseShapeFactory(item.element, slide.shapes)
+            if position.text is not None and shape.has_text_frame:
+                shape.text_frame.text = position.text
+            if position.style is not None and shape.has_text_frame:
+                from pptx.util import Pt
+                from pptx.dml.color import RGBColor
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        style = position.style
+                        if style.size_pt: run.font.size = Pt(style.size_pt)
+                        if style.color: run.font.color.rgb = RGBColor.from_string(style.color)
+                        if style.family: run.font.name = style.family
+                        run.font.bold = style.bold
+                        run.font.italic = style.italic
+    for element in spec.added_elements:
+        from pptx.util import Pt
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        x, y, w, h = element.box
+        sw, sh = ds.slide_size_emu
+        box = (int(x*sw), int(y*sh), int(w*sw), int(h*sh))
+        if element.type == "text":
+            shape = slide.shapes.add_textbox(*box)
+            shape.text_frame.text = element.text
+            shape.text_frame.word_wrap = True
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    style = element.style
+                    if style:
+                        if style.size_pt: run.font.size = Pt(style.size_pt)
+                        if style.family: run.font.name = style.family
+                        if style.color: run.font.color.rgb = RGBColor.from_string(style.color)
+                        run.font.bold = style.bold
+        elif element.type == "shape":
+            shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *box)
+            shape.fill.solid()
+            shape.fill.fore_color.rgb = RGBColor.from_string(element.fill or "D9D9D9")
     _prune_groups(slide)
     if spec.notes:
         slide.notes_slide.notes_text_frame.text = spec.notes

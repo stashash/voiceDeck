@@ -27,13 +27,15 @@ public final class Audio implements AutoCloseable {
     private long samples,phraseStart=-1,lastPartial,baseOffset=-1;
     private String previous="",partial="";
     private boolean overlap;
+    private boolean editorMode;
+    public void editorMode(boolean enabled){editorMode=enabled;}
     public Audio(Models models,Listener listener) throws Exception {this.models=models;this.listener=listener;vad=models.newVad();}
     public void accept(Packet p) throws Exception {
         if(baseOffset<0)baseOffset=p.offset();
         for(float f:p.samples())ring[(int)(samples++%ring.length)]=f;
         Models.call(vad,"acceptWaveform",p.samples());
         if((boolean)Models.call(vad,"isSpeechDetected")&&phraseStart<0)phraseStart=Math.max(0,samples-4096);
-        if(phraseStart>=0&&samples-lastPartial>=8000){
+        if(!editorMode&&phraseStart>=0&&samples-lastPartial>=16000&&(boolean)Models.call(vad,"empty")){
             lastPartial=samples;
             try {partial=models.decode(slice(Math.max(phraseStart,samples-160000),samples),false);listener.partial(partial,ms(phraseStart),ms(samples));}
             catch(Exception e){listener.warning("Партиальное распознавание недоступно");}
@@ -47,7 +49,7 @@ public final class Audio implements AutoCloseable {
             if(f.length>0)finish(f,start,end);
             Models.call(vad,"pop");phraseStart=-1;overlap=false;
         }
-        if(phraseStart>=0&&samples-phraseStart>=16000*8){
+        if(!editorMode&&phraseStart>=0&&samples-phraseStart>=16000*8){
             finish(slice(phraseStart,samples),phraseStart,samples);
             phraseStart=samples-32000;overlap=true;
         }
@@ -56,7 +58,10 @@ public final class Audio implements AutoCloseable {
     private float[] slice(long from,long to){from=Math.max(from,to-ring.length);float[] out=new float[(int)(to-from)];for(int i=0;i<out.length;i++)out[i]=ring[(int)((from+i)%ring.length)];return out;}
     private void finish(float[] f,long from,long to)throws Exception {
         String text;
-        try{text=models.decode(f,true);}catch(Exception e){text=partial;listener.warning("Финальная модель недоступна; используется последний партиал без нормализации");}
+        try{text=models.decode(f,true);}catch(Exception e){
+            text=editorMode?"":partial;
+            listener.warning(editorMode?"Распознавание не завершено. Команда не выполнена; повторите после переподключения микрофона.":"Финальная модель недоступна; используется последний партиал без нормализации");
+        }
         if(overlap)text=Text.deduplicate(previous,text);
         if(!text.isBlank()){listener.finish(text,ms(from),ms(to));previous=text;}
         partial="";

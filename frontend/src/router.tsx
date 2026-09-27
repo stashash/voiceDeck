@@ -8,6 +8,7 @@ const GenerationPage = lazy(() => import('./pages/GenerationPage'));
 const EditPage = lazy(() => import('./pages/EditPage'));
 const DesignSystemsPage = lazy(() => import('./pages/DesignSystemsPage'));
 const VoiceEditorPage = lazy(() => import('./pages/VoiceWorkspacePage'));
+const FullEditorPage = lazy(() => import('./pages/FullEditorPage'));
 const LivePage = lazy(() => import('./pages/LivePage'));
 const AudiencePage = lazy(() => import('./stage/AudiencePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -44,6 +45,7 @@ export function Router() {
   else if (root === 'decks' && a) { page = <GenerationPage deckId={a}/>; tab = ''; }
   else if (root === 'design-systems') { page = <DesignSystemsPage id={a}/>; tab = 'design-systems'; }
   else if (root === 'voice-editor') { page = <VoiceEditorPage/>; tab = 'voice-editor'; }
+  else if (root === 'editor') { page = <FullEditorPage/>; tab = 'voice-editor'; }
   else if (root === 'live') { page = <LivePage/>; tab = 'live'; }
   else if (root === 'settings') { page = <SettingsPage/>; tab = 'settings'; }
 

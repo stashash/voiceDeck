@@ -24,6 +24,7 @@ class DeckCreateResponse(BaseModel):
 class DeckVariantState(BaseModel):
     """Состояние одного варианта колоды: своя инструкция, сцены, находки и обоснование оси."""
     status: Literal["running", "done", "error"]
+    revision: str | None = None
     design_system_id: str
     plan: DeckPlan | None = None
     specs: list[SlideSpec] = Field(default_factory=list)
@@ -137,6 +138,23 @@ class DeckListResponse(BaseModel):
 class SlideTextRequest(BaseModel):
     element_id: str
     text: str
+
+
+class SlideMoveElementRequest(BaseModel):
+    element_id: str
+    dx: float = Field(default=0, ge=-1, le=1, allow_inf_nan=False)
+    dy: float = Field(default=0, ge=-1, le=1, allow_inf_nan=False)
+    align: Literal['left', 'right', 'top', 'bottom', 'center'] | None = None
+
+
+class ElementActionRequest(BaseModel):
+    action: Literal['add', 'delete', 'duplicate', 'style']
+    element_id: str | None = None
+    element_type: Literal['text', 'title', 'shape'] = 'text'
+    text: str = Field(default='', max_length=10000)
+    scale: float = Field(default=1, ge=.25, le=4, allow_inf_nan=False)
+    size_pt: float | None = Field(default=None, ge=6, le=144, allow_inf_nan=False)
+    color: str | None = Field(default=None, pattern=r'^[0-9A-Fa-f]{6}$')
 
 
 class SlidePatternRequest(BaseModel):

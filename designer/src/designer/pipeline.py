@@ -416,13 +416,12 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
     first_variant = variant_codes[0]
     deck_id = deck_id or store.new_deck_id()
     store.init_deck(deck_id, ds_id, variant_codes, brief=brief)
-    package_dir = store.design_system_dir(ds_id)
-    ds = load_package(package_dir)
-
     owns_client = client is None
-    client = client or _client_for("deck")
-    recorder = RunRecorder(model=client.model)
     try:
+        package_dir = store.design_system_dir(ds_id)
+        ds = load_package(package_dir)
+        client = client or _client_for("deck")
+        recorder = RunRecorder(model=client.model)
         _emit(on_event, "plan")
         with recorder.stage("plan"):
             plan = make_plan(brief, purpose, audience, slide_count, client)
@@ -454,7 +453,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
             store.mark_deck_failed(deck_id, str(exc), variant=variant_code)
         raise
     finally:
-        if owns_client:
+        if owns_client and client is not None:
             client.close()
 
 

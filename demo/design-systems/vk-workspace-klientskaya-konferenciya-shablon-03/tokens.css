@@ -1,0 +1,25 @@
+:root {
+  --color-text: #FFFFFF;
+  --color-accent: #0077FF;
+  --color-other: #808080;
+  --color-text_muted: #E4E7EA;
+  --color-background: #000000;
+  --color-accent_alt: #70C3FF;
+  --color-text-muted-1: #AFB8C2;
+  --color-text-muted-2: #CAD0D5;
+  --color-other-1: #7F7F7F;
+  --color-text-muted-3: #EB4250;
+  --color-text-muted-4: #6DBCFF;
+  --color-surface: #212121;
+  --font-body: "Play";
+  --size-display: 36.0pt;
+  --size-title: 20.0pt;
+  --size-heading: 18.0pt;
+  --size-body: 16.0pt;
+  --size-caption: 14.0pt;
+  --size-caption-1: 12.0pt;
+  --margin-left: 0.0351;
+  --margin-top: 0.0619;
+  --margin-right: 0.0352;
+  --margin-bottom: 0.0965;
+}

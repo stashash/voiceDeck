@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 
 from designer import store
+from designer.edit_runtime import serialized, schedule, lock
 from designer.agent_hook import _client_for
 from designer.audit.deterministic import run_checks
 from designer.contracts import (
@@ -24,6 +25,7 @@ from designer.contracts import (
     DeckPlan,
     DesignSystem,
     Element,
+    ElementPosition,
     Finding,
     Item,
     Pattern,
@@ -31,6 +33,7 @@ from designer.contracts import (
     SlideIntent,
     SlideKind,
     SlideSpec,
+    TextStyle,
 )
 from designer.export import convert, render
 from designer.export.html import render_deck
@@ -125,11 +128,27 @@ def _checks(state: _State, touched: set[str] | None = None, drop_ids: set[str] |
 
 
 def _persist(state: _State, findings: list[Finding]) -> None:
-    """Переиздаёт файлы варианта (pptx, html, pdf, картинки) и пишет deck.json."""
+    """Commit the document immediately; derived files are exported separately."""
     deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
                 plan=state.plan, specs=state.specs, scenes=state.scenes)
+    store.save_deck_result(state.deck_id, deck, findings, variant=state.variant)
+    raw = store.load_deck_state(state.deck_id, state.variant)
+    raw["revision"] = uuid.uuid4().hex
+    store._write_json(store.deck_variant_state_path(state.deck_id, state.variant), raw)
+    schedule(state.deck_id, state.variant, raw["revision"])
 
-    files_dir = store.deck_variant_files_dir(state.deck_id, state.variant)
+
+def live_slide(deck_id: str, variant: str, number: int) -> str:
+    state = _load(deck_id, variant)
+    index = _slide_index(state, number)
+    deck = Deck(id=deck_id, design_system_id=state.ds_id, variant=variant,
+                plan=state.plan, specs=[state.specs[index]], scenes=[state.scenes[index]])
+    return render_deck(deck, state.ds, state.package_dir).split("<script>")[0] + "</body></html>"
+
+
+def _export_files(state: _State, files_dir: Path) -> None:
+    deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
+                plan=state.plan, specs=state.specs, scenes=state.scenes)
     pptx_path = files_dir / "deck.pptx"
     export_pptx(state.specs, state.ds, state.package_dir, pptx_path)
     markup_html = render_deck(deck, state.ds, state.package_dir)
@@ -146,15 +165,13 @@ def _persist(state: _State, findings: list[Finding]) -> None:
         except convert.ConverterUnavailable:
             pngs = []
         if pngs:
-            slides_dir = store.deck_variant_slides_dir(state.deck_id, state.variant)
-            for old in slides_dir.glob("slide-*.png"):
-                old.unlink()
+            slides_dir = files_dir / "slides"
+            slides_dir.mkdir(exist_ok=True)
             for index, png in enumerate(pngs, start=1):
                 (slides_dir / f"slide-{index:03d}.png").write_bytes(png)
             html_text = render_deck_images(deck, state.ds, pngs)
             (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
 
-    store.save_deck_result(state.deck_id, deck, findings, variant=state.variant)
 
 
 def _recompose(state: _State, index: int, intent: SlideIntent, pattern: Pattern) -> None:
@@ -218,6 +235,35 @@ def _set_intent_text(intent: SlideIntent, slot, group, unit_index: int | None, t
         item.body = text
 
 
+@serialized
+def move_element(deck_id: str, variant: str, slide_number: int, element_id: str,
+                 dx: float = 0, dy: float = 0, align: str | None = None) -> None:
+    state = _load(deck_id, variant)
+    index = _slide_index(state, slide_number)
+    el = next((e for e in state.scenes[index].elements if e.id == element_id), None)
+    if el is None:
+        raise ElementNotFound("Выбранный элемент не найден на слайде")
+    x, y, w, h = el.box
+    x, y = x + dx, y + dy
+    if align == "left": x = 0.02
+    if align == "right": x = 0.98 - w
+    if align == "top": y = 0.02
+    if align == "bottom": y = 0.98 - h
+    if align == "center": x, y = (1-w)/2, (1-h)/2
+    box = (max(0, min(1-w, x)), max(0, min(1-h, y)), w, h)
+    _snapshot(state)
+    previous = state.specs[index].element_positions.get(el.id)
+    added = next((e for e in state.specs[index].added_elements if e.id == el.id), None)
+    if added is not None:
+        added.box = box
+    else:
+        state.specs[index].element_positions[el.id] = (previous.model_copy(update={"box": box}) if previous else
+            ElementPosition(original_box=el.box, box=box, source_shape_id=el.source_shape_id))
+    el.box = box
+    _persist(state, _checks(state, {state.specs[index].slide_id}))
+
+
+@serialized
 def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: str, text: str) -> None:
     state = _load(deck_id, variant)
     index = _slide_index(state, slide_number)
@@ -225,6 +271,8 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
     el = next((e for e in scene.elements if e.id == element_id), None)
     if el is None:
         raise ElementNotFound(f"элемент {element_id} не найден на слайде {slide_number}")
+    if el.type != "text":
+        raise ValueError("Выбранный объект не является текстом")
 
     _snapshot(state)
     el.text = text
@@ -233,6 +281,13 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
     if slot is not None:
         _set_slot_text(state.specs[index], slot, group, unit_index, text)
         _set_intent_text(state.plan.slides[index], slot, group, unit_index, text)
+    added = next((e for e in state.specs[index].added_elements if e.id == el.id), None)
+    if added is not None:
+        added.text = text
+    elif slot is None:
+        override = state.specs[index].element_positions.setdefault(el.id,
+            ElementPosition(original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
+        override.text = text
 
     findings = _checks(state, {state.specs[index].slide_id})
     _persist(state, findings)
@@ -240,6 +295,65 @@ def set_slide_text(deck_id: str, variant: str, slide_number: int, element_id: st
 
 # ---------- образец слайда ----------
 
+@serialized
+def element_action(deck_id: str, variant: str, number: int, action: str,
+                   element_id: str | None = None, element_type: str = "text",
+                   text: str = "", scale: float = 1, size_pt: float | None = None,
+                   color: str | None = None) -> None:
+    state = _load(deck_id, variant)
+    index = _slide_index(state, number)
+    scene, spec = state.scenes[index], state.specs[index]
+    el = next((e for e in scene.elements if e.id == element_id), None)
+    if action != "add" and el is None:
+        raise ElementNotFound("Сначала выберите объект")
+    if action == "style" and el.type != "text":
+        raise ValueError("Размер шрифта и цвет текста доступны текстовым объектам")
+    if action == "duplicate" and el.type not in ("text", "shape"):
+        raise ValueError("Копирование этого типа объекта пока не поддерживается")
+    _snapshot(state)
+    if action in ("add", "duplicate"):
+        if action == "duplicate":
+            new = el.model_copy(deep=True)
+            x,y,w,h = new.box
+            new.box = (min(1-w,x+.02), min(1-h,y+.02),w,h)
+        else:
+            if element_type not in ("text", "title", "shape"):
+                raise ValueError("Для прямого добавления доступны текст, заголовок и фигура")
+            color_token = next((e.style.color for e in scene.elements if e.type == "text" and e.style and e.style.color),
+                next((c.hex for c in state.ds.tokens.colors if c.role == "text"), "FFFFFF" if scene.theme == "dark" else "222222"))
+            family = next((f.family for f in state.ds.tokens.fonts), None)
+            new = Element(id="new", type="shape" if element_type == "shape" else "text",
+                role="title" if element_type == "title" else "body", box=(.1,.15,.5,.15), text=text,
+                style=TextStyle(size_pt=32 if element_type == "title" else 24, family=family, color=color_token), fill="D9D9D9" if element_type == "shape" else None)
+        new.id = "custom-" + uuid.uuid4().hex
+        new.source_shape_id = None
+        new.z = max((e.z for e in scene.elements), default=0)+1
+        spec.added_elements.append(new.model_copy(deep=True))
+        scene.elements.append(new)
+    elif action == "delete":
+        if any(e.id == el.id for e in spec.added_elements):
+            spec.added_elements = [e for e in spec.added_elements if e.id != el.id]
+        else:
+            override = spec.element_positions.setdefault(el.id, ElementPosition(original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
+            override.deleted = True
+        scene.elements = [e for e in scene.elements if e.id != el.id]
+    elif action == "style":
+        style = (el.style or TextStyle(size_pt=24)).model_copy(deep=True)
+        style.size_pt = max(6,min(144,size_pt if size_pt is not None else (style.size_pt or 24)*scale))
+        if color is not None: style.color = color
+        el.style = style
+        added = next((e for e in spec.added_elements if e.id == el.id), None)
+        if added is not None:
+            added.style = style.model_copy(deep=True)
+        else:
+            override = spec.element_positions.setdefault(el.id, ElementPosition(original_box=el.box, box=el.box, source_shape_id=el.source_shape_id))
+            override.style = style
+    else:
+        raise ValueError("Неизвестная операция")
+    _persist(state, _checks(state, {spec.slide_id}))
+
+
+@serialized
 def set_slide_pattern(deck_id: str, variant: str, slide_number: int, pattern_id: str) -> None:
     state = _load(deck_id, variant)
     index = _slide_index(state, slide_number)
@@ -370,11 +484,21 @@ def ask_agent_rewrite(deck_id: str, variant: str, slide_number: int, instruction
         pattern = choose_pattern(intent, state.ds, [s.pattern_id for s in state.specs])
 
     new_intent = _rewrite_intent(intent, pattern, instruction, state.ds)
-    _snapshot(state)
-    _recompose(state, index, new_intent, pattern)
+    # Model latency must not lock the document. Recovery or a newer edit wins.
+    with lock(deck_id, variant):
+        if store.load_deck_state(deck_id, variant) != state.raw:
+            raise ValueError("Документ изменился или команда остановлена. Ответ агента не применён.")
+        _snapshot(state)
+        _recompose(state, index, new_intent, pattern)
+        findings = _checks(state, {state.specs[index].slide_id})
+        _persist(state, findings)
 
-    findings = _checks(state, {state.specs[index].slide_id})
-    _persist(state, findings)
+
+@serialized
+def recover_editor(deck_id: str, variant: str) -> None:
+    state = _load(deck_id, variant)
+    state.raw["recovery_token"] = uuid.uuid4().hex
+    store._write_json(store.deck_variant_state_path(deck_id, variant), state.raw)
 
 
 def rewrite_from_finding(deck_id: str, variant: str, finding_id: str) -> None:
@@ -392,16 +516,12 @@ def rewrite_from_finding(deck_id: str, variant: str, finding_id: str) -> None:
     if pattern is None:
         raise PatternNotFound("образец слайда не найден в дизайн-системе")
 
-    new_intent = _rewrite_intent(intent, pattern, finding.message, state.ds)
-    _snapshot(state)
-    _recompose(state, index, new_intent, pattern)
-
-    findings = _checks(state, {state.specs[index].slide_id}, {finding_id})
-    _persist(state, findings)
+    ask_agent_rewrite(deck_id, variant, index + 1, finding.message)
 
 
 # ---------- заметки докладчика ----------
 
+@serialized
 def set_slide_notes(deck_id: str, variant: str, slide_number: int, notes: str) -> None:
     state = _load(deck_id, variant)
     index = _slide_index(state, slide_number)
@@ -416,6 +536,7 @@ def set_slide_notes(deck_id: str, variant: str, slide_number: int, notes: str) -
 
 # ---------- лента слайдов: добавить, копия, удалить, переставить ----------
 
+@serialized
 def apply_slide_action(deck_id: str, variant: str, action: str, index: int, to: int | None = None) -> None:
     if action not in _SLIDE_ACTIONS:
         raise ValueError(f"неизвестное действие: {action}")
@@ -459,8 +580,12 @@ def apply_slide_action(deck_id: str, variant: str, action: str, index: int, to: 
         else:
             new_intent = SlideIntent(id=uuid.uuid4().hex, kind=SlideKind.bullets, title="Новый слайд")
             pattern = choose_pattern(new_intent, state.ds, used)
-        spec = compose(new_intent, pattern, state.ds)
-        scene = build_scene(spec, pattern, state.ds, state.package_dir)
+        if action == "copy":
+            spec = state.specs[pos].model_copy(deep=True, update={"slide_id": new_intent.id})
+            scene = state.scenes[pos].model_copy(deep=True, update={"slide_id": new_intent.id})
+        else:
+            spec = compose(new_intent, pattern, state.ds)
+            scene = build_scene(spec, pattern, state.ds, state.package_dir)
         insert_at = pos + 1
         state.plan.slides.insert(insert_at, new_intent)
         state.specs.insert(insert_at, spec)
@@ -472,6 +597,7 @@ def apply_slide_action(deck_id: str, variant: str, action: str, index: int, to: 
 
 # ---------- вернуть последнюю правку ----------
 
+@serialized
 def revert(deck_id: str, variant: str) -> None:
     history_dir = store.deck_variant_history_dir(deck_id, variant)
     numbers = sorted((int(p.stem) for p in history_dir.glob("*.json") if p.stem.isdigit()), reverse=True)
