@@ -42,4 +42,4 @@
 
 ## Current State
 
-Started: isolated worktree created; implementation tasks dispatched after this plan. Existing research is input, not accepted functionality. This plan remains active while any acceptance gate is incomplete.
+Implementation and reviewer rework are committed as 4ba299b. See runs/VOICE-QUALITY-V3 for evidence and delivery limits. Synthetic ASR still fails 4/9 cases; physical microphone acceptance is absent. No autonomous scheduler is running. This plan remains active for the unresolved quality gates, not because workers are silently continuing after delivery.

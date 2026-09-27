@@ -1,0 +1,79 @@
+{
+  "task_id": "VOICE-QUALITY-V3",
+  "judge": "df-judge-independent",
+  "timestamp": "2026-09-27T17:40:48Z",
+  "base_sha": "5f71f013d9d7c268abba20907f74fd4e2c3b3823",
+  "head_sha": "4ba299ba8ae28f3b9b1d644b5fdb068ca9d70a20",
+  "branch": "codex/voice-quality-factory",
+  "rubric": "C:/Users/Admin/dev/project/dark-factory/skills/df-judge/SKILL.md",
+  "aggregation": "Equal weights, 0.2 per dimension; rubric specifies no other weights. Scores are judgment, not probabilities or test pass rates.",
+  "verdict_scope": "overall_user_vision_and_release_readiness",
+  "scores": {
+    "correctness": 2,
+    "completeness": 2,
+    "idiomatic": 4,
+    "maintainability": 4,
+    "test_coverage": 3
+  },
+  "weighted_score": 3.0,
+  "verdict": "rework",
+  "release_gate": "BLOCKED",
+  "auto_merge_allowed": false,
+  "human_merge_decision_required": true,
+  "product_complete": false,
+  "reasoning": "The bounded safety/dictation implementation is acceptable. The full spoken editing experience is not accepted: the final-image synthetic ASR run still fails four of nine commands, and physical-microphone accuracy and speech-end-to-visible latency are unaccepted. Passing execution tests cannot override that gate.",
+  "scoped_implementation": {
+    "scope": "VOICE-QUALITY-V3 PM acceptance: editor safety, dictation, bounded execution, transport compatibility, preservation constraints and honest ASR evaluation contract",
+    "scores": {
+      "correctness": 4,
+      "completeness": 4,
+      "idiomatic": 4,
+      "maintainability": 4,
+      "test_coverage": 4
+    },
+    "weighted_score": 4.0,
+    "verdict": "accept",
+    "authorizes_merge_or_release": false,
+    "score_reasons": {
+      "correctness": "Capture context survives the queue; deletion and dictation validate revision and slide identity under the document lock; expiry cancels dependent commands. Reviewed fixes and regression cases support correctness, without proving every browser schedule.",
+      "completeness": "All nine bounded acceptance topics are addressed. The ASR requirement is an honest evaluation contract, not an ASR quality win. Physical voice acceptance and parity of multi-utterance dictation in the second editor remain outside demonstrated completion.",
+      "idiomatic": "Uses existing React hooks, queue, transport, FastAPI schemas, edit locks and persistence paths; the evaluator reuses the production parser and PCM transport.",
+      "maintainability": "Small context/dictation/preservation helpers and explicit limits keep the change scoped. Dense EditPage lifecycle logic and a bespoke mocked React scheduler prevent an excellent score.",
+      "test_coverage": "Strong negative, concurrency, persistence/undo and transport coverage, including 11 persisted integration-style cases. React scheduling/devices/server boundaries are mocked; skipped tests and absent physical-microphone/browser lifecycle acceptance preclude 5/5."
+    }
+  },
+  "strengths": [
+    "Four reviewer races are closed in review.md; corresponding production guards and 11 integration-style cases were inspected. The verifier's capture-gap regression is also retained.",
+    "Stale/conflicting dictation and deletion reject before mutation; dictation has one persistence transaction and undo coverage.",
+    "Flush, acknowledgement and server finalization have bounded waits; forced stop and session invalidation take precedence.",
+    "Evidence distinguishes parser/execution, local-model latency, Live pipeline continuity, synthetic recognition and physical microphone acceptance."
+  ],
+  "weaknesses": [
+    "Synthetic ASR remains FAIL 5/9 on the final image; select, move, replace and append fail. This is an unchanged release blocker.",
+    "No accepted human microphone/noise corpus or speech-end-to-visible latency distribution. One warm model sample is not p95 or end-to-end voice latency.",
+    "Number/date preservation is a conservative lexical check, not semantic equivalence or comprehensive support for spelled-out values.",
+    "Full Python regression remains non-green: 9/871 failures, reported identically reproduced on clean base. This judge did not independently repeat that comparison.",
+    "Native decoder process isolation, advanced semantic groups/layout and second-editor dictation parity are not delivered claims."
+  ],
+  "evidence": {
+    "directly_inspected": [
+      "Plan, committed implementation/test diff against base, relevant previously untracked files, delivery.md, metrics.json and review.md",
+      ".voice-factory/voice-quality-targeted.xml: 226 tests, zero failures/errors/skips",
+      ".voice-factory/model-acceptance.json: persisted rewrite 2708 ms, concurrent fast mutation 26 ms with stale model HTTP 409, cancellation 35 ms without mutation",
+      ".voice-factory/asr-ru135-v3-image-7a0220e.json: FAIL, 5 complete commands / 9; all six recorded runner/parser source hashes match current files",
+      "All five retained V3 ASR reports show the same corpus hash and FAIL 5/9",
+      "Source/tests match frozen HEAD; git diff --check base HEAD passes"
+    ],
+    "reported_not_rerun_by_judge": [
+      "Frontend 382 passed / 18 skipped; TypeScript PASS; Maven verify and production build PASS",
+      "Full Python 871 collected / 9 failed, with all nine reproduced on clean base",
+      "Reviewer independently ran 58 focused tests and TypeScript; all four findings closed",
+      "Latest-image browser typed transcript checks: literal legacy replacement, two-phrase draft/manual save, persisted API text matching iframe, undo; revision b96ba82f4fcd476d994fbba7e1d52d97",
+      "Live synthetic PCM: final/chunk/rendered slide, 71/71 acknowledgements, zero warnings, erroneous transcript; continuity only",
+      "Fresh final-image ASR command exit code 1; inspected report and runner agree with FAIL"
+    ],
+    "final_app_image": "sha256:7a0220e2f87cbd34e6a5ce8ffcf7b0d004efe8077aff14fcd2af33782cdd0cfc",
+    "calibration": "Neither workspace nor factory scenarios directory exists; assessed against inspected positive/negative regression cases and retained failed ASR runs, not an external judge calibration set."
+  },
+  "judge_limits": "Read-only assessment except these two judge artifacts. No tests, browser actions or model requests rerun; no source/test edits, runtime changes, commit, push or merge. Later source changes require a refreshed assessment."
+}
