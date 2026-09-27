@@ -1,0 +1,23 @@
+{
+  "run": "VOICE-ADAPTIVE-V4",
+  "date": "2026-09-27",
+  "branch": "codex/voice-quality-factory",
+  "base_sha": "e668c4eac5e7a2fc75caf79212f98f979345e9a9",
+  "code_sha": "3ff12c5f67d67eb5cff9b933115f4d48d2e9d8de",
+  "bounded_stage": "accepted",
+  "release": "blocked_asr_and_human_acceptance",
+  "frontend": {"passed": 641, "skipped": 18, "failed": 0, "typescript": "pass"},
+  "backend_targeted": {"passed": 354, "skipped": 6, "failed": 0, "new_batch_cases": 116},
+  "backend_full_without_heavy_templates": {"collected": 987, "passed": 813, "skipped": 165, "failed": 9, "failure_set": "matches_retained_v3_baseline_evidence"},
+  "backend_heavy_templates": {"status": "interrupted", "passed_before_interrupt": 25, "seconds": 193.26},
+  "audio_evaluator_tests": {"passed": 16},
+  "reviewer": {"status": "approve", "closed_findings": 5, "parser_cases": 52, "independent_boundary_probes": 44},
+  "build": {"frontend": "pass", "maven_verify": "pass", "running_docker_image": "sha256:e042f4ef4979153c6aa32273c1d3fc0b9e298b687844a1859cfc2152bd35769e"},
+  "api_acceptance": {"status": "pass", "batch_ms_single_sample": 37, "undo_ms_single_sample": 28},
+  "final_browser": {"status": "pass", "input": "typed_transcript_shared_executor", "macro_ms_single_sample": 44, "undo_ms_single_sample": 34, "physical_microphone": false},
+  "final_asr": {"status": "fail", "corpus": "synthetic_development", "passed": 5, "total": 9, "human_speakers": 0, "new_v4_command_coverage": false, "exit_code": 1},
+  "push": false,
+  "merge": false,
+  "production_restart": false,
+  "background_scheduler_enabled": false
+}
