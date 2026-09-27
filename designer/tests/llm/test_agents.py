@@ -146,3 +146,43 @@ def test_client_for_local_returns_llm_client_with_chosen_model():
 def test_client_for_unknown_task_raises():
     with pytest.raises(ValueError):
         agents.client_for("bogus")
+
+
+# ---------- адрес сервера и модели с экрана настроек ----------
+
+def test_saved_server_url_goes_to_container_host_and_overrides_env(monkeypatch):
+    monkeypatch.setattr(agents, "_in_docker", lambda: True)
+    monkeypatch.setattr(agents, "server_kind", lambda url: "ollama")
+
+    shown = agents.save_model_settings({"llm_url": "http://127.0.0.1:11434/v1/"})
+
+    assert shown["llm_url"] == "http://127.0.0.1:11434/v1"
+    assert shown["server"] == "ollama"
+    assert agents.load_settings().llm_url == "http://host.docker.internal:11434/v1"
+
+
+def test_saved_server_url_rejects_non_http():
+    with pytest.raises(ValueError):
+        agents.save_model_settings({"llm_url": "file:///etc/passwd"})
+
+
+def test_new_local_model_takes_local_tasks_and_keeps_cli(monkeypatch):
+    monkeypatch.setattr(agents, "server_kind", lambda url: "lmstudio")
+    agents.save_assignments({"deck": "local:qwen/qwen3.8-27b", "live": "cli:claude", "describe": "local:qwen/qwen3.8-27b"})
+
+    agents.save_model_settings({"llm_model": "voicedeck-qwen3.8"})
+
+    assert agents.load_assignments() == {"deck": "local:voicedeck-qwen3.8", "live": "cli:claude",
+                                         "describe": "local:voicedeck-qwen3.8"}
+    assert agents.load_settings().llm_model == "voicedeck-qwen3.8"
+
+
+def test_cli_model_reaches_bridge_client_and_empty_value_clears_it(monkeypatch):
+    monkeypatch.setattr(agents, "server_kind", lambda url: "lmstudio")
+    agents.save_assignments({"deck": "cli:claude"})
+
+    agents.save_model_settings({"cli_models": {"claude": "sonnet"}})
+    assert agents.client_for("deck").model == "sonnet"
+
+    agents.save_model_settings({"cli_models": {"claude": ""}})
+    assert agents.client_for("deck").model == "cli:claude"

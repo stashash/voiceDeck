@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import httpx
 from designer import store
 from designer.llm.bridge import BRIDGE_URL_ENV, DEFAULT_BRIDGE_URL, BridgeClient
 from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
-from designer.settings import load_settings
+from designer.settings import SAVED_MODELS_REL, load_settings, read_saved_models
 from designer.store import data_dir
 
 _TASKS = ("deck", "live", "describe")
@@ -94,7 +95,8 @@ def check_agent(agent_id: str) -> dict:
     if kind != "cli":
         return _check_local(name)
     try:
-        response = _bridge_post(f"/agents/{name}/check", {}, timeout=35.0)
+        model = cli_model(name)
+        response = _bridge_post(f"/agents/{name}/check", {"model": model} if model else {}, timeout=35.0)
     except httpx.HTTPError as error:
         return {"ok": False, "images": None, "seconds": 0.0, "message": f"мост недоступен: {error}"}
     if response.status_code >= 400:
@@ -157,6 +159,81 @@ def client_for(task: str):
     agent_id = load_assignments()[task]
     kind, _, name = agent_id.partition(":")
     if kind == "cli":
-        return BridgeClient(agent=name)
+        return BridgeClient(agent=name, model=cli_model(name))
     settings = load_settings()
     return LlmClient(settings.llm_url, name or settings.llm_model)
+
+
+# ---------- адрес сервера и модели с экрана настроек ----------
+
+def _saved() -> dict:
+    return read_saved_models(data_dir())
+
+
+def cli_model(agent: str) -> str | None:
+    """Модель CLI-агента, заданная на экране настроек; None значит модель по умолчанию у самого CLI."""
+    return (_saved().get("cli_models") or {}).get(agent) or None
+
+
+def _in_docker() -> bool:
+    return Path("/.dockerenv").exists()
+
+
+def _container_url(url: str) -> str:
+    """Браузер и человек видят сервер модели на 127.0.0.1, контейнер ходит к хосту через host.docker.internal."""
+    if not _in_docker():
+        return url
+    return re.sub(r"//(localhost|127\.0\.0\.1)([:/]|$)", r"//host.docker.internal\2", url)
+
+
+def _shown_url(url: str) -> str:
+    return url.replace("//host.docker.internal", "//127.0.0.1")
+
+
+def server_kind(llm_url: str) -> str:
+    """ollama | lmstudio | api: Ollama отвечает на /api/version, LM Studio по умолчанию слушает порт 1234."""
+    base = re.sub(r"/v1/?$", "", llm_url.rstrip("/"))
+    try:
+        response = httpx.Client(timeout=2.0).get(f"{base}/api/version")
+        if response.status_code == 200 and "version" in response.json():
+            return "ollama"
+    except (httpx.HTTPError, ValueError):
+        pass
+    return "lmstudio" if ":1234" in llm_url else "api"
+
+
+def load_model_settings() -> dict:
+    settings = load_settings()
+    saved = _saved()
+    return {
+        "llm_url": saved.get("llm_url_shown") or _shown_url(settings.llm_url),
+        "llm_model": settings.llm_model,
+        "server": server_kind(settings.llm_url),
+        "cli_models": saved.get("cli_models") or {},
+    }
+
+
+def save_model_settings(payload: dict) -> dict:
+    """Сохраняет адрес сервера, модель и модели CLI. Новая модель забирает задачи, назначенные локальной модели."""
+    saved = _saved()
+    url = (payload.get("llm_url") or "").strip().rstrip("/")
+    if url:
+        if not re.match(r"^https?://[^\s/]+", url):
+            raise ValueError("адрес сервера модели начинается с http:// или https://")
+        saved["llm_url_shown"] = url
+        saved["llm_url"] = _container_url(url)
+    model = (payload.get("llm_model") or "").strip()
+    if model:
+        saved["llm_model"] = model
+        assignments = load_assignments()
+        save_assignments({task: f"local:{model}" for task, agent in assignments.items() if agent.startswith("local:")})
+    for agent, value in (payload.get("cli_models") or {}).items():
+        models = saved.setdefault("cli_models", {})
+        if value and value.strip():
+            models[agent] = value.strip()
+        else:
+            models.pop(agent, None)
+    path = data_dir() / SAVED_MODELS_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text_atomic(path, json.dumps(saved, ensure_ascii=False, indent=2))
+    return load_model_settings()

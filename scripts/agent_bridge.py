@@ -29,7 +29,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -226,18 +228,27 @@ def _run_agent(agent: Agent, exe: str, system: str, user: str, model: str | None
         return text, seconds
 
 
+_VERSION_TTL_S = 600.0
+_versions: dict[str, tuple[float, str | None]] = {}
+
+
+def _cached_version(exe: str) -> str | None:
+    """Версия CLI живёт 10 минут: под нагрузкой четыре запуска `--version` подряд не укладывались
+    в 5 с, которые designer ждёт список, и экран настроек показывал «CLI-агенты не найдены»."""
+    hit = _versions.get(exe)
+    if hit and time.monotonic() - hit[0] < _VERSION_TTL_S:
+        return hit[1]
+    version = _version(exe)
+    _versions[exe] = (time.monotonic(), version)
+    return version
+
+
 def _handle_list() -> dict:
-    items = []
-    for agent in AGENTS:
-        exe = shutil.which(agent.id)
-        items.append({
-            "id": agent.id,
-            "name": agent.name,
-            "version": _version(exe) if exe else None,
-            "found": exe is not None,
-            "path": exe,
-        })
-    return {"items": items}
+    found = [(agent, shutil.which(agent.id)) for agent in AGENTS]
+    with ThreadPoolExecutor(max_workers=len(found)) as pool:
+        versions = list(pool.map(lambda pair: _cached_version(pair[1]) if pair[1] else None, found))
+    return {"items": [{"id": agent.id, "name": agent.name, "version": version, "found": exe is not None, "path": exe}
+                      for (agent, exe), version in zip(found, versions)]}
 
 
 def _handle_check(agent: Agent, body: dict) -> dict:
@@ -332,6 +343,8 @@ def main() -> None:
     args = parser.parse_args()
 
     server = create_server(args.host, args.port)
+    # Версии CLI опрашиваются сразу: первый же экран настроек получает список без ожидания.
+    threading.Thread(target=_handle_list, daemon=True).start()
     print(f"мост агентов слушает http://{args.host}:{server.server_port}", flush=True)
     try:
         server.serve_forever()

@@ -1,7 +1,7 @@
 import pytest
 
-from designer.contracts import RepeatGroup, RepeatUnit
-from designer.layout.units import map_shape_box, place_units
+from designer.contracts import DecorShape, Pattern, RepeatGroup, RepeatUnit, SlideKind
+from designer.layout.units import attach_unit_decor, keeps_aspect, map_shape_box, place_units
 
 
 def _group(direction, cols, rows, count, max_units, step=(0.30, 0.32), size=(0.28, 0.30)):
@@ -54,3 +54,50 @@ def test_map_shape_box_scales_text_keeps_icon():
     icon = map_shape_box(old, new, (0.05, 0.26, 0.02, 0.04), keep_size=True)
     assert round(text[2], 3) == 0.36 and round(text[0], 3) == 0.06
     assert icon[2] == 0.02
+
+
+def test_circle_in_wider_unit_stays_a_circle():
+    # Блоков стало меньше, блок шире: кружок с номером не тянется в овал, центр едет вместе с блоком.
+    old, new = (0.03, 0.24, 0.28, 0.30), (0.03, 0.24, 0.42, 0.30)
+    circle = (0.05, 0.26, 0.05, 0.05 * 16 / 9)
+    assert keeps_aspect(old, circle, 16 / 9)
+    box = map_shape_box(old, new, circle, keep_aspect=True)
+    assert box[2] == pytest.approx(circle[2]) and box[3] == pytest.approx(circle[3])
+    assert box[0] + box[2] / 2 == pytest.approx(0.03 + (0.075 - 0.03) * 1.5)
+
+
+def test_card_background_still_stretches():
+    old = (0.03, 0.24, 0.28, 0.30 * 16 / 9 * 0.28 / 0.30)
+    assert not keeps_aspect(old, old, 16 / 9), "подложка на весь блок тянется вместе с блоком"
+
+
+def _pattern_with_row_decor():
+    group = _group("row", 3, 1, 3, 4, size=(0.28, 0.20))
+    decor = [DecorShape(shape_id=100 + i, box=(0.08 + i * 0.30, 0.12, 0.05, 0.09)) for i in range(3)]
+    decor.append(DecorShape(shape_id=200, box=(0.0, 0.0, 1.0, 0.08)))
+    return Pattern(id="p", source_slide=1, layout_name="l", kind=SlideKind.cards, kind_confidence=1, theme="light",
+                   groups=[group], decor_shape_ids=[d.shape_id for d in decor], decor=decor)
+
+
+def test_decor_one_per_unit_moves_with_its_unit():
+    pattern = attach_unit_decor(_pattern_with_row_decor())
+    assert [u.shape_ids for u in pattern.groups[0].units] == [[0, 100], [1, 101], [2, 102]]
+    assert pattern.decor_shape_ids == [200], "полоса на всю ширину остаётся оформлением слайда"
+    assert attach_unit_decor(pattern) == pattern
+
+
+def test_decor_not_one_per_unit_stays():
+    pattern = _pattern_with_row_decor()
+    pattern = pattern.model_copy(update={"decor": pattern.decor[:2] + pattern.decor[3:]})
+    assert attach_unit_decor(pattern).groups[0].units[0].shape_ids == [0]
+
+
+def test_figure_around_icon_moves_with_its_unit():
+    # Цветная фигура, внутри которой стоит значок блока, едет вместе с блоком и не тянется в овал.
+    group = _group("row", 3, 1, 3, 6, step=(0.305, 0.0), size=(0.037, 0.066))
+    figures = [DecorShape(shape_id=100 + i, box=(0.02 + i * 0.305, 0.21, 0.071, 0.126)) for i in range(3)]
+    pattern = Pattern(id="p", source_slide=1, layout_name="l", kind=SlideKind.cards, kind_confidence=1, theme="light",
+                      groups=[group], decor_shape_ids=[f.shape_id for f in figures], decor=figures)
+    attached = attach_unit_decor(pattern)
+    assert [u.shape_ids for u in attached.groups[0].units] == [[0, 100], [1, 101], [2, 102]]
+    assert keeps_aspect(group.units[0].box, figures[0].box, 16 / 9), "фигура крупнее блока это не подложка"

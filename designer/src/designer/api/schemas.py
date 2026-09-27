@@ -68,11 +68,27 @@ class LiveSlideRequest(BaseModel):
     used_pattern_ids: list[str] = Field(default_factory=list)
 
 
+class LiveWarmRequest(BaseModel):
+    design_system_id: str
+
+
+class LiveBoundaryRequest(BaseModel):
+    thought: str = Field(min_length=1, max_length=16000, description="текст текущего слайда: мысль докладчика до сих пор")
+    next_sentence: str = Field(min_length=1, max_length=4000, description="следующее распознанное предложение")
+
+
+class LiveBoundaryResponse(BaseModel):
+    new_thought: bool
+    timings: dict[str, int] = Field(default_factory=dict, description="время ответа модели и ожидания, мс")
+
+
 class LiveSlideResponse(BaseModel):
     scene: Scene
     html: str
     image_png_base64: str | None = Field(default=None,
                                           description="картинка слайда; None, если движка конвертации нет")
+    timings: dict[str, int] = Field(default_factory=dict,
+                                     description="время этапов слайда, мс: модель, картинка, всего, запросов к модели в работе")
 
 
 class HealthResponse(BaseModel):
@@ -162,3 +178,10 @@ class AgentAssignmentsRequest(BaseModel):
     deck: str | None = None
     live: str | None = None
     describe: str | None = None
+
+
+class ModelSettingsRequest(BaseModel):
+    """Экран «Агенты и модели»: адрес сервера модели, модель по умолчанию, модели CLI-агентов."""
+    llm_url: str | None = Field(default=None, max_length=500)
+    llm_model: str | None = Field(default=None, max_length=200)
+    cli_models: dict[str, str] | None = None

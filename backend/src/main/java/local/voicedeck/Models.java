@@ -165,6 +165,9 @@ public final class Models implements AutoCloseable {
     public double dispersionMultiplier(){return config.getDouble("dispersionMultiplier",1.6);}
     // T4-exp: delay before the confirmer may freeze a provisional chunk (was hardcoded 2000ms).
     public int confirmerDelayMs(){return config.getInteger("confirmerDelayMs",2000);}
+    // Сколько слайдов Live модель собирает одновременно: по одному свежая мысль ждала 5 с в очереди.
+    // Вместе с вопросом о границе мысли это 3 запроса из 4 слотов LM Studio (start-models.ps1 --parallel 4).
+    public int liveSlideParallel(){return Math.max(1,config.getInteger("liveSlideParallel",2));}
     public void close() throws Exception {
         if(partial!=null)call(partial,"release");if(finals!=null&&finals!=partial)call(finals,"release");
         if(frida!=null)frida.close();if(tokenizer!=null)tokenizer.close();

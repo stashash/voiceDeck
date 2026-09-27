@@ -1,0 +1,29 @@
+{
+  "run_id": "e5207eeec7ad4298a7b39ea0ff373430",
+  "started_at": "2026-09-27T08:01:45.633417+00:00",
+  "model": "qwen/qwen3.8-27b",
+  "design_system_id": "shablon-prezentacii-vk-education",
+  "skills": [
+    {
+      "name": "plan-deck",
+      "version": "5",
+      "sha256": "7d0957afdd93ff7608f02edd90107106f702f6212ec0c75caf24d057128c345f"
+    },
+    {
+      "name": "fill-slots",
+      "version": "2",
+      "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+    }
+  ],
+  "timings_ms": {
+    "plan": 85401,
+    "a-fill-slots": 10895,
+    "a-export-pptx": 817,
+    "a-convert": 2498,
+    "a-render-slides": 1193,
+    "a-audit": 1,
+    "a-export-html": 30,
+    "a-audit-contextual": 60257
+  },
+  "axis": "как в шаблоне: план как есть, паттерн подбирается по точному числу блоков"
+}

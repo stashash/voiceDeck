@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { RotateCw, TerminalSquare, Boxes } from 'lucide-react';
 import {
-  AgentAssignments, AgentCheckResult, AgentInfo,
-  checkAgent, getAgentAssignments, listAgents, setAgentAssignments,
+  AgentAssignments, AgentCheckResult, AgentInfo, ModelSettings,
+  checkAgent, getAgentAssignments, getModelSettings, listAgents, setAgentAssignments, setModelSettings, errorText
 } from '../designer/api';
 import { agentOptionName } from '../designer/agentName';
 
 type Tab = 'cli' | 'local';
+const SERVER_NAME: Record<ModelSettings['server'], string> = { lmstudio: 'LM Studio', ollama: 'Ollama', api: 'Сервер модели' };
 const ASSIGNMENT_ROWS: [keyof AgentAssignments, string][] = [
   ['deck', 'Презентации'], ['live', 'Live-режим'], ['describe', 'Описание образцов дизайн-системы'],
 ];
@@ -24,10 +25,22 @@ export default function SettingsPage() {
   const [assignments, setAssignments] = useState<AgentAssignments | null>(null);
   const [checks, setChecks] = useState<Record<string, AgentCheckResult | 'busy'>>({});
   const [error, setError] = useState('');
+  const [models, setModels] = useState<ModelSettings | null>(null);
+  const [urlDraft, setUrlDraft] = useState('');
 
   function reload() {
-    listAgents().then(setAgents).catch(e => setError(String(e)));
+    listAgents().then(setAgents).catch(e => setError(errorText(e)));
     getAgentAssignments().then(setAssignments).catch(() => {});
+    getModelSettings().then(m => { setModels(m); setUrlDraft(m.llm_url); }).catch(() => {});
+  }
+
+  // Сервис отвечает сохранёнными настройками; после смены сервера или модели список агентов и роли перечитываются.
+  function saveModels(change: Partial<Omit<ModelSettings, 'server'>>) {
+    setModelSettings(change).then(m => { setModels(m); setUrlDraft(m.llm_url); reload(); }).catch(e => setError(errorText(e)));
+  }
+  function saveUrl() {
+    const next = urlDraft.trim();
+    if (models && next && next !== models.llm_url) saveModels({ llm_url: next });
   }
   useEffect(reload, []);
 
@@ -37,19 +50,23 @@ export default function SettingsPage() {
   async function runCheck(id: string) {
     setChecks(prev => ({ ...prev, [id]: 'busy' }));
     try { const result = await checkAgent(id); setChecks(prev => ({ ...prev, [id]: result })); }
-    catch (e) { setChecks(prev => ({ ...prev, [id]: { ok: false, images: null, seconds: 0, message: String(e) } })); }
+    catch (e) { setChecks(prev => ({ ...prev, [id]: { ok: false, images: null, seconds: 0, message: errorText(e) } })); }
   }
 
   function assign(task: keyof AgentAssignments, agentId: string) {
     if (!assignments) return;
     const next = { ...assignments, [task]: agentId };
     setAssignments(next);
-    setAgentAssignments(next).catch(e => setError(String(e)));
+    setAgentAssignments(next).catch(e => setError(errorText(e)));
   }
 
   return <main className="settings-shell">
     <h1 style={{ fontSize: 28, fontWeight: 600 }}>Агенты и модели</h1>
-    {error && <div className="notice" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+    {error && <div className="notice" role="alert">{error}
+      <span style={{ display: 'flex', gap: 8 }}>
+        <button type="button" onClick={() => { setError(''); reload(); }} aria-label="Повторить" title="Повторить запрос"><RotateCw size={16} strokeWidth={1.5}/></button>
+        <button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button>
+      </span></div>}
     <div role="tablist" className="settings-tabs">
       <button type="button" role="tab" aria-selected={tab === 'cli'} className={`settings-tab ${tab === 'cli' ? 'active' : ''}`} onClick={() => setTab('cli')}>Локальный CLI</button>
       <button type="button" role="tab" aria-selected={tab === 'local'} className={`settings-tab ${tab === 'local' ? 'active' : ''}`} onClick={() => setTab('local')}>Локальная модель</button>
@@ -78,7 +95,9 @@ export default function SettingsPage() {
             {st.text && <div className="agent-card-status-row"><span className={`agent-status ${st.tone}`}>{st.text}</span></div>}
             {a.found && <div className="agent-model-row">
               <label>Модель</label>
-              <input type="text" placeholder="модель по умолчанию в CLI" defaultValue={a.model ?? ''}/>
+              <input type="text" placeholder="модель по умолчанию в CLI" key={models?.cli_models[a.id.slice(4)] ?? ''}
+                defaultValue={models?.cli_models[a.id.slice(4)] ?? ''}
+                onBlur={e => { const value = e.target.value.trim(); if (models && value !== (models.cli_models[a.id.slice(4)] ?? '')) saveModels({ cli_models: { [a.id.slice(4)]: value } }); }}/>
             </div>}
           </div>;
         })}
@@ -90,7 +109,7 @@ export default function SettingsPage() {
         <div className="agent-card-head">
           <span className="agent-icon"><Boxes size={20} strokeWidth={1.5}/></span>
           <div className="agent-card-body">
-            <span className="agent-card-name">LM Studio</span>
+            <span className="agent-card-name">{models ? SERVER_NAME[models.server] : 'Сервер модели'}</span>
             <span className={`agent-status ${localAgents.length ? 'ok' : 'warn'}`}>{localAgents.length ? `Сервер отвечает, моделей: ${localAgents.length}` : 'Сервер недоступен'}</span>
           </div>
           <button type="button" className="button" disabled={!localAgents[0]} onClick={() => localAgents[0] && runCheck(localAgents[0].id)}>Проверить</button>
@@ -98,12 +117,13 @@ export default function SettingsPage() {
         <div className="local-grid">
           <div className="local-field">
             <label>Адрес сервера</label>
-            <input type="text" defaultValue="http://127.0.0.1:1234/v1"/>
+            <input type="text" value={urlDraft} onChange={e => setUrlDraft(e.target.value)} onBlur={saveUrl}
+              onKeyDown={e => { if (e.key === 'Enter') saveUrl(); }}/>
           </div>
           <div className="local-field">
             <label>Модель для текста и картинок</label>
-            <select disabled={!localAgents.length}>
-              {localAgents.map(a => <option key={a.id} value={a.id}>{agentOptionName(a)}</option>)}
+            <select disabled={!localAgents.length} value={models?.llm_model ?? ''} onChange={e => saveModels({ llm_model: e.target.value })}>
+              {localAgents.map(a => <option key={a.id} value={a.model ?? a.name}>{agentOptionName(a)}</option>)}
             </select>
           </div>
         </div>

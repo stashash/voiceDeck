@@ -24,6 +24,31 @@ def slide_html(png: bytes, scene: Scene, ds: DesignSystem) -> str:
     )
 
 
+def draft_html(background: bytes, scene: Scene, ds: DesignSystem, fonts_css: str = "") -> str:
+    """Черновик живого слайда: чистый фон макета картинкой и сказанный текст поверх видимым цветом шаблона.
+
+    Строится без модели за миллисекунды, чтобы слайд появился сразу после фразы. Слайд от модели
+    приходит следом и заменяет черновик.
+    """
+    default = "FFFFFF" if scene.theme == "dark" else _token_hex(ds, "text", "111111")
+    layer = "".join(
+        _text_layer_item(el, ds, color=(el.style.color if el.style and el.style.color else default))
+        for el in sorted(scene.elements, key=lambda e: e.z)
+        if el.type == "text" and el.text
+    )
+    section = (
+        f'<section class="slide active" id="slide-1" data-index="0" data-theme="{scene.theme}">'
+        f'<img class="slide-image" src="{_png_data_uri(background)}" alt="">'
+        f'<div class="layer">{layer}</div>'
+        "</section>"
+    )
+    return _document(title="Слайд", lang="ru", ds=ds, sections=section, extra_css=fonts_css)
+
+
+def _token_hex(ds: DesignSystem, role: str, fallback: str) -> str:
+    return next((color.hex for color in ds.tokens.colors if color.role == role), fallback)
+
+
 def render_deck_images(deck: Deck, ds: DesignSystem, pngs: list[bytes]) -> str:
     """Колода картинками слайдов с текстовым слоем: листание, полный экран и печать."""
     sections = "".join(
@@ -60,8 +85,10 @@ def _box_style(box: Box, z: int) -> str:
     return f"left:{x * 100:.4f}%;top:{y * 100:.4f}%;width:{w * 100:.4f}%;height:{h * 100:.4f}%;z-index:{z};"
 
 
-def _text_layer_item(el: Element, ds: DesignSystem) -> str:
+def _text_layer_item(el: Element, ds: DesignSystem, color: str | None = None) -> str:
     style = [_box_style(el.box, el.z + 1)]
+    if color:
+        style.append(f"color:#{color};")
     size_pt = _size_pt(el, ds)
     if size_pt:
         style.append(f"font-size:{size_pt / _slide_width_pt(ds) * 100:.4f}cqw;")
@@ -175,7 +202,7 @@ html, body {{ margin: 0; padding: 0; height: 100%; background: #1a1a1a; }}
 """
 
 
-def _document(title: str, lang: str, ds: DesignSystem, sections: str) -> str:
+def _document(title: str, lang: str, ds: DesignSystem, sections: str, extra_css: str = "") -> str:
     width_emu, height_emu = ds.slide_size_emu
     aspect = (width_emu / height_emu) if height_emu else 16 / 9
     return (
@@ -184,7 +211,7 @@ def _document(title: str, lang: str, ds: DesignSystem, sections: str) -> str:
         "<head>\n"
         '<meta charset="utf-8">\n'
         f"<title>{html.escape(title)}</title>\n"
-        f"<style>\n{_css(aspect)}\n</style>\n"
+        f"<style>\n{extra_css}\n{_css(aspect)}\n</style>\n"
         "</head>\n"
         "<body>\n"
         f'<main id="deck">\n{sections}\n</main>\n'

@@ -58,13 +58,16 @@ export class SessionEngine{
  }
  /** Последний фрагмент со слайдом, который ещё не стал текущим. */
  draft():Chunk|null{const l=this.latest();return l&&l.id!==this.currentId?l:null;}
+ /** В зал уходит самая свежая законченная мысль или та, что докладчик зафиксировал. Черновик следующей
+  *  мысли может прийти раньше, чем сервис подтвердит прежнюю: прежняя всё равно уходит в зал. */
  private settle(){
-  const l=this.latest();
-  if(!l||l.id===this.suppressed||l.id===this.currentId)return;
-  if(l.status==='confirmed'||l.id===this.fixedId){
-   this.history.push({id:this.currentId,slide:this.shown});
-   this.currentId=l.id;this.shown=this.state.slides[l.id]??null;
-  }
+  const withSlide=Object.values(this.state.chunks).filter(c=>this.state.slides[c.id]).sort((a,b)=>a.t0-b.t0);
+  const done=[...withSlide].reverse().find(c=>c.status==='confirmed'||c.id===this.fixedId);
+  if(!done||done.id===this.suppressed||done.id===this.currentId)return;
+  const current=this.currentId?this.state.chunks[this.currentId]:undefined;
+  if(current&&done.t0<current.t0)return; // сам зал к прошлой мысли не возвращается
+  this.history.push({id:this.currentId,slide:this.shown});
+  this.currentId=done.id;this.shown=this.state.slides[done.id]??null;
  }
  /** «Вернуть прошлый»: залу снова показывается слайд, который был текущим до этого. */
  revertPrevious(){

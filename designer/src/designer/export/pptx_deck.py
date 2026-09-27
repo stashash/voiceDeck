@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import io
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,11 +15,12 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
+from designer import icons
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
-from designer.layout.capacity import number_caption, split_number
-from designer.layout.units import map_shape_box, place_units
+from designer.layout.capacity import number_caption, split_number, unit_boxes
+from designer.layout.units import keeps_aspect, map_shape_box, place_units
 from designer.parse.package import SOURCE_NAME
 from designer.viz.pptx_native import add_chart, add_table
 
@@ -206,19 +208,33 @@ def _next_id(slide):
     return issue
 
 
+def _unit_box(item: _Placed, old_box: Box, new_box: Box, slide_size) -> Box:
+    """Та же геометрия, что у сцены: картинка размера не меняет, кружок остаётся кружком."""
+    keep = item.kind == KEEP_SIZE_KIND
+    aspect = not keep and keeps_aspect(old_box, item.box, slide_size[0] / slide_size[1])
+    return map_shape_box(old_box, new_box, item.box, keep_size=keep, keep_aspect=aspect)
+
+
 def _move_unit(placed, shape_ids, old_box: Box, new_box: Box, slide_size) -> None:
     for shape_id in shape_ids:
         item = _live(placed, shape_id)
         if item is None:
             continue
-        keep = item.kind == KEEP_SIZE_KIND
-        _set_box(item, map_shape_box(old_box, new_box, item.box, keep_size=keep), slide_size)
+        _set_box(item, _unit_box(item, old_box, new_box, slide_size), slide_size)
+
+
+def _layer(placed, shape_id: int) -> int:
+    item = placed.get(shape_id)
+    parent = item.element.getparent() if item is not None else None
+    return parent.index(item.element) if parent is not None else 1 << 30
 
 
 def _copy_unit(placed, shape_ids, unit_map, old_box: Box, new_box: Box, slide_size, issue) -> dict[str, int]:
-    """Новый блок копией фигур образца; возвращает своё соответствие слот -> фигура."""
+    """Новый блок копией фигур образца; возвращает своё соответствие слот -> фигура.
+
+    Фигуры копируются в порядке слоёв слайда: значок внутри цветной фигуры остаётся поверх неё."""
     copied: dict[int, int] = {}
-    for shape_id in shape_ids:
+    for shape_id in sorted(shape_ids, key=lambda sid: _layer(placed, sid)):
         item = _live(placed, shape_id)
         if item is None:
             continue
@@ -229,8 +245,7 @@ def _copy_unit(placed, shape_ids, unit_map, old_box: Box, new_box: Box, slide_si
         parent.append(element)
         new_id = _renumber(element, issue)
         fresh = _Placed(element=element, box=item.box, transform=item.transform, kind=item.kind)
-        keep = item.kind == KEEP_SIZE_KIND
-        _set_box(fresh, map_shape_box(old_box, new_box, item.box, keep_size=keep), slide_size)
+        _set_box(fresh, _unit_box(item, old_box, new_box, slide_size), slide_size)
         placed[new_id] = fresh
         copied[shape_id] = new_id
     return {slot_id: copied[shape_id] for slot_id, shape_id in unit_map.items() if shape_id in copied}
@@ -248,10 +263,12 @@ def _renumber(element, issue) -> int:
 
 def _fill_repeat_group(
     placed, group: RepeatGroup, unit_texts: list[dict[str, str]], count: int,
-    fitted_size_pt: dict[str, float], ds: DesignSystem, issue,
+    fitted_size_pt: dict[str, float], ds: DesignSystem, issue, boxes: list[Box] | None = None,
 ) -> None:
-    """Перекладывает и заполняет блоки одной группы на count блоков. Общая часть для главной и связанных групп."""
-    boxes = place_units(group, count)
+    """Перекладывает и заполняет блоки одной группы на count блоков. Общая часть для главной и связанных групп.
+
+    boxes: рамки блоков, если их задаёт главная группа (связанный ряд едет её преобразованием)."""
+    boxes = boxes or place_units(group, count)
     units = group.units
     kept = min(count, len(units))
     maps = [_unit_map(group, units[i], placed) for i in range(kept)]
@@ -282,13 +299,20 @@ def _fill_group(placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem, iss
     count = len(spec.unit_text)
     _fill_repeat_group(placed, group, spec.unit_text, count, spec.fitted_size_pt, ds, issue)
 
+    # Связанная группа и ряд значков рядом с пунктами перекладываются тем же числом блоков и тем же
+    # преобразованием, что главная (как в сцене, capacity.unit_boxes): значок стоит над своей подписью.
+    # Какие это группы, решила вёрстка (spec.linked_unit_text), экспорт исполняет буквально.
+    for linked_group, boxes in _linked_boxes(spec, pattern, group, count):
+        _fill_repeat_group(placed, linked_group, spec.linked_unit_text[linked_group.id], count,
+                           spec.fitted_size_pt, ds, issue, boxes)
+
+
+def _linked_boxes(spec: SlideSpec, pattern: Pattern, main: RepeatGroup, count: int) -> list[tuple[RepeatGroup, list[Box]]]:
     groups = {g.id: g for g in pattern.groups}
-    for linked_id in group.linked_group_ids:  # связанная группа перекладывается тем же числом блоков
-        linked_group = groups.get(linked_id)
-        unit_texts = spec.linked_unit_text.get(linked_id)
-        if linked_group is None or not linked_group.units or not unit_texts:
-            continue
-        _fill_repeat_group(placed, linked_group, unit_texts, count, spec.fitted_size_pt, ds, issue)
+    linked = [groups[g] for g, texts in spec.linked_unit_text.items()
+              if g in groups and g != main.id and groups[g].units and texts]
+    _, boxes = unit_boxes(main, linked, count)
+    return [(other, boxes[other.id]) for other in linked]
 
 
 def _content_box(pattern: Pattern, ds: DesignSystem) -> Box:
@@ -384,6 +408,58 @@ def _relayout_if_bare(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem
             break
 
 
+_SVG_BLIP_URI = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"
+
+
+def _set_unit_icons(slide, placed, spec: SlideSpec, pattern: Pattern) -> None:
+    """Картинка-значок каждого блока меняется на значок набора в цвете картинки образца: у пунктов свои значки."""
+    if not any(spec.unit_icons):
+        return
+    main = _group_of(pattern, spec.group_id)
+    if main is None:
+        return
+    count = len(spec.unit_text)
+    if not main.min_units <= count <= main.max_units:
+        return
+    for group, boxes in [(main, place_units(main, count)), *_linked_boxes(spec, pattern, main, count)]:
+        areas = [area for area in group.unit_areas if area.kind == "icon"]
+        if not areas:
+            continue
+        limit_w = max(area.box[2] for area in areas) * 1.5
+        limit_h = max(area.box[3] for area in areas) * 1.5
+        for index, unit in enumerate(boxes):
+            name = spec.unit_icons[index] if index < len(spec.unit_icons) else None
+            if not name:
+                continue
+            for item in placed.values():
+                if item.dropped or item.kind != KEEP_SIZE_KIND or item.box[2] > limit_w or item.box[3] > limit_h:
+                    continue
+                # Значок размера не меняет, а рамка блока при сжатии ряда бывает уже значка: ищем по большему.
+                cx, cy = item.box[0] + item.box[2] / 2, item.box[1] + item.box[3] / 2
+                width, height = max(unit[2], item.box[2]), max(unit[3], item.box[3])
+                if unit[0] <= cx <= unit[0] + width and unit[1] <= cy <= unit[1] + height:
+                    _replace_picture(slide, item, name)
+
+
+def _replace_picture(slide, item: _Placed, name: str) -> None:
+    blip = item.element.find(".//" + qn("a:blip"))
+    if blip is None:
+        return
+    old_rid = blip.get(qn("r:embed"))
+    color = None
+    if old_rid:
+        try:
+            color = icons.dominant_color(slide.part.related_part(old_rid).blob)
+        except KeyError:
+            color = None
+    _, new_rid = slide.part.get_or_add_image_part(io.BytesIO(icons.icon_png(name, color or "0077FF")))
+    blip.set(qn("r:embed"), new_rid)
+    # Картинка образца в svg: PowerPoint показал бы её вместо нового значка.
+    for ext in blip.findall(qn("a:extLst") + "/" + qn("a:ext")):
+        if ext.get("uri") == _SVG_BLIP_URI:
+            ext.getparent().remove(ext)
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
@@ -391,6 +467,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     _remove_shapes(placed, spec.remove_shape_ids)
     _fill_slots(placed, spec, pattern, ds.slide_size_emu)
     _fill_group(placed, spec, pattern, ds, issue)
+    _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
     _prune_groups(slide)
     if spec.notes:

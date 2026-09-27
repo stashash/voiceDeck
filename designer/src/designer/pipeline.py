@@ -25,7 +25,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from designer import store
@@ -36,7 +36,9 @@ from designer.audit.deterministic import run_checks
 from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideKind, SlideSpec
 from designer.export import convert, render
 from designer.export.html import render_deck
-from designer.export.html_image import render_deck_images, slide_html
+from designer.export.html import _font_faces
+from designer.plan.numerals import digits_from_speech
+from designer.export.html_image import draft_html, render_deck_images, slide_html
 from designer.export.pptx_deck import export_pptx
 from designer.layout import variants as variant_axes
 from designer.layout.capacity import main_group, slot_limits, unit_count
@@ -483,20 +485,31 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
 
     specs: list[SlideSpec] = []
     scenes: list[Scene] = []
-    can_render = bool(convert.available())
-    slides_dir = store.deck_variant_slides_dir(deck_id, variant_code) if can_render else None
-    for index, (intent, pattern) in enumerate(zip(filled, patterns), start=1):
+    for intent, pattern in zip(filled, patterns):
         spec = compose(intent, pattern, ds)
         specs.append(spec)
         scenes.append(build_scene(spec, pattern, ds, package_dir))
-        if slides_dir is not None:
-            # Картинка слайда сразу после компоновки (по брифу): лента считает готовые
-            # слайды по ней, не дожидаясь общего экспорта pptx ниже.
-            try:
-                png = render.render_spec(spec, ds, package_dir)
-            except convert.ConverterUnavailable:
-                continue
-            (slides_dir / f"slide-{index:03d}.png").write_bytes(png)
+
+    # pptx, pdf и картинки слайдов снимаются один раз по готовому файлу, до аудита: лента на экране
+    # считает готовые слайды по событиям slide-image. Раньше движок запускался отдельно на каждый
+    # слайд (1–1,5 с на слайд) и ещё раз на pdf, и колода выходила за 5 минут.
+    files_dir = store.deck_variant_files_dir(deck_id, variant_code)
+    pptx_path = files_dir / "deck.pptx"
+    with recorder.stage(f"{variant_code}-export-pptx"):
+        export_pptx(specs, ds, package_dir, pptx_path)
+    can_render = bool(convert.available())
+    pdf_path: Path | None = None
+    png_paths: list[Path] = []
+    if can_render:
+        try:
+            with recorder.stage(f"{variant_code}-convert"):
+                convert.to_pdf(pptx_path, files_dir / "deck.pdf")
+            pdf_path = files_dir / "deck.pdf"
+        except convert.ConverterUnavailable:
+            _emit(on_event, "convert-failed", None, variant_code)
+        with recorder.stage(f"{variant_code}-render-slides"):
+            png_paths = _save_slide_images(deck_id, variant_code, pptx_path, len(specs), on_event, pdf_path)
+        for index in range(1, len(png_paths) + 1):
             _emit(on_event, "slide-image", index, variant_code)
 
     _emit(on_event, "audit", None, variant_code)
@@ -506,12 +519,7 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     deck = Deck(id=deck_id, design_system_id=ds_id, variant=variant_code,
                 plan=variant_plan, specs=specs, scenes=scenes)
 
-    files_dir = store.deck_variant_files_dir(deck_id, variant_code)
-    pptx_path = files_dir / "deck.pptx"
     _emit(on_event, "export-pptx", None, variant_code)
-    with recorder.stage(f"{variant_code}-export-pptx"):
-        export_pptx(specs, ds, package_dir, pptx_path)
-
     _emit(on_event, "export-html", None, variant_code)
     with recorder.stage(f"{variant_code}-export-html"):
         markup_html = render_deck(deck, ds, package_dir)
@@ -519,22 +527,14 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     (files_dir / "deck.markup.html").write_text(markup_html, encoding="utf-8")
     (files_dir / "deck.html").write_text(markup_html, encoding="utf-8")
 
-    _emit(on_event, "convert", None, variant_code)
-    png_paths: list[Path] = []
-    if convert.available():
-        try:
-            with recorder.stage(f"{variant_code}-convert"):
-                convert.to_pdf(pptx_path, files_dir / "deck.pdf")
-        except convert.ConverterUnavailable:
-            _emit(on_event, "convert-failed", None, variant_code)
-
+    if can_render:
+        _emit(on_event, "convert", None, variant_code)
         _emit(on_event, "render-slides", None, variant_code)
-        with recorder.stage(f"{variant_code}-render-slides"):
-            png_paths = _save_slide_images(deck_id, variant_code, pptx_path, len(specs), on_event)
         if png_paths:
             html_text = render_deck_images(deck, ds, [path.read_bytes() for path in png_paths])
             (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
     else:
+        _emit(on_event, "convert", None, variant_code)
         _emit(on_event, "slide-images-skipped", None, variant_code)
 
     if png_paths and with_contextual_audit:
@@ -547,10 +547,13 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
 
 
 def _save_slide_images(deck_id: str, variant: str, pptx_path: Path, count: int,
-                        on_event: OnEvent) -> list[Path]:
-    """Картинки слайдов варианта в хранилище. Пусто, если движок не смог их снять."""
+                        on_event: OnEvent, pdf_path: Path | None = None) -> list[Path]:
+    """Картинки слайдов варианта в хранилище. Пусто, если движок не смог их снять.
+
+    pdf_path: pdf этого же pptx, уже снятый движком; картинки берутся из него без второго запуска."""
     try:
-        pngs = render.render_slides(pptx_path, count)
+        pngs = render.render_slides(pptx_path, count, pdf_path=pdf_path) if pdf_path else \
+            render.render_slides(pptx_path, count)
     except convert.ConverterUnavailable:
         _emit(on_event, "slide-images-failed", None, variant)
         return []
@@ -631,10 +634,11 @@ def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text
         scene, png_path = job
         return audit_slide(scene, png_path.read_bytes(), source_text, client)
 
+    # Запросы с картинкой идут строго по одному, как при описании образцов: в несколько потоков сервер
+    # модели отвечает на ту же картинку иначе (замер 22.09: needs_images true на одном потоке, false на четырёх).
     findings: list[Finding] = []
-    with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
-        for found in pool.map(_one, list(zip(scenes, png_paths))):
-            findings.extend(found)
+    for job in zip(scenes, png_paths):
+        findings.extend(_one(job))
     findings.extend(audit_deck(scenes, client))
     return findings
 
@@ -725,10 +729,11 @@ def apply_fixes(deck_id: str, variant: str, finding_ids: list[str]) -> tuple[lis
 
 @dataclass(frozen=True)
 class LiveSlide:
-    """Слайд живого режима: сцена, её HTML и картинка слайда (None, если движка нет)."""
+    """Слайд живого режима: сцена, её HTML, картинка слайда (None, если движка нет) и время этапов, мс."""
     scene: Scene
     html: str
     png: bytes | None = None
+    timings: dict[str, int] = field(default_factory=dict)
 
 
 def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
@@ -746,6 +751,8 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
 
     owns_client = client is None
     client = client or _client_for("live")
+    started = time.monotonic()
+    calls_before = len(getattr(client, "call_durations_ms", []))
     try:
         # «other» это метка разбора для нераспознанного образца, а не тип содержания:
         # выбранный моделью, он уводил слайд на схему процесса с пустыми блоками.
@@ -755,6 +762,7 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
         intent = speech_to_slide(chunk_text, kinds, client)
         if not intent.title:
             return None
+        model_ms = sum(getattr(client, "call_durations_ms", [])[calls_before:])
         pattern = choose_pattern(intent, ds, used_pattern_ids)
         spec = compose(intent, pattern, ds)
         scene = build_scene(spec, pattern, ds, package_dir)
@@ -762,13 +770,68 @@ def live_slide(ds_id: str, chunk_text: str, used_pattern_ids: list[str], *,
         if owns_client:
             client.close()
 
+    image_started = time.monotonic()
     png = _live_png(spec, ds, package_dir)
+    timings = {"model_ms": model_ms, "image_ms": int((time.monotonic() - image_started) * 1000),
+               "total_ms": int((time.monotonic() - started) * 1000)}
     if png is None:
         # Движка нет: на сцену идёт прежний вид чистой разметкой.
         solo = Deck(id="live", design_system_id=ds_id, variant="a",
                     plan=DeckPlan(title="", purpose="", slides=[]), specs=[spec], scenes=[scene])
+        return LiveSlide(scene=scene, html=render_deck(solo, ds, package_dir), timings=timings)
+    return LiveSlide(scene=scene, html=slide_html(png, scene, ds), png=png, timings=timings)
+
+
+def _draft_parts(ds_id: str, chunk_text: str):
+    """Сцена черновика: сказанная фраза заголовком на титульном образце, без модели."""
+    ds_id = ds_id or store.latest_design_system_id() or ""
+    if not ds_id:
+        raise LookupError("шаблон не загружен: загрузите pptx на экране «Шаблон»")
+    package_dir = store.design_system_dir(ds_id)
+    ds = load_package(package_dir)
+    text = " ".join(digits_from_speech(chunk_text).split())
+    if len(text) > _DRAFT_CHARS:
+        text = text[:_DRAFT_CHARS].rsplit(" ", 1)[0] + "…"
+    intent = SlideIntent(id="draft", kind=SlideKind.title, title=text)
+    pattern = choose_pattern(intent, ds, [])
+    return ds, package_dir, intent, pattern
+
+
+_DRAFT_CHARS = 140
+
+
+def _draft_background(intent: SlideIntent, pattern, ds: DesignSystem, package_dir: Path) -> bytes | None:
+    """Чистый фон образца без текста: один раз через движок, дальше из кеша render_spec."""
+    if not convert.available():
+        return None
+    empty = compose(intent.model_copy(update={"title": " "}), pattern, ds)
+    try:
+        return render.render_spec(empty, ds, package_dir)
+    except convert.ConverterUnavailable:
+        return None
+
+
+def live_draft(ds_id: str, chunk_text: str) -> LiveSlide:
+    """Черновик слайда сразу после фразы: чистый фон образца и сказанный текст поверх, без модели.
+
+    Живой слайд от модели идёт 3–4 с (модель 2,5 с, картинка 1,5 с); черновик — миллисекунды, если фон
+    образца уже в кеше (его греет live_warm при выборе дизайн-системы).
+    """
+    ds, package_dir, intent, pattern = _draft_parts(ds_id, chunk_text)
+    spec = compose(intent, pattern, ds)
+    scene = build_scene(spec, pattern, ds, package_dir)
+    background = _draft_background(intent, pattern, ds, package_dir)
+    if background is None:
+        solo = Deck(id="live", design_system_id="live", variant="a",
+                    plan=DeckPlan(title="", purpose="", slides=[]), specs=[spec], scenes=[scene])
         return LiveSlide(scene=scene, html=render_deck(solo, ds, package_dir))
-    return LiveSlide(scene=scene, html=slide_html(png, scene, ds), png=png)
+    return LiveSlide(scene=scene, html=draft_html(background, scene, ds, _font_faces(ds, package_dir)))
+
+
+def live_warm(ds_id: str) -> None:
+    """Готовит фон черновика заранее, чтобы первый слайд Live не ждал движок картинок."""
+    ds, package_dir, intent, pattern = _draft_parts(ds_id, "Черновик")
+    _draft_background(intent, pattern, ds, package_dir)
 
 
 def _live_png(spec: SlideSpec, ds: DesignSystem, package_dir: Path) -> bytes | None:

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import NamedTuple
 
 from designer.contracts import Box, DesignSystem, Element, Finding, Pattern, RepeatGroup, Scene
-from designer.layout.units import map_shape_box, place_units
+from designer.layout.units import keeps_aspect, map_shape_box, place_units
 
 CheckFunc = Callable[[list[Scene], DesignSystem], list[Finding]]
 
@@ -58,7 +58,7 @@ def _box_close(a: Box, b: Box, tol: float) -> bool:
 _KEEP_SIZE_AREAS = ("image", "icon")
 
 
-def _group_frames(group: RepeatGroup) -> dict[int, list[Box]]:
+def _group_frames(group: RepeatGroup, slide_ratio: float = 16 / 9) -> dict[int, list[Box]]:
     """Рамки слотов и мест блока при любом числе блоков от min_units до max_units.
 
     Та же геометрия, что при сборке сцены (`layout.scene`, `layout.capacity.unit_boxes`):
@@ -79,17 +79,21 @@ def _group_frames(group: RepeatGroup) -> dict[int, list[Box]]:
                 absolute = (old_unit[0] + sx, old_unit[1] + sy, sw, sh)
                 box = map_shape_box(old_unit, new_unit, absolute)
                 frames.setdefault(slot.shape_id, []).append(box)
+                if keeps_aspect(old_unit, absolute, slide_ratio):  # кружок с номером не тянется в овал
+                    frames[slot.shape_id].append(map_shape_box(old_unit, new_unit, absolute, keep_aspect=True))
             for area in group.unit_areas:
                 if area.shape_id is None:
                     continue
                 ax, ay, aw, ah = area.box
                 absolute = (old_unit[0] + ax, old_unit[1] + ay, aw, ah)
-                box = map_shape_box(old_unit, new_unit, absolute, keep_size=area.kind in _KEEP_SIZE_AREAS)
+                keep = area.kind in _KEEP_SIZE_AREAS
+                aspect = not keep and keeps_aspect(old_unit, absolute, slide_ratio)
+                box = map_shape_box(old_unit, new_unit, absolute, keep_size=keep, keep_aspect=aspect)
                 frames.setdefault(area.shape_id, []).append(box)
     return frames
 
 
-def template_frames(pattern: Pattern) -> dict[int, list[Box]]:
+def template_frames(pattern: Pattern, slide_ratio: float = 16 / 9) -> dict[int, list[Box]]:
     """Рамки, куда шаблон поставил свои слоты, картинки и фигуры оформления.
 
     Ключ — id исходной фигуры (shape_id). Для повторяющихся блоков (карточки,
@@ -109,7 +113,7 @@ def template_frames(pattern: Pattern) -> dict[int, list[Box]]:
     for decor in pattern.decor:
         add(decor.shape_id, decor.box)
     for group in pattern.groups:
-        for shape_id, boxes in _group_frames(group).items():
+        for shape_id, boxes in _group_frames(group, slide_ratio).items():
             frames.setdefault(shape_id, []).extend(boxes)
     return frames
 

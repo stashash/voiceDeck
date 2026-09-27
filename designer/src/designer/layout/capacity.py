@@ -418,6 +418,41 @@ def linked_groups(pattern: Pattern, group: RepeatGroup | None) -> list[RepeatGro
     return [by_id[gid] for gid in group.linked_group_ids if gid in by_id and gid != group.id]
 
 
+def companion_icon_groups(pattern: Pattern, group: RepeatGroup | None) -> list[RepeatGroup]:
+    """Ряд значков без текста рядом с рядом пунктов: он повторяется вместе с пунктами, а не убирается.
+
+    Разбор не связывает такие ряды, когда блоков в них разное число (три значка над двумя подписями
+    и отдельным полем). Без этой связи вёрстка убирала значки как незаполненную группу, и у пунктов
+    не оставалось ни одного значка.
+    """
+    if group is None or group.direction not in ("row", "column"):
+        return []
+    axis = 0 if group.direction == "row" else 1
+    cross = 1 - axis
+    start = min(u.box[axis] for u in group.units)
+    end = max(u.box[axis] + u.box[axis + 2] for u in group.units)
+    low = min(u.box[cross] for u in group.units)
+    high = max(u.box[cross] + u.box[cross + 2] for u in group.units)
+    size = group.unit_size[cross]
+    out = []
+    for other in pattern.groups:
+        if other.id == group.id or other.id in group.linked_group_ids or other.unit_slots:
+            continue
+        if other.direction != group.direction or not other.unit_areas:
+            continue
+        if any(area.kind not in ("icon", "image") for area in other.unit_areas):
+            continue
+        o_start = min(u.box[axis] for u in other.units)
+        o_end = max(u.box[axis] + u.box[axis + 2] for u in other.units)
+        overlap = min(end, o_end) - max(start, o_start)
+        o_low = min(u.box[cross] for u in other.units)
+        o_high = max(u.box[cross] + u.box[cross + 2] for u in other.units)
+        near = o_high >= low - 1.5 * size and o_low <= high + 1.5 * size
+        if near and overlap >= 0.5 * min(end - start, o_end - o_start):
+            out.append(other)
+    return out
+
+
 def unit_text_slots(group: RepeatGroup, linked: list[RepeatGroup] | None = None) -> list:
     """Слоты блока под слова пункта: номер несёт цифру, а не заголовок с пояснением."""
     groups = [group, *(linked or [])]
@@ -439,7 +474,10 @@ def unit_boxes(
     """
     main = place_units(group, n)
     old = group.units[0].box
-    return main, {other.id: [map_shape_box(old, new, other.units[0].box) for new in main]
+    # Ряд значков без текста размера не меняет: значок и фигура вокруг него не сжимаются вместе
+    # с подписями, блок только встаёт над своей подписью.
+    return main, {other.id: [map_shape_box(old, new, other.units[0].box, keep_size=not other.unit_slots)
+                             for new in main]
                   for other in linked}
 
 

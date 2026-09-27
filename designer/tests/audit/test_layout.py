@@ -47,6 +47,15 @@ def test_overlap_found():
     assert set(findings[0].element_ids) == {"a", "b"}
 
 
+def test_icon_inside_its_unit_figure_is_not_overlap():
+    # На образце VK Tech значок пункта стоит внутри своей цветной фигуры: так задумано, огреха нет.
+    figure = Element(id="u0s880", type="icon", box=(0.05, 0.3, 0.06, 0.1))
+    icon = Element(id="u0s881", type="icon", box=(0.065, 0.32, 0.03, 0.06))
+    other_unit = Element(id="u1s881", type="icon", box=(0.06, 0.31, 0.04, 0.07))
+    findings = checks_layout.check_overlap([_scene("s1", [figure, icon, other_unit])], _ds())
+    assert {tuple(sorted(f.element_ids)) for f in findings} == {("u0s880", "u1s881"), ("u0s881", "u1s881")}
+
+
 def test_overlap_clean_backdrop_excluded():
     """Подложка (shape) под текстом наложением не считается — исключена из сравнения."""
     text = Element(id="t", type="text", box=(0.2, 0.2, 0.2, 0.1), text="t")

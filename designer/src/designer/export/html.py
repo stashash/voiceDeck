@@ -5,6 +5,7 @@ import base64
 import html
 from pathlib import Path
 
+from designer import icons
 from designer.contracts import Asset, Box, Deck, DesignSystem, Element, Scene, Tokens
 from designer.export.svg_chart import chart_colors, render_chart
 
@@ -127,6 +128,12 @@ def _render_shape(el: Element) -> str:
 def _render_image(el: Element, ds: DesignSystem, package_dir: Path) -> str:
     style = _box_style(el.box, el.z)
     asset = _asset_by_id(ds, el.asset)
+    if el.icon:
+        # Значок пункта из набора, в цвете значка образца: так же, как в pptx.
+        path = package_dir / asset.path if asset else None
+        color = icons.dominant_color(path.read_bytes()) if path is not None and path.is_file() else None
+        png = icons.icon_png(el.icon, color or "0077FF")
+        return f'<img class="el {el.type}" style="{style}" src="data:image/png;base64,{base64.b64encode(png).decode("ascii")}" alt="">'
     src = _image_data_uri(asset, package_dir) if asset else None
     if src is None:
         return f'<div class="el {el.type} el-missing" style="{style}"></div>'

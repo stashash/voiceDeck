@@ -1,0 +1,3464 @@
+{
+  "status": "done",
+  "design_system_id": "vk-workspace-klientskaya-konferenciya-shablon-03",
+  "brief": "Команда платформы данных предлагает инициативу: перевести ночные отчёты с пакетной загрузки на потоковую. Сейчас отчёт по продажам готов к 11 утра, после перехода к 8:30. Пилот на двух витринах занял 6 недель, затраты на инфраструктуру выросли на 12 %, число инцидентов с опозданием отчёта упало с 9 до 2 в месяц. Нужно решение руководства о переводе остальных 14 витрин до конца квартала. Аудитория: директора направлений. Назначение: инициатива.\n",
+  "plan": {
+    "title": "Перевод ночных отчётов на потоковую загрузку",
+    "purpose": "Инициатива",
+    "audience": "",
+    "language": "ru",
+    "slides": [
+      {
+        "id": "s1",
+        "kind": "title",
+        "title": "Перевод ночных отчётов на потоковую загрузку",
+        "key_message": "Инициатива команды платформы данных по оптимизации отчётности",
+        "items": [],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Приветствие и представление инициативы по изменению архитектуры отчётности."
+      },
+      {
+        "id": "s2",
+        "kind": "agenda",
+        "title": "Повестка встречи по инициативе",
+        "key_message": "План обсуждения ключевых аспектов перехода на потоковую загрузку",
+        "items": [
+          {
+            "heading": "Текущее состояние отчётности",
+            "body": "Анализ существующих процессов и ограничений",
+            "number": null,
+            "icon_hint": "eye"
+          },
+          {
+            "heading": "Результаты пилотного проекта",
+            "body": "Показатели эффективности на двух витринах",
+            "number": null,
+            "icon_hint": "chart-line"
+          },
+          {
+            "heading": "План масштабирования",
+            "body": "Стратегия перевода остальных 14 витрин",
+            "number": null,
+            "icon_hint": "rocket"
+          },
+          {
+            "heading": "Решение руководства",
+            "body": "Определение сроков и ресурсов для реализации",
+            "number": null,
+            "icon_hint": "gavel"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Обзор структуры презентации и ключевых тем для обсуждения."
+      },
+      {
+        "id": "s3",
+        "kind": "bullets",
+        "title": "Текущие ограничения пакетной загрузки",
+        "key_message": "Существующий подход к отчётности создаёт задержки в доступе к данным",
+        "items": [
+          {
+            "heading": "Поздняя готовность отчётов",
+            "body": "Отчёт по продажам доступен только к 11 утра",
+            "number": null,
+            "icon_hint": "clock"
+          },
+          {
+            "heading": "Риск опозданий",
+            "body": "9 инцидентов с задержкой отчёта в месяц",
+            "number": null,
+            "icon_hint": "triangle-alert"
+          },
+          {
+            "heading": "Ограниченная гибкость",
+            "body": "Пакетная загрузка не позволяет оперативно обновлять данные",
+            "number": null,
+            "icon_hint": "refresh-cw"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Подчёркивание проблем текущего подхода к отчётности."
+      },
+      {
+        "id": "s4",
+        "kind": "big_number",
+        "title": "Ранняя готовность отчётов",
+        "key_message": "Переход на потоковую загрузку ускоряет доступ к данным",
+        "items": [
+          {
+            "heading": "",
+            "body": "",
+            "number": "8:30",
+            "icon_hint": "clock"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Демонстрация ключевого преимущества новой архитектуры."
+      },
+      {
+        "id": "s5",
+        "kind": "chart",
+        "title": "Снижение числа инцидентов",
+        "key_message": "Потоковая загрузка повышает надёжность отчётности",
+        "items": [],
+        "chart": {
+          "type": "column",
+          "title": "",
+          "categories": [
+            "Было",
+            "Стало"
+          ],
+          "series": [
+            {
+              "name": "Инциденты с опозданием",
+              "values": [
+                9.0,
+                2.0
+              ]
+            }
+          ],
+          "unit": "шт/мес"
+        },
+        "table": null,
+        "attribution": "",
+        "notes": "Визуализация улучшения надёжности отчётного процесса."
+      },
+      {
+        "id": "s6",
+        "kind": "big_number",
+        "title": "Сроки пилотного проекта",
+        "key_message": "Переход на потоковую загрузку реализуем в короткие сроки",
+        "items": [
+          {
+            "heading": "",
+            "body": "",
+            "number": "6 недель",
+            "icon_hint": "calendar"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Подчёркивание эффективности пилотной реализации."
+      },
+      {
+        "id": "s7",
+        "kind": "big_number",
+        "title": "Рост затрат на инфраструктуру",
+        "key_message": "Увеличение расходов компенсируется повышением надёжности",
+        "items": [
+          {
+            "heading": "",
+            "body": "",
+            "number": "12 %",
+            "icon_hint": "trending-up"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Анализ финансовой составляющей инициативы."
+      },
+      {
+        "id": "s8",
+        "kind": "steps",
+        "title": "Этапы масштабирования инициативы",
+        "key_message": "Пошаговый план перевода остальных витрин на потоковую загрузку",
+        "items": [
+          {
+            "heading": "Анализ оставшихся витрин",
+            "body": "Оценка готовности 14 витрин к переходу",
+            "number": null,
+            "icon_hint": "search"
+          },
+          {
+            "heading": "Подготовка инфраструктуры",
+            "body": "Настройка потоковых компонентов для масштабирования",
+            "number": null,
+            "icon_hint": "server"
+          },
+          {
+            "heading": "Постепенный перевод витрин",
+            "body": "Поэтапное перемещение оставшихся 14 витрин",
+            "number": null,
+            "icon_hint": "route"
+          },
+          {
+            "heading": "Финальная валидация",
+            "body": "Проверка стабильности и производительности системы",
+            "number": null,
+            "icon_hint": "clipboard-check"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Детализация процесса масштабирования инициативы."
+      },
+      {
+        "id": "s9",
+        "kind": "compare",
+        "title": "Сравнение подходов к отчётности",
+        "key_message": "Потоковая загрузка превосходит пакетную по ключевым метрикам",
+        "items": [
+          {
+            "heading": "Пакетная загрузка",
+            "body": "Отчёт к 11:00, 9 инцидентов в месяц",
+            "number": null,
+            "icon_hint": "box"
+          },
+          {
+            "heading": "Потоковая загрузка",
+            "body": "Отчёт к 8:30, 2 инцидента в месяц",
+            "number": null,
+            "icon_hint": "zap"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Прямое сопоставление преимуществ нового подхода."
+      },
+      {
+        "id": "s10",
+        "kind": "bullets",
+        "title": "Ожидаемые выгоды от масштабирования",
+        "key_message": "Перевод всех витрин обеспечит системные улучшения",
+        "items": [
+          {
+            "heading": "Ранний доступ к данным",
+            "body": "Все отчёты будут готовы к 8:30",
+            "number": null,
+            "icon_hint": "clock"
+          },
+          {
+            "heading": "Повышение надёжности",
+            "body": "Снижение числа инцидентов до 2 в месяц",
+            "number": null,
+            "icon_hint": "shield-check"
+          },
+          {
+            "heading": "Операционная эффективность",
+            "body": "Улучшение процессов принятия решений",
+            "number": null,
+            "icon_hint": "trending-up"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Формулировка ключевых преимуществ для бизнеса."
+      },
+      {
+        "id": "s11",
+        "kind": "bullets",
+        "title": "Риски и меры их снижения",
+        "key_message": "Идентифицированы основные риски и способы их минимизации",
+        "items": [
+          {
+            "heading": "Рост затрат",
+            "body": "Увеличение расходов на инфраструктуру на 12 %",
+            "number": null,
+            "icon_hint": "circle-dollar-sign"
+          },
+          {
+            "heading": "Сложность миграции",
+            "body": "Необходимость настройки потоковых компонентов",
+            "number": null,
+            "icon_hint": "settings"
+          },
+          {
+            "heading": "Временные задержки",
+            "body": "Возможные простои при переводе витрин",
+            "number": null,
+            "icon_hint": "hourglass"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Честное представление потенциальных проблем и их решений."
+      },
+      {
+        "id": "s12",
+        "kind": "bullets",
+        "title": "Требования к ресурсам",
+        "key_message": "Для реализации инициативы необходимы определённые ресурсы",
+        "items": [
+          {
+            "heading": "Инфраструктурные мощности",
+            "body": "Расширение вычислительных ресурсов",
+            "number": null,
+            "icon_hint": "server"
+          },
+          {
+            "heading": "Командные усилия",
+            "body": "Вовлечение специалистов платформы данных",
+            "number": null,
+            "icon_hint": "users"
+          },
+          {
+            "heading": "Финансирование",
+            "body": "Бюджет на увеличение затрат в 12 %",
+            "number": null,
+            "icon_hint": "banknote"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Определение необходимых ресурсов для успешной реализации."
+      },
+      {
+        "id": "s13",
+        "kind": "timeline",
+        "title": "План реализации до конца квартала",
+        "key_message": "Чёткий график перевода остальных 14 витрин",
+        "items": [
+          {
+            "heading": "Недели 1-2",
+            "body": "Анализ и подготовка оставшихся витрин",
+            "number": null,
+            "icon_hint": "search"
+          },
+          {
+            "heading": "Недели 3-4",
+            "body": "Перевод первой группы витрин",
+            "number": null,
+            "icon_hint": "route"
+          },
+          {
+            "heading": "Недели 5-6",
+            "body": "Перевод второй группы витрин",
+            "number": null,
+            "icon_hint": "route"
+          },
+          {
+            "heading": "Неделя 7",
+            "body": "Финальная валидация и запуск",
+            "number": null,
+            "icon_hint": "flag"
+          }
+        ],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Представление временного плана реализации инициативы."
+      },
+      {
+        "id": "s14",
+        "kind": "cta",
+        "title": "Решение о переводе витрин",
+        "key_message": "Необходимо одобрение руководства для масштабирования",
+        "items": [],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Призыв к принятию решения о переводе остальных 14 витрин."
+      },
+      {
+        "id": "s15",
+        "kind": "thanks",
+        "title": "Спасибо за внимание",
+        "key_message": "Готовы ответить на вопросы по инициативе",
+        "items": [],
+        "chart": null,
+        "table": null,
+        "attribution": "",
+        "notes": "Завершение презентации и приглашение к обсуждению."
+      }
+    ]
+  },
+  "specs": [
+    {
+      "slide_id": "s1",
+      "pattern_id": "p028",
+      "variant": "a",
+      "slot_text": {
+        "s874": "Инициатива команды платформы данных по оптимизации отчётности: перевод ночных отчётов на потоковую загрузку"
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s874": 24.5
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Приветствие и представление инициативы по изменению архитектуры отчётности."
+    },
+    {
+      "slide_id": "s2",
+      "pattern_id": "p012",
+      "variant": "a",
+      "slot_text": {
+        "s613": "План обсуждения ключевых аспектов перехода на потоковую загрузку"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s625": "Текущее состояние отчётности и существующие ограничения процессов"
+        },
+        {
+          "s625": "Результаты пилотного проекта и показатели эффективности витрин"
+        },
+        {
+          "s625": "План масштабирования и стратегия перевода остальных витрин"
+        },
+        {
+          "s625": "Решение руководства о сроках и ресурсах реализации"
+        }
+      ],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s613": 20.0,
+        "s625": 12.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        614,
+        615,
+        616,
+        618,
+        619,
+        622,
+        623,
+        624,
+        629,
+        630,
+        631,
+        632,
+        634,
+        635,
+        637,
+        638,
+        640,
+        641
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Обзор структуры презентации и ключевых тем для обсуждения."
+    },
+    {
+      "slide_id": "s3",
+      "pattern_id": "p005",
+      "variant": "a",
+      "slot_text": {
+        "s441": "Существующий подход к отчётности создаёт задержки в доступе к данным"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s442": "Отчёт по продажам доступен только к 11 утра"
+        },
+        {
+          "s442": "9 инцидентов с задержкой отчёта в месяц"
+        },
+        {
+          "s442": "Пакетная загрузка не позволяет оперативно обновлять данные"
+        }
+      ],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s441": 20.0,
+        "s442": 18.0
+      },
+      "unit_icons": [
+        "clock",
+        "triangle-alert",
+        "refresh-cw"
+      ],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Подчёркивание проблем текущего подхода к отчётности."
+    },
+    {
+      "slide_id": "s4",
+      "pattern_id": "p017",
+      "variant": "a",
+      "slot_text": {
+        "s709": "Переход на потоковую загрузку ускоряет доступ к данным, обеспечивая раннюю готовность отчётов уже к 8:30",
+        "s712": "Потоковая загрузка ускоряет доступ к данным, делая отчёты готовыми к 8:30.",
+        "s710": "8:30",
+        "s711": ""
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s709": 20.0,
+        "s712": 14.0,
+        "s710": 80.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Демонстрация ключевого преимущества новой архитектуры."
+    },
+    {
+      "slide_id": "s5",
+      "pattern_id": "p010",
+      "variant": "a",
+      "slot_text": {
+        "s547": "Потоковая загрузка повышает надёжность отчётности"
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s547": 20.0
+      },
+      "unit_icons": [],
+      "viz_box": [
+        0.3887755085301837,
+        0.1733333333333333,
+        0.5760244914698163,
+        0.7301666666666666
+      ],
+      "remove_shape_ids": [
+        548,
+        550,
+        551,
+        552,
+        554,
+        555,
+        556,
+        558,
+        559
+      ],
+      "chart": {
+        "type": "column",
+        "title": "",
+        "categories": [
+          "Было",
+          "Стало"
+        ],
+        "series": [
+          {
+            "name": "Инциденты с опозданием",
+            "values": [
+              9.0,
+              2.0
+            ]
+          }
+        ],
+        "unit": "шт/мес"
+      },
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Визуализация улучшения надёжности отчётного процесса."
+    },
+    {
+      "slide_id": "s6",
+      "pattern_id": "p017",
+      "variant": "a",
+      "slot_text": {
+        "s709": "Переход на потоковую загрузку реализуем в короткие сроки: всего 6 недель",
+        "s712": "",
+        "s710": "6 недель",
+        "s711": ""
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s709": 20.0,
+        "s710": 58.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Подчёркивание эффективности пилотной реализации."
+    },
+    {
+      "slide_id": "s7",
+      "pattern_id": "p017",
+      "variant": "a",
+      "slot_text": {
+        "s709": "Рост затрат на инфраструктуру компенсируется повышением надёжности",
+        "s712": "12 %",
+        "s710": "12 %",
+        "s711": ""
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s709": 20.0,
+        "s712": 16.0,
+        "s710": 80.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Анализ финансовой составляющей инициативы."
+    },
+    {
+      "slide_id": "s8",
+      "pattern_id": "p027",
+      "variant": "a",
+      "slot_text": {
+        "s858": "Пошаговый план перевода оставшихся витрин на потоковую загрузку"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s863": "1"
+        },
+        {
+          "s863": "2"
+        },
+        {
+          "s863": "3"
+        },
+        {
+          "s863": "4"
+        }
+      ],
+      "linked_unit_text": {
+        "g2": [
+          {
+            "s859": ""
+          },
+          {
+            "s859": ""
+          },
+          {
+            "s859": ""
+          },
+          {
+            "s859": ""
+          }
+        ]
+      },
+      "fitted_size_pt": {
+        "s858": 20.0,
+        "s863": 58.5
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        859,
+        860,
+        861,
+        862
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Детализация процесса масштабирования инициативы."
+    },
+    {
+      "slide_id": "s9",
+      "pattern_id": "p015",
+      "variant": "a",
+      "slot_text": {
+        "s680": "Потоковая загрузка превосходит пакетную по ключевым метрикам",
+        "s685": "",
+        "s684": ""
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s681": "Пакетная загрузка — Отчёт к 11:00, 9 инцидентов в месяц"
+        },
+        {
+          "s681": "Потоковая загрузка — Отчёт к 8:30, 2 инцидента в месяц"
+        }
+      ],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s680": 20.0,
+        "s681": 18.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        683
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Прямое сопоставление преимуществ нового подхода."
+    },
+    {
+      "slide_id": "s10",
+      "pattern_id": "p002",
+      "variant": "a",
+      "slot_text": {
+        "s388": "Перевод всех витрин обеспечит системные улучшения: отчёты к 8:30, снижение инцидентов до 2 в месяц и повышение эффективности"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s394": "Ранний доступ к данным"
+        },
+        {
+          "s394": "Повышение надёжности"
+        },
+        {
+          "s394": "Операционная эффективность"
+        }
+      ],
+      "linked_unit_text": {
+        "g2": [
+          {
+            "s389": "1"
+          },
+          {
+            "s389": "2"
+          },
+          {
+            "s389": "3"
+          }
+        ]
+      },
+      "fitted_size_pt": {
+        "s388": 20.0,
+        "s394": 20.0,
+        "s389": 40.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        392,
+        393,
+        397,
+        398
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Формулировка ключевых преимуществ для бизнеса."
+    },
+    {
+      "slide_id": "s11",
+      "pattern_id": "p006",
+      "variant": "a",
+      "slot_text": {
+        "s459": "Идентифицированы основные риски и способы их минимизации"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s462": "Рост затрат",
+          "s463": "Расходы на инфраструктуру вырастут на 12 %"
+        },
+        {
+          "s462": "Сложность миграции",
+          "s463": "Требуется настройка потоковых компонентов"
+        },
+        {
+          "s462": "Временные задержки",
+          "s463": "Возможны простои при переводе витрин"
+        }
+      ],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s459": 20.0,
+        "s462": 20.0,
+        "s463": 12.0
+      },
+      "unit_icons": [
+        "circle-dollar-sign",
+        "settings",
+        "hourglass"
+      ],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Честное представление потенциальных проблем и их решений."
+    },
+    {
+      "slide_id": "s12",
+      "pattern_id": "p016",
+      "variant": "a",
+      "slot_text": {
+        "s703": "Для реализации инициативы необходимы вычислительные мощности, специалисты платформы данных и увеличение бюджета на 12 %",
+        "s702": "Для реализации инициативы необходимы определённые ресурсы"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s693": "Инфраструктурные мощности",
+          "s694": "Расширение вычислительных ресурсов"
+        },
+        {
+          "s693": "Командные усилия",
+          "s694": "Вовлечение специалистов платформы данных"
+        },
+        {
+          "s693": "Финансирование",
+          "s694": "Бюджет на увеличение затрат в 12 %"
+        }
+      ],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s703": 18.0,
+        "s702": 16.0,
+        "s693": 18.0,
+        "s694": 12.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Определение необходимых ресурсов для успешной реализации."
+    },
+    {
+      "slide_id": "s13",
+      "pattern_id": "p026",
+      "variant": "a",
+      "slot_text": {
+        "s839": "План перевода 14 витрин до конца квартала"
+      },
+      "group_id": "g1",
+      "unit_text": [
+        {
+          "s840": "Недели 1-2: анализ витрин"
+        },
+        {
+          "s840": "Недели 3-4: первая группа"
+        },
+        {
+          "s840": "Недели 5-6: вторая группа"
+        },
+        {
+          "s840": "Неделя 7: валидация и запуск"
+        }
+      ],
+      "linked_unit_text": {
+        "g2": [
+          {
+            "s849": ""
+          },
+          {
+            "s849": ""
+          },
+          {
+            "s849": ""
+          },
+          {
+            "s849": ""
+          }
+        ]
+      },
+      "fitted_size_pt": {
+        "s839": 36.0,
+        "s840": 18.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        849,
+        850,
+        851,
+        852
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Представление временного плана реализации инициативы."
+    },
+    {
+      "slide_id": "s14",
+      "pattern_id": "p028",
+      "variant": "a",
+      "slot_text": {
+        "s874": "Необходимо одобрение руководства для масштабирования решения о переводе витрин"
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s874": 30.5
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Призыв к принятию решения о переводе остальных 14 витрин."
+    },
+    {
+      "slide_id": "s15",
+      "pattern_id": "p001",
+      "variant": "a",
+      "slot_text": {
+        "s381": "Спасибо за внимание: готовы ответить на вопросы по инициативе",
+        "s383": ""
+      },
+      "group_id": null,
+      "unit_text": [],
+      "linked_unit_text": {},
+      "fitted_size_pt": {
+        "s381": 41.0
+      },
+      "unit_icons": [],
+      "viz_box": null,
+      "remove_shape_ids": [
+        382
+      ],
+      "chart": null,
+      "table": null,
+      "viz_area_id": null,
+      "notes": "Завершение презентации и приглашение к обсуждению."
+    }
+  ],
+  "scenes": [
+    {
+      "slide_id": "s1",
+      "pattern_id": "p028",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s874",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.39747424540682413,
+            0.2736789151356081
+          ],
+          "z": 0,
+          "text": "Инициатива команды платформы данных по оптимизации отчётности: перевод ночных отчётов на потоковую загрузку",
+          "style": {
+            "family": null,
+            "size_pt": 24.5,
+            "bold": true,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 874,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s2",
+      "pattern_id": "p012",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s613",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "План обсуждения ключевых аспектов перехода на потоковую загрузку",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 613,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "a620",
+          "type": "image",
+          "role": "image",
+          "box": [
+            0.03270365813648294,
+            0.8982962962962963,
+            0.15235244422572178,
+            0.042675853018372734
+          ],
+          "z": 6,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "b310db145d5a",
+          "icon": null,
+          "source_shape_id": 620,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "a621",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.9098996062992126,
+            0.9096357538641003,
+            0.056636893044619385,
+            0.03149606299212604
+          ],
+          "z": 7,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "d04e5e8d446e",
+          "icon": null,
+          "source_shape_id": 621,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s625",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.03509391404199475,
+            0.5,
+            0.23054068241469816,
+            0.13949956255468066
+          ],
+          "z": 11,
+          "text": "Текущее состояние отчётности и существующие ограничения процессов",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 625,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s625",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.2715490485564304,
+            0.5,
+            0.2305406824146981,
+            0.13949956255468066
+          ],
+          "z": 11,
+          "text": "Результаты пилотного проекта и показатели эффективности витрин",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 625,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s625",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5080041830708661,
+            0.5,
+            0.23054068241469816,
+            0.13949956255468066
+          ],
+          "z": 11,
+          "text": "План масштабирования и стратегия перевода остальных витрин",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 625,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u3s625",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.7444593175853018,
+            0.5,
+            0.23054068241469816,
+            0.13949956255468066
+          ],
+          "z": 11,
+          "text": "Решение руководства о сроках и ресурсах реализации",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 625,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s3",
+      "pattern_id": "p005",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s441",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.09140696996208805
+          ],
+          "z": 0,
+          "text": "Существующий подход к отчётности создаёт задержки в доступе к данным",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 441,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s442",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.4415611056430446,
+            0.12541834354039078,
+            0.4853640091863517,
+            0.24871463983668707
+          ],
+          "z": 1,
+          "text": "Отчёт по продажам доступен только к 11 утра",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 442,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s442",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.4415611056430446,
+            0.3952595508894721,
+            0.4853640091863517,
+            0.248714639836687
+          ],
+          "z": 1,
+          "text": "9 инцидентов с задержкой отчёта в месяц",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 442,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s442",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.4415611056430446,
+            0.6651007582385535,
+            0.4853640091863517,
+            0.24871463983668707
+          ],
+          "z": 1,
+          "text": "Пакетная загрузка не позволяет оперативно обновлять данные",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 442,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s444",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.45306176181102364,
+            0.14533858267716535,
+            0.042278543307086636,
+            0.07515237678623507
+          ],
+          "z": 2,
+          "text": "",
+          "style": null,
+          "fill": "212121",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 444,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s444",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.45306176181102364,
+            0.41517979002624666,
+            0.042278543307086636,
+            0.07515237678623504
+          ],
+          "z": 2,
+          "text": "",
+          "style": null,
+          "fill": "212121",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 444,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s444",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.45306176181102364,
+            0.6850209973753282,
+            0.042278543307086636,
+            0.0751523767862351
+          ],
+          "z": 2,
+          "text": "",
+          "style": null,
+          "fill": "212121",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 444,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s445",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.46326353346456695,
+            0.16299008457276173,
+            0.021874999999999978,
+            0.03888888888888889
+          ],
+          "z": 3,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "clock",
+          "source_shape_id": 445,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s445",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.46326353346456695,
+            0.4328312919218431,
+            0.021874999999999978,
+            0.03888888888888886
+          ],
+          "z": 3,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "triangle-alert",
+          "source_shape_id": 445,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s445",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.46326353346456695,
+            0.7026724992709245,
+            0.021874999999999978,
+            0.03888888888888886
+          ],
+          "z": 3,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "refresh-cw",
+          "source_shape_id": 445,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s4",
+      "pattern_id": "p017",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s709",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "Переход на потоковую загрузку ускоряет доступ к данным, обеспечивая раннюю готовность отчётов уже к 8:30",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 709,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s710",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.5181108923884514,
+            0.18127850685331,
+            0.35315321522309706,
+            0.2789228638086906
+          ],
+          "z": 1,
+          "text": "8:30",
+          "style": {
+            "family": "Play",
+            "size_pt": 80.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 710,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s712",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.03537795275590551,
+            0.18127850685331,
+            0.29773892716535433,
+            0.09394006999125107
+          ],
+          "z": 3,
+          "text": "Потоковая загрузка ускоряет доступ к данным, делая отчёты готовыми к 8:30.",
+          "style": {
+            "family": "Play",
+            "size_pt": 14.0,
+            "bold": false,
+            "italic": false,
+            "color": "CAD0D5",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 712,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s5",
+      "pattern_id": "p010",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s547",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.09140696996208805
+          ],
+          "z": 0,
+          "text": "Потоковая загрузка повышает надёжность отчётности",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 547,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "viz",
+          "type": "chart",
+          "role": "viz",
+          "box": [
+            0.3887755085301837,
+            0.1733333333333333,
+            0.5760244914698163,
+            0.7301666666666666
+          ],
+          "z": 10,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": null,
+          "chart": {
+            "type": "column",
+            "title": "",
+            "categories": [
+              "Было",
+              "Стало"
+            ],
+            "series": [
+              {
+                "name": "Инциденты с опозданием",
+                "values": [
+                  9.0,
+                  2.0
+                ]
+              }
+            ],
+            "unit": "шт/мес"
+          },
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s6",
+      "pattern_id": "p017",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s709",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "Переход на потоковую загрузку реализуем в короткие сроки: всего 6 недель",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 709,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s710",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.5181108923884514,
+            0.18127850685331,
+            0.35315321522309706,
+            0.2789228638086906
+          ],
+          "z": 1,
+          "text": "6 недель",
+          "style": {
+            "family": "Play",
+            "size_pt": 58.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 710,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s7",
+      "pattern_id": "p017",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s709",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "Рост затрат на инфраструктуру компенсируется повышением надёжности",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 709,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s710",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.5181108923884514,
+            0.18127850685331,
+            0.35315321522309706,
+            0.2789228638086906
+          ],
+          "z": 1,
+          "text": "12 %",
+          "style": {
+            "family": "Play",
+            "size_pt": 80.0,
+            "bold": true,
+            "italic": false,
+            "color": "70C3FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 710,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s712",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.03537795275590551,
+            0.18127850685331,
+            0.29773892716535433,
+            0.09394006999125107
+          ],
+          "z": 3,
+          "text": "12 %",
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "CAD0D5",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 712,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s8",
+      "pattern_id": "p027",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s858",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "Пошаговый план перевода оставшихся витрин на потоковую загрузку",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 858,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s863",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.03520784120734908,
+            0.40751370662000586,
+            0.14498695866141736,
+            0.13072295129775446
+          ],
+          "z": 5,
+          "text": "1",
+          "style": {
+            "family": "Play",
+            "size_pt": 58.5,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 863,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s863",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.2722208552055993,
+            0.40751370662000586,
+            0.14498695866141736,
+            0.13072295129775446
+          ],
+          "z": 5,
+          "text": "2",
+          "style": {
+            "family": "Play",
+            "size_pt": 58.5,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 863,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s863",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.5092338692038495,
+            0.40751370662000586,
+            0.1449869586614173,
+            0.13072295129775446
+          ],
+          "z": 5,
+          "text": "3",
+          "style": {
+            "family": "Play",
+            "size_pt": 58.5,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 863,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u3s863",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.7462468832020998,
+            0.40751370662000586,
+            0.1449869586614173,
+            0.13072295129775446
+          ],
+          "z": 5,
+          "text": "4",
+          "style": {
+            "family": "Play",
+            "size_pt": 58.5,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 863,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s9",
+      "pattern_id": "p015",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "d679",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.0,
+            0.6923696412948381,
+            1.0,
+            0.30763035870516187
+          ],
+          "z": 0,
+          "text": "",
+          "style": null,
+          "fill": "009BEF",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 679,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s680",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.035093832020997376,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 1,
+          "text": "Потоковая загрузка превосходит пакетную по ключевым метрикам",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 680,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s681",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.035093832020997376,
+            0.2678721201516477,
+            0.453647063648294,
+            0.2948390201224847
+          ],
+          "z": 2,
+          "text": "Пакетная загрузка — Отчёт к 11:00, 9 инцидентов в месяц",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 681,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s681",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5013499835958005,
+            0.2678721201516477,
+            0.453647063648294,
+            0.2948390201224847
+          ],
+          "z": 2,
+          "text": "Потоковая загрузка — Отчёт к 8:30, 2 инцидента в месяц",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 681,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s10",
+      "pattern_id": "p002",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s388",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.03520784120734908,
+            0.2346450860309128,
+            0.3939588254593176,
+            0.27367891513560805
+          ],
+          "z": 0,
+          "text": "Перевод всех витрин обеспечит системные улучшения: отчёты к 8:30, снижение инцидентов до 2 в месяц и повышение эффективности",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 388,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s389",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.40269430774278214,
+            0.1481482939632546,
+            0.13076919291338585,
+            0.10176640419947511
+          ],
+          "z": 1,
+          "text": "1",
+          "style": {
+            "family": "Play",
+            "size_pt": 40.0,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "right"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 389,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s389",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.40269430774278214,
+            0.3044701443569554,
+            0.13076919291338585,
+            0.10176640419947508
+          ],
+          "z": 1,
+          "text": "2",
+          "style": {
+            "family": "Play",
+            "size_pt": 40.0,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "right"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 389,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s389",
+          "type": "text",
+          "role": "number",
+          "box": [
+            0.40269430774278214,
+            0.46079199475065613,
+            0.13076919291338585,
+            0.10176640419947514
+          ],
+          "z": 1,
+          "text": "3",
+          "style": {
+            "family": "Play",
+            "size_pt": 40.0,
+            "bold": true,
+            "italic": false,
+            "color": "0077FF",
+            "align": "right"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 389,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s394",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5571702755905512,
+            0.1481482939632546,
+            0.4076218832020997,
+            0.08649693788276466
+          ],
+          "z": 6,
+          "text": "Ранний доступ к данным",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 394,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s394",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5571702755905512,
+            0.3044701443569554,
+            0.4076218832020997,
+            0.08649693788276469
+          ],
+          "z": 6,
+          "text": "Повышение надёжности",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 394,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s394",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5571702755905512,
+            0.46079199475065613,
+            0.4076218832020997,
+            0.08649693788276469
+          ],
+          "z": 6,
+          "text": "Операционная эффективность",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 394,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s11",
+      "pattern_id": "p006",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s459",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "Идентифицированы основные риски и способы их минимизации",
+          "style": {
+            "family": null,
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 459,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s462",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.03409506233595801,
+            0.24300072907553222,
+            0.28051181102362205,
+            0.5139985418489355
+          ],
+          "z": 3,
+          "text": "Рост затрат",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 462,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s462",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.33403740157480316,
+            0.24300072907553222,
+            0.28051181102362205,
+            0.5139985418489355
+          ],
+          "z": 3,
+          "text": "Сложность миграции",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 462,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s462",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.6339797408136484,
+            0.24300072907553222,
+            0.2805118110236221,
+            0.5139985418489355
+          ],
+          "z": 3,
+          "text": "Временные задержки",
+          "style": {
+            "family": "Play",
+            "size_pt": 20.0,
+            "bold": false,
+            "italic": false,
+            "color": "0077FF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 462,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s463",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.04893856627296588,
+            0.47520968212306797,
+            0.25075,
+            0.03671551472732576
+          ],
+          "z": 4,
+          "text": "Расходы на инфраструктуру вырастут на 12 %",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 463,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s463",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.34888090551181106,
+            0.47520968212306797,
+            0.2507499999999999,
+            0.03671551472732576
+          ],
+          "z": 4,
+          "text": "Требуется настройка потоковых компонентов",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 463,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s463",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.6488232447506562,
+            0.47520968212306797,
+            0.2507499999999999,
+            0.03671551472732576
+          ],
+          "z": 4,
+          "text": "Возможны простои при переводе витрин",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 463,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s464",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.048938484251968506,
+            0.42112438028579763,
+            0.021875000000000006,
+            0.03888888888888892
+          ],
+          "z": 5,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "circle-dollar-sign",
+          "source_shape_id": 464,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s464",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.3488808234908137,
+            0.42112438028579763,
+            0.021874999999999978,
+            0.03888888888888892
+          ],
+          "z": 5,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "settings",
+          "source_shape_id": 464,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s464",
+          "type": "icon",
+          "role": "icon",
+          "box": [
+            0.6488231627296589,
+            0.42112438028579763,
+            0.021874999999999978,
+            0.03888888888888892
+          ],
+          "z": 5,
+          "text": "",
+          "style": null,
+          "fill": null,
+          "asset": "a359cddc4cea",
+          "icon": "hourglass",
+          "source_shape_id": 464,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s12",
+      "pattern_id": "p016",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "u0s691",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.03509399606299213,
+            0.28744969378827645,
+            0.2950716863517061,
+            0.5021811023622047
+          ],
+          "z": 0,
+          "text": "",
+          "style": null,
+          "fill": "000000",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 691,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s691",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.338542281824147,
+            0.28744969378827645,
+            0.29507168635170605,
+            0.5021811023622047
+          ],
+          "z": 0,
+          "text": "",
+          "style": null,
+          "fill": "000000",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 691,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s691",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.6419905675853018,
+            0.28744969378827645,
+            0.2950716863517061,
+            0.5021811023622047
+          ],
+          "z": 0,
+          "text": "",
+          "style": null,
+          "fill": "000000",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 691,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s692",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.03509399606299213,
+            0.28744954797317,
+            0.2950716863517061,
+            0.10684966462525519
+          ],
+          "z": 1,
+          "text": "",
+          "style": null,
+          "fill": "0092F3",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 692,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s692",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.338542281824147,
+            0.28744954797317,
+            0.29507168635170605,
+            0.10684966462525519
+          ],
+          "z": 1,
+          "text": "",
+          "style": null,
+          "fill": "0092F3",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 692,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s692",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.6419905675853018,
+            0.28744954797317,
+            0.2950716863517061,
+            0.10684966462525519
+          ],
+          "z": 1,
+          "text": "",
+          "style": null,
+          "fill": "0092F3",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 692,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s693",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.04904061388495683,
+            0.31824234470691165,
+            0.2688169504580522,
+            0.044878536016331294
+          ],
+          "z": 2,
+          "text": "Инфраструктурные мощности",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "212121",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 693,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s693",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.3524888996461117,
+            0.31824234470691165,
+            0.26881695045805226,
+            0.044878536016331294
+          ],
+          "z": 2,
+          "text": "Командные усилия",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "212121",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 693,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s693",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.6559371854072665,
+            0.31824234470691165,
+            0.2688169504580522,
+            0.044878536016331294
+          ],
+          "z": 2,
+          "text": "Финансирование",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "212121",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 693,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s694",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.04904061388495683,
+            0.414387284922718,
+            0.2688169504580522,
+            0.12565966754155727
+          ],
+          "z": 3,
+          "text": "Расширение вычислительных ресурсов",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 694,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s694",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.3524888996461117,
+            0.414387284922718,
+            0.26881695045805226,
+            0.12565966754155727
+          ],
+          "z": 3,
+          "text": "Вовлечение специалистов платформы данных",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 694,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s694",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.6559371854072665,
+            0.414387284922718,
+            0.2688169504580522,
+            0.12565966754155727
+          ],
+          "z": 3,
+          "text": "Бюджет на увеличение затрат в 12 %",
+          "style": {
+            "family": "Play",
+            "size_pt": 12.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 694,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s702",
+          "type": "text",
+          "role": "body",
+          "box": [
+            0.03537795275590551,
+            0.18127850685331,
+            0.7955879265091863,
+            0.09394006999125107
+          ],
+          "z": 11,
+          "text": "Для реализации инициативы необходимы определённые ресурсы",
+          "style": {
+            "family": "Play",
+            "size_pt": 16.0,
+            "bold": false,
+            "italic": false,
+            "color": "CAD0D5",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 702,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "s703",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 12,
+          "text": "Для реализации инициативы необходимы вычислительные мощности, специалисты платформы данных и увеличение бюджета на 12 %",
+          "style": {
+            "family": null,
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 703,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s13",
+      "pattern_id": "p026",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s839",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.06192636337124526,
+            0.6420038549868766,
+            0.1702496354622339
+          ],
+          "z": 0,
+          "text": "План перевода 14 витрин до конца квартала",
+          "style": {
+            "family": null,
+            "size_pt": 36.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 839,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s840",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.0352077591863517,
+            0.5322354913969087,
+            0.21696423884514437,
+            0.08649693788276469
+          ],
+          "z": 1,
+          "text": "Недели 1-2: анализ витрин",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 840,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s840",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.2722613462379702,
+            0.5322354913969087,
+            0.21696423884514443,
+            0.08649693788276469
+          ],
+          "z": 1,
+          "text": "Недели 3-4: первая группа",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 840,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s840",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.5093149332895888,
+            0.5322354913969087,
+            0.21696423884514437,
+            0.08649693788276469
+          ],
+          "z": 1,
+          "text": "Недели 5-6: вторая группа",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 840,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u3s840",
+          "type": "text",
+          "role": "heading",
+          "box": [
+            0.7463685203412073,
+            0.5322354913969087,
+            0.21696423884514437,
+            0.08649693788276469
+          ],
+          "z": 1,
+          "text": "Неделя 7: валидация и запуск",
+          "style": {
+            "family": "Play",
+            "size_pt": 18.0,
+            "bold": false,
+            "italic": false,
+            "color": "FFFFFF",
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 840,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u0s845",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.13763984580052496,
+            0.4869687955672208,
+            0.012099983595800529,
+            0.021511081948089872
+          ],
+          "z": 6,
+          "text": "",
+          "style": null,
+          "fill": "0077FF",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 845,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u1s845",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.37469343285214346,
+            0.4869687955672208,
+            0.012099983595800501,
+            0.021511081948089872
+          ],
+          "z": 6,
+          "text": "",
+          "style": null,
+          "fill": "0077FF",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 845,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u2s845",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.611747019903762,
+            0.4869687955672208,
+            0.012099983595800556,
+            0.021511081948089872
+          ],
+          "z": 6,
+          "text": "",
+          "style": null,
+          "fill": "0077FF",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 845,
+          "chart": null,
+          "table": null
+        },
+        {
+          "id": "u3s845",
+          "type": "shape",
+          "role": "decor",
+          "box": [
+            0.8488006069553805,
+            0.4869687955672208,
+            0.012099983595800556,
+            0.021511081948089872
+          ],
+          "z": 6,
+          "text": "",
+          "style": null,
+          "fill": "0077FF",
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 845,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s14",
+      "pattern_id": "p028",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s874",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.33412394284047825,
+            0.39747424540682413,
+            0.2736789151356081
+          ],
+          "z": 0,
+          "text": "Необходимо одобрение руководства для масштабирования решения о переводе витрин",
+          "style": {
+            "family": null,
+            "size_pt": 30.5,
+            "bold": true,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 874,
+          "chart": null,
+          "table": null
+        }
+      ]
+    },
+    {
+      "slide_id": "s15",
+      "pattern_id": "p001",
+      "variant": "a",
+      "theme": "dark",
+      "background_asset": null,
+      "background_color": "000000",
+      "elements": [
+        {
+          "id": "s381",
+          "type": "text",
+          "role": "title",
+          "box": [
+            0.0352077591863517,
+            0.363160542432196,
+            0.6420058234908137,
+            0.27367891513560805
+          ],
+          "z": 0,
+          "text": "Спасибо за внимание: готовы ответить на вопросы по инициативе",
+          "style": {
+            "family": null,
+            "size_pt": 41.0,
+            "bold": false,
+            "italic": false,
+            "color": null,
+            "align": "left"
+          },
+          "fill": null,
+          "asset": null,
+          "icon": null,
+          "source_shape_id": 381,
+          "chart": null,
+          "table": null
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "s1.integrity.empty.0",
+      "slide_id": "s1",
+      "check_id": "integrity.empty",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "На слайде только заголовок",
+      "element_ids": [
+        "s874"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.33412394284047825,
+        0.39747424540682413,
+        0.2736789151356081
+      ],
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s1.template.type_scale.0",
+      "slide_id": "s1",
+      "check_id": "template.type_scale",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Заголовок «Инициатива команды платф…»: кегль 24.5 пт не входит в шкалу шаблона",
+      "element_ids": [
+        "s874"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.33412394284047825,
+        0.39747424540682413,
+        0.2736789151356081
+      ],
+      "fixable": true,
+      "fix_hint": "уменьшить кегль до ступени шкалы"
+    },
+    {
+      "id": "s2.density.fill.0",
+      "slide_id": "s2",
+      "check_id": "density.fill",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Содержимое занимает 83 % слайда, удобно от 25 до 75 %",
+      "element_ids": [
+        "s613",
+        "a620",
+        "a621",
+        "u0s625",
+        "u1s625",
+        "u2s625",
+        "u3s625"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s3.density.fill.0",
+      "slide_id": "s3",
+      "check_id": "density.fill",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Содержимое занимает 76 % слайда, удобно от 25 до 75 %",
+      "element_ids": [
+        "s441",
+        "u0s442",
+        "u1s442",
+        "u2s442",
+        "u0s445",
+        "u1s445",
+        "u2s445"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s3.layout.overlap.0",
+      "slide_id": "s3",
+      "check_id": "layout.overlap",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Заголовок «Существующий подход к от…» и заголовок блока 1 «Отчёт по продажам доступ…»: накладываются друг на друга",
+      "element_ids": [
+        "s441",
+        "u0s442"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s3.layout.overlap.1",
+      "slide_id": "s3",
+      "check_id": "layout.overlap",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Заголовок блока 1 «Отчёт по продажам доступ…» и значок блока 1: накладываются друг на друга",
+      "element_ids": [
+        "u0s442",
+        "u0s445"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s3.layout.overlap.2",
+      "slide_id": "s3",
+      "check_id": "layout.overlap",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Заголовок блока 2 «9 инцидентов с задержкой…» и значок блока 2: накладываются друг на друга",
+      "element_ids": [
+        "u1s442",
+        "u1s445"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s5.density.fill.0",
+      "slide_id": "s5",
+      "check_id": "density.fill",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Содержимое занимает 78 % слайда, удобно от 25 до 75 %",
+      "element_ids": [
+        "s547",
+        "viz"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s5.layout.off_guides.0",
+      "slide_id": "s5",
+      "check_id": "layout.off_guides",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Диаграмма: левый край не стоит на направляющей шаблона",
+      "element_ids": [
+        "viz"
+      ],
+      "box": [
+        0.3887755085301837,
+        0.1733333333333333,
+        0.5760244914698163,
+        0.7301666666666666
+      ],
+      "fixable": true,
+      "fix_hint": "сдвинуть к направляющей"
+    },
+    {
+      "id": "s9.template.color.0",
+      "slide_id": "s9",
+      "check_id": "template.color",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Оформление: заливка #009BEF не из палитры",
+      "element_ids": [
+        "d679"
+      ],
+      "box": [
+        0.0,
+        0.6923696412948381,
+        1.0,
+        0.30763035870516187
+      ],
+      "fixable": true,
+      "fix_hint": "заменить цвет ближайшим из палитры"
+    },
+    {
+      "id": "s10.density.bullet_words.0",
+      "slide_id": "s10",
+      "check_id": "density.bullet_words",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Заголовок «Перевод всех витрин обес…»: пункт «Перевод всех витрин обеспечит …» длиннее 15 слов",
+      "element_ids": [
+        "s388"
+      ],
+      "box": [
+        0.03520784120734908,
+        0.2346450860309128,
+        0.3939588254593176,
+        0.27367891513560805
+      ],
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s10.layout.overlap.0",
+      "slide_id": "s10",
+      "check_id": "layout.overlap",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Заголовок «Перевод всех витрин обес…» и число блока 2 «2»: накладываются друг на друга",
+      "element_ids": [
+        "s388",
+        "u1s389"
+      ],
+      "box": null,
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s11.layout.text_overflow.0",
+      "slide_id": "s11",
+      "check_id": "layout.text_overflow",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Текст блока 1 «Расходы на инфраструктур…»: текст не помещается в рамку при кегле 12 пт",
+      "element_ids": [
+        "u0s463"
+      ],
+      "box": [
+        0.04893856627296588,
+        0.47520968212306797,
+        0.25075,
+        0.03671551472732576
+      ],
+      "fixable": true,
+      "fix_hint": "уменьшить кегль до ступени шкалы"
+    },
+    {
+      "id": "s11.layout.text_overflow.1",
+      "slide_id": "s11",
+      "check_id": "layout.text_overflow",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "Текст блока 2 «Требуется настройка пото…»: текст не помещается в рамку при кегле 12 пт",
+      "element_ids": [
+        "u1s463"
+      ],
+      "box": [
+        0.34888090551181106,
+        0.47520968212306797,
+        0.2507499999999999,
+        0.03671551472732576
+      ],
+      "fixable": true,
+      "fix_hint": "уменьшить кегль до ступени шкалы"
+    },
+    {
+      "id": "s12.template.color.0",
+      "slide_id": "s12",
+      "check_id": "template.color",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Оформление блока 1: заливка #0092F3 не из палитры",
+      "element_ids": [
+        "u0s692"
+      ],
+      "box": [
+        0.03509399606299213,
+        0.28744954797317,
+        0.2950716863517061,
+        0.10684966462525519
+      ],
+      "fixable": true,
+      "fix_hint": "заменить цвет ближайшим из палитры"
+    },
+    {
+      "id": "s12.template.color.1",
+      "slide_id": "s12",
+      "check_id": "template.color",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Оформление блока 2: заливка #0092F3 не из палитры",
+      "element_ids": [
+        "u1s692"
+      ],
+      "box": [
+        0.338542281824147,
+        0.28744954797317,
+        0.29507168635170605,
+        0.10684966462525519
+      ],
+      "fixable": true,
+      "fix_hint": "заменить цвет ближайшим из палитры"
+    },
+    {
+      "id": "s12.template.color.2",
+      "slide_id": "s12",
+      "check_id": "template.color",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Оформление блока 3: заливка #0092F3 не из палитры",
+      "element_ids": [
+        "u2s692"
+      ],
+      "box": [
+        0.6419905675853018,
+        0.28744954797317,
+        0.2950716863517061,
+        0.10684966462525519
+      ],
+      "fixable": true,
+      "fix_hint": "заменить цвет ближайшим из палитры"
+    },
+    {
+      "id": "s14.integrity.empty.0",
+      "slide_id": "s14",
+      "check_id": "integrity.empty",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "На слайде только заголовок",
+      "element_ids": [
+        "s874"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.33412394284047825,
+        0.39747424540682413,
+        0.2736789151356081
+      ],
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s14.template.type_scale.0",
+      "slide_id": "s14",
+      "check_id": "template.type_scale",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Заголовок «Необходимо одобрение рук…»: кегль 30.5 пт не входит в шкалу шаблона",
+      "element_ids": [
+        "s874"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.33412394284047825,
+        0.39747424540682413,
+        0.2736789151356081
+      ],
+      "fixable": true,
+      "fix_hint": "уменьшить кегль до ступени шкалы"
+    },
+    {
+      "id": "s15.integrity.empty.0",
+      "slide_id": "s15",
+      "check_id": "integrity.empty",
+      "kind": "deterministic",
+      "severity": "error",
+      "message": "На слайде только заголовок",
+      "element_ids": [
+        "s381"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.363160542432196,
+        0.6420058234908137,
+        0.27367891513560805
+      ],
+      "fixable": false,
+      "fix_hint": ""
+    },
+    {
+      "id": "s15.template.type_scale.0",
+      "slide_id": "s15",
+      "check_id": "template.type_scale",
+      "kind": "deterministic",
+      "severity": "warning",
+      "message": "Заголовок «Спасибо за внимание: гот…»: кегль 41 пт не входит в шкалу шаблона",
+      "element_ids": [
+        "s381"
+      ],
+      "box": [
+        0.0352077591863517,
+        0.363160542432196,
+        0.6420058234908137,
+        0.27367891513560805
+      ],
+      "fixable": true,
+      "fix_hint": "уменьшить кегль до ступени шкалы"
+    }
+  ],
+  "error": null
+}

@@ -137,6 +137,11 @@ class LlmClient:
                     raise ModelLoading(f"модель {self.model} не загружена: {response.text[:200]}")
                 time.sleep(_LOAD_POLL_S)
                 continue
+            if response.status_code == 400 and "reasoning_effort" in payload and "reasoning" in response.text.lower():
+                # Ollama принимает только значения, которые модель объявила в /api/show: без параметра
+                # модель думает по своему умолчанию, но отвечает.
+                payload = {key: value for key, value in payload.items() if key != "reasoning_effort"}
+                continue
             break
         response.raise_for_status()
         self.call_durations_ms.append(int((time.monotonic() - started) * 1000))

@@ -48,8 +48,19 @@ def render_spec(spec: SlideSpec, ds: DesignSystem, package_dir: Path,
     return png
 
 
-def render_slides(pptx_path: Path, count: int, width_px: int = DEFAULT_WIDTH_PX) -> list[bytes]:
-    """Картинки слайдов готовой колоды: движок открывает файл один раз."""
+def render_slides(pptx_path: Path, count: int, width_px: int = DEFAULT_WIDTH_PX,
+                  pdf_path: Path | None = None) -> list[bytes]:
+    """Картинки слайдов готовой колоды: движок открывает файл один раз.
+
+    pdf_path это pdf той же колоды, уже снятый движком: тогда картинки берутся из него
+    и движок второй раз не запускается. Не вышло растеризовать pdf: снимает движок."""
+    if pdf_path is not None and Path(pdf_path).is_file():
+        try:
+            pages = convert.pdf_pages(Path(pdf_path), width_px)
+        except convert.ConverterUnavailable:
+            pages = []
+        if len(pages) == count:
+            return pages
     session = convert.get_session()
     pptx_path = Path(pptx_path)
     return [session.png(pptx_path, index, width_px) for index in range(count)]

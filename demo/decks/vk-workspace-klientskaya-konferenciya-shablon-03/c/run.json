@@ -1,0 +1,41 @@
+{
+  "run_id": "af0b3ed2404448879ae5070b9686dc3e",
+  "started_at": "2026-09-27T07:55:48.420568+00:00",
+  "model": "qwen/qwen3.8-27b",
+  "design_system_id": "vk-workspace-klientskaya-konferenciya-shablon-03",
+  "skills": [
+    {
+      "name": "plan-deck",
+      "version": "5",
+      "sha256": "7d0957afdd93ff7608f02edd90107106f702f6212ec0c75caf24d057128c345f"
+    },
+    {
+      "name": "fill-slots",
+      "version": "2",
+      "sha256": "cedd00b647cc8fbac6c266d54537b710197c956eff7b4ca998726225c87c3bff"
+    }
+  ],
+  "timings_ms": {
+    "plan": 48609,
+    "a-fill-slots": 21826,
+    "a-export-pptx": 539,
+    "a-convert": 2705,
+    "a-render-slides": 10260,
+    "a-audit": 2,
+    "a-export-html": 40,
+    "a-audit-contextual": 97077,
+    "b-fill-slots": 19684,
+    "b-export-pptx": 546,
+    "b-convert": 2716,
+    "b-render-slides": 10361,
+    "b-audit": 2,
+    "b-export-html": 44,
+    "c-fill-slots": 22538,
+    "c-export-pptx": 543,
+    "c-convert": 2124,
+    "c-render-slides": 7105,
+    "c-audit": 2,
+    "c-export-html": 37
+  },
+  "axis": "данные вперёд: числа становятся крупной цифрой, диаграммой или таблицей раньше текста"
+}

@@ -80,9 +80,17 @@ export type DeckListItem = {
 export type AgentInfo = { id: string; kind: 'cli' | 'local'; name: string; detail: string; found: boolean; model: string | null };
 export type AgentCheckResult = { ok: boolean; images: boolean | null; seconds: number; message: string };
 export type AgentAssignments = { deck: string; live: string; describe: string };
+/** Экран «Агенты и модели»: адрес сервера модели, как его видит человек, модель по умолчанию, модели CLI. */
+export type ModelSettings = { llm_url: string; llm_model: string; server: 'lmstudio' | 'ollama' | 'api'; cli_models: Record<string, string> };
 
 function url(path: string): string {
   return `${BASE_URL}${path}`;
+}
+
+/** Ошибка запроса словами человека: сбой сети браузер отдаёт как «TypeError: Failed to fetch». */
+export function errorText(e: unknown): string {
+  if (e instanceof TypeError) return `Сервис дизайнера не отвечает (${BASE_URL}). Проверьте, что контейнеры запущены: docker compose ps.`;
+  return e instanceof Error ? e.message : String(e);
 }
 
 async function asJson<T>(res: Response): Promise<T> {
@@ -271,6 +279,16 @@ export function checkAgent(agentId: string, model?: string): Promise<AgentCheckR
 
 export function getAgentAssignments(): Promise<AgentAssignments> {
   return fetch(url('/settings/agents')).then(r => asJson<AgentAssignments>(r));
+}
+
+export function getModelSettings(): Promise<ModelSettings> {
+  return fetch(url('/settings/models')).then(r => asJson<ModelSettings>(r));
+}
+
+export function setModelSettings(change: Partial<Omit<ModelSettings, 'server'>>): Promise<ModelSettings> {
+  return fetch(url('/settings/models'), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(change),
+  }).then(r => asJson<ModelSettings>(r));
 }
 
 export function setAgentAssignments(assignments: AgentAssignments): Promise<AgentAssignments> {

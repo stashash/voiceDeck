@@ -70,7 +70,7 @@ def test_live_slide_returns_scene_with_model_text(client, templates):
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
@@ -225,7 +225,7 @@ def _fake_slide_images(monkeypatch) -> None:
     monkeypatch.setattr("designer.pipeline.convert.to_pdf",
                          lambda pptx_path, out_path: out_path.write_bytes(b"%PDF-1.4 fake"))
     monkeypatch.setattr("designer.pipeline.render.render_slides",
-                         lambda pptx_path, count, width_px=1600: [PNG] * count)
+                         lambda pptx_path, count, width_px=1600, pdf_path=None: [PNG] * count)
     monkeypatch.setattr("designer.pipeline.render.render_spec",
                          lambda spec, ds, package_dir: PNG)
 
@@ -254,7 +254,7 @@ def test_live_slide_returns_picture_of_the_slide(client, templates, monkeypatch)
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
@@ -273,7 +273,7 @@ def test_live_slide_without_engine_has_no_picture(client, templates):
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm(payload)
 
@@ -620,3 +620,35 @@ def test_agent_settings_default_and_roundtrip(client):
     again = client.get("/settings/agents")
     assert again.json()["deck"] == "cli:claude"
     assert again.json()["live"] == body["live"]  # не тронуто частичным PUT
+
+
+def test_live_boundary_returns_model_decision(client):
+    app.dependency_overrides[get_live_llm_client] = lambda: _mock_llm({"title": "Проблема", "new_thought": True})
+
+    response = client.post("/live/boundary", json={
+        "thought": "Начну с проблемы. Обращений стало больше.", "next_sentence": "Теперь о результатах пилота.",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["new_thought"] is True
+    assert set(response.json()["timings"]) == {"total_ms", "busy"}
+
+
+def test_live_boundary_reports_model_loading(client):
+    app.dependency_overrides[get_live_llm_client] = lambda: _loading_llm()
+
+    response = client.post("/live/boundary", json={"thought": "Начну с проблемы.", "next_sentence": "Далее."})
+
+    assert response.status_code == 503
+
+
+def test_live_draft_puts_spoken_words_on_template_without_model(client, templates, monkeypatch):
+    ds_id = _upload_first_template(client, templates)
+    monkeypatch.setattr("designer.pipeline.convert.available", lambda: [])
+
+    response = client.post("/live/draft", json={
+        "design_system_id": ds_id, "chunk_text": "мы внедрили автоматизацию за три месяца", "used_pattern_ids": [],
+    })
+
+    assert response.status_code == 200
+    assert "3 месяца" in response.json()["html"]

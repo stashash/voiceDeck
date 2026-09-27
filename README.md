@@ -8,31 +8,35 @@
 
 ## Быстрый старт
 
-Нужны Windows 10 или 11, Docker Desktop с Linux-контейнерами, [LM Studio](https://lmstudio.ai), видеокарта NVIDIA от 24 ГБ, PowerShell 7, Git, Node.js 22 и Python 3.12. Те же шаги с проверкой каждого: [запуск на своей машине](docs/wiki/zapusk.md).
+```bash
+git clone https://github.com/stashash/voiceDeck.git
+cd voiceDeck
+```
 
-1. Клонируйте репозиторий и скачайте веса распознавания речи. Скрипт заодно создаёт `.env` из `.env.example`, настройки там уже под LM Studio:
+Затем мастер установки: `setup.cmd` на Windows, `./setup.sh` на macOS.
 
-   ```powershell
-   git clone https://github.com/stashash/voiceDeck.git
-   cd voiceDeck
-   pwsh scripts/setup-models.ps1
-   ```
+Мастер спрашивает, откуда брать модель, и ставит недостающее, спросив согласия: Docker Desktop, LM Studio или Ollama, Qwen3.8 27B, веса распознавания речи. Он пишет `.env`, собирает и поднимает контейнеры, проверяет сервисы и открывает `http://localhost:8088`. Повторный запуск пропускает сделанное.
 
-2. Скачайте модели LM Studio: `lms get qwen/qwen3.8-27b` и в самом LM Studio эмбеддинги `text-embedding-bge-m3`. Затем закрепите обе в памяти:
+| Модель | Что нужно | Что работает |
+|---|---|---|
+| LM Studio на этой машине | видеокарта NVIDIA от 24 ГБ или Mac на Apple Silicon от 32 ГБ, около 30 ГБ на диске | всё: генерация, правка, Live-режим |
+| Ollama на этой машине | то же железо, около 20 ГБ на диске | всё; путь написан по документации Ollama, на живой Ollama не запускался |
+| внешний OpenAI-совместимый API с Qwen3.8 27B | адрес, имя модели и ключ | всё |
+| без модели | только Docker | готовые дизайн-системы и презентации, правка текста и образца, скачивание |
 
-   ```powershell
-   pwsh scripts/start-models.ps1
-   ```
+Сразу после установки в приложении есть три дизайн-системы из шаблонов VK и три презентации по одному брифу из `examples/brief.txt`, у каждой три варианта вёрстки: всего 9 вариантов, как требует ТЗ. Их копия лежит в `demo/`, при первом старте сервис переносит её в своё хранилище.
 
-3. Поднимите стек и откройте `http://localhost:8088` в Chrome или Edge:
+Ручная установка по шагам с проверкой каждого: [запуск на своей машине](docs/wiki/zapusk.md). Мастер для Windows проверен на Windows 11 всеми тремя путями модели. Для macOS проверены шаги до запуска контейнеров в bash 3.2 под arm64 и сборка обоих образов под arm64; на живом Mac мастер не запускался.
 
-   ```powershell
-   docker compose up --build -d
-   ```
+## Готовые презентации
 
-4. Для CLI-агентов (Claude Code, Codex, Cursor Agent, OpenCode) запустите мост и оставьте окно открытым: `python scripts/agent_bridge.py`. Qwen в LM Studio работает и без него.
+Один бриф, три шаблона VK, три варианта вёрстки: `a` как в шаблоне, `b` плотнее, `c` данные вперёд. Шаблоны лежат в `docs/requirements/template/`, пересобрать всё заново: `python examples/build.py examples/brief.txt` и `python examples/export_demo.py <каталог данных designer>`.
 
-На свежей установке дизайн-систем нет: загрузите любой pptx в разделе «Дизайн-системы». После перезагрузки машины снова выполните `pwsh scripts/start-models.ps1`: контейнеры поднимаются сами, модели в LM Studio нет.
+| Шаблон | Вариант a | Вариант b | Вариант c |
+|---|---|---|---|
+| VK Tech шаблон | [pdf](demo/decks/vk-tech-shablon/a/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/a/files/deck.pptx), [html](demo/decks/vk-tech-shablon/a/files/deck.html) | [pdf](demo/decks/vk-tech-shablon/b/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/b/files/deck.pptx), [html](demo/decks/vk-tech-shablon/b/files/deck.html) | [pdf](demo/decks/vk-tech-shablon/c/files/deck.pdf), [pptx](demo/decks/vk-tech-shablon/c/files/deck.pptx), [html](demo/decks/vk-tech-shablon/c/files/deck.html) |
+| VK WorkSpace Клиентская конференция Шаблон 03 | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/a/files/deck.html) | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/b/files/deck.html) | [pdf](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.pdf), [pptx](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.pptx), [html](demo/decks/vk-workspace-klientskaya-konferenciya-shablon-03/c/files/deck.html) |
+| Шаблон презентации VK Education | [pdf](demo/decks/shablon-prezentacii-vk-education/a/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/a/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/a/files/deck.html) | [pdf](demo/decks/shablon-prezentacii-vk-education/b/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/b/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/b/files/deck.html) | [pdf](demo/decks/shablon-prezentacii-vk-education/c/files/deck.pdf), [pptx](demo/decks/shablon-prezentacii-vk-education/c/files/deck.pptx), [html](demo/decks/shablon-prezentacii-vk-education/c/files/deck.html) |
 
 ## Сервис `designer`: генерация презентаций по шаблону
 
@@ -75,7 +79,7 @@ python -m designer serve
 | `DESIGNER_LLM_URL` | designer | `http://127.0.0.1:1234/v1` | адрес OpenAI-совместимого сервера модели |
 | `DESIGNER_LLM_MODEL` | designer | `qwen/qwen3.8-27b` | имя модели на этом сервере |
 | `DESIGNER_LIVE_LLM_URL`, `DESIGNER_LIVE_LLM_MODEL` | designer | пусто, берутся основные | отдельная модель для слайда из речи (`POST /live/slide`), когда нужна более быстрая |
-| `DESIGNER_LLM_PARALLEL` | designer | `4` | сколько текстовых запросов к модели идёт одновременно (текст слотов, аудит слайдов); сервер модели поднимается с тем же числом слотов. Запросы с картинками идут строго по одному |
+| `DESIGNER_LLM_PARALLEL` | designer | `4` | сколько текстовых запросов к модели идёт одновременно (текст слотов); сервер модели поднимается с тем же числом слотов. Запросы с картинками, в том числе аудит слайдов по картинке, идут строго по одному |
 | `DESIGNER_CONFIG` | designer | `config.yaml` | путь к файлу настроек |
 | `DESIGNER_SKILLS_DIR` | designer | `designer/skills` рядом с кодом; в образе `/app/skills` | каталог промптов (скиллов) |
 | `DESIGNER_DESCRIBE` | designer | `1` | `0` выключает описание слайдов-образцов моделью при импорте шаблона |
@@ -107,7 +111,7 @@ python -m designer serve
 
 ### Примеры
 
-В `examples/` девять колод по одному брифу (`examples/brief.txt`): три выданных шаблона на три варианта вёрстки. В каждом каталоге `examples/<шаблон>/<вариант>/` лист слайдов `sheet.jpg`, `deck.pdf` и карточка прогона `run.json`; `deck.pptx` и `deck.html` в git не лежат, их собирает заново `python examples/build.py` при поднятом `docker compose`. Замер 2026-09-23 на Qwen3.8-27B в LM Studio (RTX 5090): импорт шаблона 79–99 с, три варианта колоды на 10–15 слайдов 150–195 с с контекстным аудитом первого варианта (`examples/build.log`).
+В `examples/` девять колод по одному брифу (`examples/brief.txt`): три выданных шаблона на три варианта вёрстки. В каждом каталоге `examples/<шаблон>/<вариант>/` лист слайдов `sheet.jpg` и карточка прогона `run.json`; `deck.pptx`, `deck.pdf` и `deck.html` в git не лежат, их собирает заново `python examples/build.py` при поднятом `docker compose`. Замер 2026-09-26 на Qwen3.8-27B в LM Studio (RTX 5090): импорт шаблона с описанием образцов 61–113 с, три варианта колоды на 10–15 слайдов 192–251 с с контекстным аудитом первого варианта (`examples/build.log`).
 
 ### Живой режим как надстройка
 
@@ -133,7 +137,7 @@ python -m designer serve
 * PostgreSQL + pgvector: журнал событий, эмбеддинги, восстановление истории после reconnect. Сырой звук на диск не записывается.
 * Мини-макеты создаются обычным кодом из текста сразу после публикации куска, для каждого куска. Конфигурация `SLIDE_MODE=llm` зарезервирована для существующего адаптера локального OpenAI-совместимого LLM-сервера; для текущего сценария она не используется.
 
-Обычные паузы дают более ранние финалы; партиалы обновляются примерно каждые 0.5 с аудио плюс время инференса. Это не гарантия задержки на любом компьютере. Времена отдельных предложений интерполируются внутри фразы. Границы смысловых фрагментов эвристические и могут требовать правки.
+Обычные паузы дают более ранние финалы; партиалы обновляются примерно каждые 0.5 с аудио плюс время инференса. Это не гарантия задержки на любом компьютере. Времена отдельных предложений интерполируются внутри фразы. Java-сервис закрывает фрагмент речи на паузе, и через 0,6–0,7 с после фразы designer кладёт в колонку «Следующий слайд» черновик: сказанные слова на чистом фоне образца, без модели. Через 4,5–6 с черновик меняет слайд модели (в среднем 5,5 с на речи из шести мыслей). Продолжает ли следующий фрагмент мысль предыдущего, решает модель (навык `designer/skills/speech-boundary`, около 0,8 с на Qwen3.8 27B); её спрашивают по первым словам фразы, пока человек ещё говорит. Слайды модели строятся по два одновременно, свежая мысль первой. Если продолжает, Java-сервис склеивает фрагменты и designer дополняет слайд; если нет, прежний слайд уходит в зал. Пока designer не отвечает, Java-сервис склеивает фрагменты по эмбеддингам.
 
 ## Проверки
 

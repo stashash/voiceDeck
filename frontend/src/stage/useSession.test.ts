@@ -70,6 +70,48 @@ describe('SessionEngine',()=>{
   hall.close();engine.close();
  });
 
+ it('keeps the draft visible while a merged chunk waits for its new slide',async()=>{
+  // Модель склеила фрагмент со следующим: пока сервис собирает дополненный слайд, справа прежний, а не пустота.
+  const engine=makeEngine('s-merge');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>начало мысли</section>')});
+  engine.event({type:'chunk_revise',seq:3,replace_ids:['a'],chunks:[{...chunk('a',2,'provisional'),sentence_ids:['s','t']}]});
+  expect(engine.state.slides.a?.html).toBe('<section>начало мысли</section>');
+  engine.event({type:'slide',seq:4,slide:slide('a',2,'<section>вся мысль</section>')});
+  expect(engine.state.slides.a?.html).toBe('<section>вся мысль</section>');
+  engine.close();
+ });
+
+ it('shows the draft slide in the hall when its chunk is confirmed',async()=>{
+  // Подтверждение не меняет фрагмент: зал получает тот же слайд, что докладчик видел черновиком, без пустого экрана.
+  const engine=makeEngine('s-confirm');
+  const hall=listen('s-confirm');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>черновик</section>')});
+  engine.event({type:'chunk_revise',seq:3,replace_ids:['a'],chunks:[chunk('a',2,'confirmed')]});
+  await wait();
+  expect(engine.state.slides.a?.rev).toBe(2);
+  expect(engine.shown?.html).toBe('<section>черновик</section>');
+  expect(slidesOf(hall.messages).some(s=>s===null)).toBe(false);
+  hall.close();engine.close();
+ });
+
+ it('sends the finished thought to the hall even when the next draft came first',async()=>{
+  // Черновик новой мысли показывается, не дожидаясь ответа модели о границе: прежняя мысль всё равно уходит в зал.
+  const engine=makeEngine('s-early');
+  const hall=listen('s-early');
+  engine.event({type:'chunk',seq:1,chunk:chunk('a',1,'provisional')});
+  engine.event({type:'slide',seq:2,slide:slide('a',1,'<section>первая мысль</section>')});
+  engine.event({type:'chunk',seq:3,chunk:{...chunk('b',1,'provisional'),t0:2000,t1:3000}});
+  engine.event({type:'slide',seq:4,slide:slide('b',1,'<section>черновик второй</section>')});
+  engine.event({type:'chunk_revise',seq:5,replace_ids:['a'],chunks:[chunk('a',2,'confirmed')]});
+  await wait();
+  expect(engine.shown?.html).toBe('<section>первая мысль</section>');
+  expect(engine.draft()?.id).toBe('b');
+  expect(slidesOf(hall.messages).at(-1)?.chunk_id).toBe('a');
+  hall.close();engine.close();
+ });
+
  it('keeps the hall slide when the service replaces its chunk',async()=>{
   // Показанный залу слайд не пропадает, когда сервис разбивает или склеивает фрагмент речи.
   const engine=makeEngine('s-revise');

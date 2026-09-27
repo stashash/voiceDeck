@@ -5,7 +5,7 @@ import httpx
 
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
-from designer.plan.writer import fill_slots, speech_to_slide
+from designer.plan.writer import fill_slots, speech_boundary, speech_to_slide
 
 BASE_INTENT = SlideIntent(
     id="s1",
@@ -128,6 +128,17 @@ def test_item_count_is_forced_to_n_units():
     assert len(client.call_durations_ms) == 2  # несовпадение числа пунктов — тоже нарушение
 
 
+def test_placeholder_braces_are_stripped_from_slot_text():
+    # Qwen на образце-таймлайне вернул «{14 витрин до конца квартала}», скобки попали на слайд.
+    payload = {"title": "{Итог квартала}", "items": [{"heading": "[Раз]", "body": "Текст {не обёртка}"}]}
+    client = _client_returning(payload)
+    result = fill_slots(BASE_INTENT, {"title": 40}, {"heading": 20, "body": 30}, 1, client)
+
+    assert result.title == "Итог квартала"
+    assert result.items[0].heading == "Раз"
+    assert result.items[0].body == "Текст {не обёртка}"
+
+
 def test_unknown_number_stays_in_phrase_and_is_left_to_audit():
     payload = {"title": "Рост 20 против 42 процента", "items": []}
     client = _client_returning(payload)
@@ -149,7 +160,7 @@ def test_speech_to_slide_builds_intent_from_fragment():
     payload = {
         "kind": "bullets", "title": "Автоматизация экономит время",
         "key_message": "Скрипты забирают рутину.",
-        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию."}],
+        "items": [{"heading": "Меньше ошибок", "body": "Проверки идут по сценарию.", "icon_hint": "shield-check"}],
     }
     client = _client_returning(payload)
     intent = speech_to_slide("Мы внедрили автоматизацию, и стало меньше ошибок",
@@ -158,6 +169,7 @@ def test_speech_to_slide_builds_intent_from_fragment():
     assert intent.kind == SlideKind.bullets
     assert intent.title == "Автоматизация экономит время"
     assert len(intent.items) == 1
+    assert intent.items[0].icon_hint == "shield-check", "значок пункта модель выбирает из набора"
 
 
 def test_speech_to_slide_drops_number_not_in_fragment():
@@ -230,3 +242,10 @@ def test_speech_to_slide_strips_time_the_speaker_did_not_say():
 
     # «6» сказано («шесть недель»), а время 6:00 нет: оно уходит вместе с предлогом.
     assert intent.title == "Подготовка отчёта"
+
+
+def test_speech_boundary_follows_model_decision():
+    thought = "Начну с проблемы. Обращений в прошлом году было сорок тысяч."
+    assert speech_boundary(thought, "Теперь о результатах пилота.", _client_returning({"title": "Проблема первой линии", "new_thought": True})) is True
+    assert speech_boundary(thought, "Каждое стоило сто двадцать рублей.",
+                           _client_returning({"title": "Проблема первой линии", "new_thought": False})) is False

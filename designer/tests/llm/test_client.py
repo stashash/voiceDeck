@@ -111,3 +111,21 @@ def test_model_that_never_loads_is_reported():
     client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler), load_wait_s=0)
     with pytest.raises(ModelLoading):
         client.complete_json("s", "u", {"type": "object"})
+
+
+def test_rejected_reasoning_effort_is_dropped_and_request_repeated():
+    """Ollama отклоняет значение reasoning_effort, которого модель не объявила: запрос повторяется без него."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        if "reasoning_effort" in body:
+            return httpx.Response(400, json={"error": 'invalid reasoning effort "none"'})
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"ok": True})}}]})
+
+    client = LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler), load_wait_s=0)
+    schema = {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}
+
+    assert client.complete_json("s", "u", schema, params={"reasoning_effort": "none"}) == {"ok": True}
+    assert "reasoning_effort" in seen[0] and "reasoning_effort" not in seen[1]

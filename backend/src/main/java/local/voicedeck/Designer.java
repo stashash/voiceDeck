@@ -42,6 +42,33 @@ public final class Designer {
         if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
         return toSlide(new JsonObject(res.body()));
     }
+    /** Черновик слайда сразу после фразы: сказанный текст на чистом фоне образца, без модели (designer /live/draft). */
+    public JsonObject draft(String designSystemId,String chunkText)throws Exception {
+        if(!enabled)throw new IllegalStateException("Designer disabled");
+        var body=new JsonObject().put("design_system_id",designSystemId).put("chunk_text",chunkText).put("used_pattern_ids",new JsonArray());
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/draft")).timeout(Duration.ofSeconds(5)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        var res=http.send(req,HttpResponse.BodyHandlers.ofString());
+        if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
+        return toSlide(new JsonObject(res.body()));
+    }
+    /** Фон черновика готовится заранее, как только выбрана дизайн-система. */
+    public void warm(String designSystemId){
+        if(!enabled||designSystemId==null||designSystemId.isBlank())return;
+        var body=new JsonObject().put("design_system_id",designSystemId);
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/warm")).timeout(Duration.ofSeconds(5)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        http.sendAsync(req,HttpResponse.BodyHandlers.discarding());
+    }
+    /** Начинает ли next новую мысль после thought: так Live делит речь на слайды (designer /live/boundary). */
+    public boolean boundary(String thought,String next)throws Exception {
+        if(!enabled)throw new IllegalStateException("Designer disabled");
+        if(thought.length()>16000)thought=thought.substring(thought.length()-16000);
+        var body=new JsonObject().put("thought",thought).put("next_sentence",next.length()>4000?next.substring(0,4000):next);
+        var req=HttpRequest.newBuilder(URI.create(url+"/live/boundary")).timeout(Duration.ofSeconds(10)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        var res=http.send(req,HttpResponse.BodyHandlers.ofString());
+        if(res.statusCode()==503)throw new ModelLoading();
+        if(res.statusCode()!=200)throw new IllegalStateException("Designer HTTP "+res.statusCode());
+        return new JsonObject(res.body()).getBoolean("new_thought",false);
+    }
     /** Сцена + html -> прежние поля slide (заголовок и тексты блоков по роли элемента) плюс pattern_id и html. */
     static JsonObject toSlide(JsonObject response) {
         JsonObject scene=response.getJsonObject("scene");
@@ -54,6 +81,9 @@ public final class Designer {
             if(title==null&&(role.equals("title")||role.equals("heading")))title=text;
             else if(role.equals("body"))bullets.add(text);
         }
-        return new JsonObject().put("title",title).put("bullets",bullets).put("notes","").put("pattern_id",scene.getString("pattern_id")).put("html",response.getString("html"));
+        JsonObject slide=new JsonObject().put("title",title).put("bullets",bullets).put("notes","").put("pattern_id",scene.getString("pattern_id")).put("html",response.getString("html"));
+        JsonObject timings=response.getJsonObject("timings");
+        if(timings!=null&&!timings.isEmpty())slide.put("timings",timings);
+        return slide;
     }
 }

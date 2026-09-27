@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import re
+
 from designer.contracts import (
     Area,
     Box,
@@ -27,6 +29,7 @@ from designer.layout.capacity import (
     ink_box,
     lead_number,
     line_capacity,
+    companion_icon_groups,
     linked_groups,
     number_caption,
     primary_group,
@@ -40,6 +43,7 @@ from designer.layout.capacity import (
     unit_count,
     unit_slot_box,
 )
+from designer import icons
 from designer.parse import geometry as geo
 
 _HEAD_ROLES = ("heading", "title")
@@ -538,6 +542,22 @@ def _head_fix(
     return out
 
 
+def _words(text: str) -> list[str]:
+    return re.findall(r"\w+", text.lower())
+
+
+def repeats(message: str, title: str) -> bool:
+    """Ключевая мысль повторяет заголовок: дословно или теми же словами. Такой текст под заголовком
+    читается как заготовка, и на слайд он не ставится."""
+    a, b = _words(message), _words(title)
+    if not a or not b:
+        return False
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    if " ".join(short) in " ".join(long):
+        return True
+    return len(set(short) & set(long)) >= 0.8 * len(set(short))
+
+
 def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpec:
     """Инструкция сборки слайда: какой слот чем заполнить, где диаграмма и что со слайда убрать."""
     spec = SlideSpec(slide_id=intent.id, pattern_id=pattern.id, notes=intent.notes)
@@ -579,9 +599,18 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.group_id = group.id
         spec.unit_text = spread[group.id]
         spec.linked_unit_text = {other.id: spread[other.id] for other in linked}
+        # Ряд значков без текста рядом с пунктами повторяется тем же числом блоков, а не убирается.
+        companions = [other for other in companion_icon_groups(pattern, group)
+                      if other.min_units <= n <= other.max_units]
+        spec.linked_unit_text.update({other.id: [{} for _ in range(n)] for other in companions})
+        # Значок у каждого пункта свой, по подсказке модели; без подсказки остаётся значок образца.
+        if any(area.kind == "icon" for g in (group, *linked, *companions) for area in g.unit_areas):
+            picked = [icons.pick(rest[i].icon_hint) if i < len(rest) else None for i in range(n)]
+            if any(picked):
+                spec.unit_icons = picked
         rest = []
 
-    if intent.key_message:
+    if intent.key_message and not repeats(intent.key_message, intent.title):
         message = intent.key_message
         slot = (
             _take(free, ("subtitle",), avoid=region, phrase=True)

@@ -1,9 +1,10 @@
 """Заполнение текстовых слотов слайда под вместимость паттерна.
 
-Два скилла:
+Три скилла:
 - fill_slots — уже собранное намерение слайда сокращается и подгоняется под лимиты
   знаков и число пунктов конкретного паттерна;
-- speech_to_slide — фрагмент устной речи (живой режим) превращается в намерение слайда.
+- speech_to_slide — фрагмент устной речи (живой режим) превращается в намерение слайда;
+- speech_boundary — начинает ли следующее предложение речи новую мысль, то есть новый слайд.
 
 Локальный сервер не проверяет maxLength из JSON-схемы (см. llm/client._matches_schema),
 поэтому длины и число пунктов проверяются кодом после ответа: один повтор с перечнем
@@ -14,6 +15,7 @@ from __future__ import annotations
 import re
 import uuid
 
+from designer import icons
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
@@ -21,6 +23,10 @@ from designer.plan.numerals import digits_from_speech
 
 _FILL_SKILL = "fill-slots"
 _SPEECH_SKILL = "speech-to-slide"
+_BOUNDARY_SKILL = "speech-boundary"
+# Заголовок идёт первым: назвав мысль текущего слайда, модель реже склеивает соседние темы.
+_BOUNDARY_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["title", "new_thought"],
+                    "properties": {"title": {"type": "string"}, "new_thought": {"type": "boolean"}}}
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _SENTENCE_END = re.compile(r"(?<!\d)[.!?](?=\s|$)")
@@ -56,6 +62,7 @@ def fill_slots(intent: SlideIntent, limits: dict[str, int], unit_limits: dict[st
         draft = _apply_fill_response(intent, data, limits, unit_limits)
 
     _fit_item_count(draft, original_items, n_units)
+    _keep_icon_hints(draft, original_items)
     _drop_unknown_numbers(draft, allowed_numbers)
     _enforce_top_limits(draft, limits)
     _enforce_unit_limits(draft.items, unit_limits)
@@ -66,7 +73,7 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     """Фрагмент устной речи в намерение слайда. Пустой title значит «слайд не нужен»."""
     skill = load_skill(_SPEECH_SKILL)
     schema = _speech_schema(kinds)
-    system = skill.render(kinds=", ".join(kind.value for kind in kinds))
+    system = skill.render(kinds=", ".join(kind.value for kind in kinds), icon_names=icons.names_text())
 
     # Распознанная речь несёт числа словами. Модель переводила их сама и ошибалась на времени:
     # «к половине девятого» становилось «6:00». Код переводит их до модели, и числа на слайде
@@ -90,6 +97,18 @@ def speech_to_slide(chunk_text: str, kinds: list[SlideKind], client: LlmClient) 
     if intent.kind is SlideKind.big_number and len(intent.items) > 1 and SlideKind.cards in kinds:
         intent.kind = SlideKind.cards
     return intent
+
+
+def speech_boundary(thought: str, next_sentence: str, client: LlmClient) -> bool:
+    """True, если next_sentence начинает новую мысль после thought, то есть нужен новый слайд.
+
+    Пауза в речи мысль не закрывает: докладчик молчит и посреди мысли. Эмбеддинги соседних
+    предложений внутри одного доклада почти одинаковы, границу по ним не видно.
+    """
+    skill = load_skill(_BOUNDARY_SKILL)
+    user = f"Текущий слайд:\n{thought}\n\nСледующее предложение:\n{next_sentence}"
+    data = client.complete_json(system=skill.render(), user=user, schema=_BOUNDARY_SCHEMA, params=skill.params)
+    return data.get("new_thought") is True
 
 
 # ---------- числа во фрагменте речи ----------
@@ -182,8 +201,9 @@ def _speech_schema(kinds: list[SlideKind]) -> dict:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "properties": {"heading": {"type": "string"}, "body": {"type": "string"}},
-                    "required": ["heading", "body"],
+                    "properties": {"heading": {"type": "string"}, "body": {"type": "string"},
+                                   "icon_hint": {"type": "string"}},
+                    "required": ["heading", "body", "icon_hint"],
                 },
             },
         },
@@ -215,22 +235,35 @@ def _intent_material(intent: SlideIntent) -> str:
 
 # ---------- разбор ответа ----------
 
+_PLACEHOLDER_WRAP = {"{": "}", "[": "]", "<": ">"}
+
+
+def _slot_text(value: object) -> str:
+    """Текст слота без обёртки заглушки: модель иногда пишет «{14 витрин до конца квартала}»."""
+    text = str(value).strip()
+    close = _PLACEHOLDER_WRAP.get(text[:1])
+    inner = text[1:-1]
+    if close and len(text) > 2 and text.endswith(close) and text[0] not in inner and close not in inner:
+        return inner.strip()
+    return text
+
+
 def _apply_fill_response(intent: SlideIntent, data: dict, limits: dict[str, int],
                           unit_limits: dict[str, int]) -> SlideIntent:
     draft = intent.model_copy(deep=True)
     for role in limits:
         if role in data:
-            setattr(draft, _TOP_ROLE_FIELD[role], str(data[role]))
+            setattr(draft, _TOP_ROLE_FIELD[role], _slot_text(data[role]))
     if "items" in data and isinstance(data["items"], list):
         items = []
         for raw in data["items"]:
             kwargs: dict[str, str | None] = {}
             if "heading" in unit_limits:
-                kwargs["heading"] = str(raw.get("heading", ""))
+                kwargs["heading"] = _slot_text(raw.get("heading", ""))
             if "body" in unit_limits:
-                kwargs["body"] = str(raw.get("body", ""))
+                kwargs["body"] = _slot_text(raw.get("body", ""))
             if "number" in unit_limits:
-                kwargs["number"] = str(raw.get("number", "")) or None
+                kwargs["number"] = _slot_text(raw.get("number", "")) or None
             items.append(Item(**kwargs))
         draft.items = items
     return draft
@@ -243,7 +276,8 @@ def _speech_intent(data: dict, kinds: list[SlideKind]) -> SlideIntent:
     if not title:
         return SlideIntent(id=uuid.uuid4().hex, kind=kind, title="")
     items = [
-        Item(heading=str(raw.get("heading", "")), body=str(raw.get("body", "")))
+        Item(heading=str(raw.get("heading", "")), body=str(raw.get("body", "")),
+             icon_hint=str(raw.get("icon_hint", "")).strip() or None)
         for raw in data.get("items", []) or []
     ]
     return SlideIntent(id=uuid.uuid4().hex, kind=kind, title=title,
@@ -292,6 +326,13 @@ def _violations(draft: SlideIntent, limits: dict[str, int], unit_limits: dict[st
 
 
 # ---------- принудительная нормализация кодом ----------
+
+def _keep_icon_hints(draft: SlideIntent, original_items: list[Item]) -> None:
+    """Переписанный под лимиты пункт сохраняет значок, который план выбрал для него."""
+    for item, original in zip(draft.items, original_items):
+        if not item.icon_hint:
+            item.icon_hint = original.icon_hint
+
 
 def _fit_item_count(draft: SlideIntent, original_items: list[Item], n_units: int) -> None:
     items = draft.items

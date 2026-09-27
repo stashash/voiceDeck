@@ -32,7 +32,7 @@ from designer.layout.capacity import (
     unit_boxes,
     unit_count,
 )
-from designer.layout.units import map_shape_box
+from designer.layout.units import keeps_aspect, map_shape_box
 from designer.parse import geometry as geo
 from designer.parse import patterns as parse
 from designer.parse.package import SOURCE_NAME
@@ -201,7 +201,8 @@ def _unit_elements(
             if area is not None and area.kind in _SAMPLE_VIZ:
                 continue
             keep = area.kind in _KEEP_SIZE if area is not None else info.kind == "image"
-            box = _clip(map_shape_box(old, new_box, info.box, keep_size=keep))
+            aspect = not keep and keeps_aspect(old, info.box, slide[0] / slide[1])
+            box = _clip(map_shape_box(old, new_box, info.box, keep_size=keep, keep_aspect=aspect))
             if box is None:
                 continue
             el_id = f"u{index}s{shape_id}"
@@ -214,7 +215,10 @@ def _unit_elements(
                 if element is not None:
                     out.append(element)
             elif area is not None:
-                out.append(_picture_element(el_id, area.kind, box, z, raw.get(shape_id), shape_id))
+                element = _picture_element(el_id, area.kind, box, z, raw.get(shape_id), shape_id)
+                if area.kind == "icon" and index < len(spec.unit_icons) and spec.unit_icons[index]:
+                    element.icon = spec.unit_icons[index]
+                out.append(element)
             else:
                 out.append(_decor_element(el_id, info, box, z, raw.get(shape_id), part, theme))
     return out

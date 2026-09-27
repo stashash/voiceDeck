@@ -30,6 +30,20 @@ public final class Session implements AutoCloseable {
     volatile boolean closed;
     long epoch=System.currentTimeMillis(),lastFinalWall,committedAt,lastSlideEnd=-45000,retryAt;
     boolean generating,curating,stopped;
+    // Фрагменты, чей слайд модель собирает прямо сейчас (Live с designer, до liveSlideParallel одновременно).
+    final Set<String> inFlight=new HashSet<>();
+    // Продолжает ли свежий фрагмент мысль предыдущего, решает модель designer; вопрос один за раз.
+    boolean judging;long boundaryDownUntil;final Set<String> judged=new HashSet<>();
+    // Вопрос о границе, заданный по частичной фразе, пока человек ещё говорит: к закрытию фрагмента ответ готов,
+    // и черновик новой мысли не ждёт модель. Ответ относится к фразе, начатой в earlyT0 после фрагмента earlyPrevId.
+    static final int EARLY_WORDS=4;
+    long earlyT0=-1;String earlyPrevId;int earlyPrevRev;Boolean earlyVerdict;boolean earlyAsking;
+    // Черновик фрагмента, чью связь с предыдущей мыслью модель ещё решает: покажется, если это новая мысль.
+    final Map<String,JsonObject> heldDrafts=new HashMap<>();final Set<String> newThoughts=new HashSet<>();
+    // Черновик ждёт ответа не дольше HOLD_MS: слайд после фразы обязан успеть за 1,5 с, даже когда модель занята.
+    static final long HOLD_MS=700;final Map<String,Long> heldAt=new HashMap<>();
+    // Слайды, которые модель пересобирает для выросшей мысли: они занимают не больше одного места из liveSlideParallel.
+    final Set<String> regrowing=new HashSet<>();
     // T-S3/T1b: depth-score EMA state (mutated only on the state worker thread); depth is computed before the EMA update.
     double emaBaseline=0.0,emaDispersion=0.0;long emaCount=0;
     // T1b: stream-level boundary detector state (state worker only): valley-confirmation candidate.
@@ -74,8 +88,14 @@ public final class Session implements AutoCloseable {
             case "final" -> {JsonObject s=e.getJsonObject("sentence");sentences.put(s.getString("id"),s);pending.add(s.getString("id"));streamIds.add(s.getString("id"));}
             case "chunk" -> {JsonObject c=e.getJsonObject("chunk");chunks.put(c.getString("id"),c);pending.removeAll(c.getJsonArray("sentence_ids").getList());}
             case "chunk_revise" -> {
-                for(Object key:e.getJsonArray("replace_ids")){chunks.remove(key.toString());slides.remove(key.toString());}
-                for(Object raw:e.getJsonArray("chunks")){JsonObject c=raw instanceof JsonObject j?j:new JsonObject((Map<String,Object>)raw);chunks.put(c.getString("id"),c);}
+                Map<String,JsonObject> before=new HashMap<>(),kept=new HashMap<>();
+                for(Object key:e.getJsonArray("replace_ids")){String k=key.toString();JsonObject old=chunks.remove(k),slide=slides.remove(k);if(old!=null&&slide!=null){before.put(k,old);kept.put(k,slide);}}
+                for(Object raw:e.getJsonArray("chunks")){
+                    JsonObject c=raw instanceof JsonObject j?j:new JsonObject((Map<String,Object>)raw);chunks.put(c.getString("id"),c);
+                    // Подтверждение не меняет состав фрагмента: слайд остаётся, модель не собирает его заново.
+                    JsonObject old=before.get(c.getString("id"));
+                    if(old!=null&&old.getJsonArray("sentence_ids").equals(c.getJsonArray("sentence_ids")))slides.put(c.getString("id"),kept.get(c.getString("id")).copy().put("rev",c.getInteger("rev")));
+                }
             }
             case "slide" -> {JsonObject s=e.getJsonObject("slide"),c=chunks.get(s.getString("chunk_id"));if(c!=null&&c.getInteger("rev").equals(s.getInteger("rev"))){slides.put(s.getString("chunk_id"),s);if(s.getValue("title")!=null)slideEligible.add(s.getString("chunk_id"));}}
             case "stopped" -> stopped=true;
@@ -113,6 +133,7 @@ public final class Session implements AutoCloseable {
         String dsId=m.getString("id","").strip();
         if(dsId.isEmpty())throw new IllegalArgumentException("Design system id required");
         designSystemId=dsId;
+        if(thoughtMode())designer.warm(dsId);
     }
     void acceptAudio(byte[] bytes){
         if(!mode.equals("live")){warning("Микрофон доступен только в режиме live с установленными моделями");return;}
@@ -128,7 +149,7 @@ public final class Session implements AutoCloseable {
             audioWorker.execute(()->{
                 try {
                     if(audio==null)audio=new Audio(models,new Audio.Listener(){
-                        public void partial(String text,long t0,long t1){submit(()->{Metrics.observe("partial_latency",System.currentTimeMillis()-epoch-t1);wire(new JsonObject().put("type","partial").put("text",text).put("t0",t0).put("t1",t1));});}
+                        public void partial(String text,long t0,long t1){submit(()->{Metrics.observe("partial_latency",System.currentTimeMillis()-epoch-t1);wire(new JsonObject().put("type","partial").put("text",text).put("t0",t0).put("t1",t1));askEarly(text,t0);});}
                         public void finish(String text,long t0,long t1){submit(()->acceptFinal(text,t0,t1));}
                         public void warning(String text){submit(()->Session.this.warning(text));}
                     });
@@ -141,6 +162,7 @@ public final class Session implements AutoCloseable {
     void acceptFinal(String text,long t0,long t1){
         Metrics.observe("final_latency",System.currentTimeMillis()-epoch-t1);
         if(sentences.size()>=20000)throw new IllegalStateException("Лимит сессии достигнут; начните новую");
+        askEarly(text,t0,1);
         List<String> list=Text.sentences(text);long total=Math.max(1,text.length()),cursor=t0;
         for(int i=0;i<list.size();i++){
             String sentence=list.get(i);long end=i==list.size()-1?t1:Math.min(t1,cursor+(t1-t0)*sentence.length()/total);
@@ -267,9 +289,136 @@ public final class Session implements AutoCloseable {
             if(words>=models.chunkSizeMax()&&sinceLastFinal>100)commit("size-cap");
             else if(pending.size()>=models.chunkSentencesMax()&&sinceLastFinal>100)commit("sentences-cap");
             else if(words>=models.chunkSizeTarget()&&sinceLastFinal>=600)commit("size-target");
-            else if(sincePhraseEnd>=2000||sinceLastFinal>=1200)commit("deadline");
+            // Слайд должен успеть через 1,5 с после фразы: при решении модели фрагмент закрывается сразу по финалу,
+            // склейку по смыслу делает модель; без неё ждём 1,2 с, как раньше.
+            else if(sincePhraseEnd>=2000||sinceLastFinal>=(modelJudges()?150:1200))commit("deadline");
         }
+        releaseHeldDrafts(now);
+        judgeContinuation();
         generate();
+    }
+    /** Ответ о границе не пришёл за HOLD_MS: черновик показывается, окажется продолжением — склеится с мыслью. */
+    void releaseHeldDrafts(long now){
+        for(String id:List.copyOf(heldDrafts.keySet())){
+            if(now-heldAt.getOrDefault(id,now)<HOLD_MS)continue;
+            heldAt.remove(id);emitDraft(heldDrafts.remove(id));
+        }
+    }
+    /** Слайда нет, есть только черновик или слайд собран по началу мысли, которая с тех пор выросла. */
+    boolean needsSlide(JsonObject c){
+        JsonObject have=slides.get(c.getString("id"));
+        return have==null||"draft".equals(have.getString("source"))||have.getInteger("sentences",Integer.MAX_VALUE)<c.getJsonArray("sentence_ids").size();
+    }
+    static boolean startsWith(JsonArray all,JsonArray head){
+        if(head.size()>all.size())return false;
+        for(int i=0;i<head.size();i++)if(!all.getValue(i).equals(head.getValue(i)))return false;
+        return true;
+    }
+    /** Слайды Live строит designer: он же отвечает, продолжает ли фрагмент мысль предыдущего. */
+    boolean thoughtMode(){return designerMode&&designer.enabled();}
+    /** Пока designer не отвечает, фрагменты склеиваются по эмбеддингам, как раньше. */
+    boolean modelJudges(){return thoughtMode()&&System.currentTimeMillis()>=boundaryDownUntil;}
+    /** Фрагмент закрывается на паузе и сразу даёт слайд. Потом модель смотрит, продолжает ли он мысль предыдущего
+     *  неподтверждённого фрагмента: продолжает — фрагменты склеиваются и слайд дополняется; новая мысль — прежний
+     *  слайд подтверждается и уходит в зал. Порог косинуса по одному предложению этого не различал. */
+    /** Частичная фраза после незакрытой мысли: вопрос о границе задаётся сразу, по первым словам фразы. */
+    void askEarly(String text,long t0){askEarly(text,t0,EARLY_WORDS);}
+    /** Короткая фраза («Что дальше») спрашивается по финалу распознавания, до закрытия фрагмента. */
+    void askEarly(String text,long t0,int minWords){
+        if(!modelJudges()||judging||stopped||!pending.isEmpty())return;
+        if(earlyT0>=0&&Math.abs(t0-earlyT0)<2000&&(earlyAsking||earlyVerdict!=null))return; // эту фразу уже спросили
+        if(Text.words(text)<minWords)return;
+        var ordered=orderedChunks();if(ordered.isEmpty())return;
+        JsonObject a=ordered.getLast();
+        if(!"provisional".equals(a.getString("status"))||sourcePriority(a.getString("source",""))>2||t0<a.getLong("t1"))return;
+        String first=Text.sentences(text).getFirst(),thought=a.getString("text");
+        earlyT0=t0;earlyPrevId=a.getString("id");earlyPrevRev=a.getInteger("rev");earlyVerdict=null;earlyAsking=true;judging=true;
+        Thread.startVirtualThread(()->{
+            try{boolean fresh=designer.boundary(thought,first);submit(()->{judging=false;earlyAsking=false;if(earlyT0==t0)earlyVerdict=fresh;judgeContinuation();});}
+            catch(Exception e){submit(()->{judging=false;earlyAsking=false;earlyT0=-1;});}
+        });
+    }
+    /** Ранний ответ годится для пары, если это та же мысль той же ревизии и фрагмент начат той фразой. */
+    boolean earlyFits(JsonObject a,JsonObject b){
+        return earlyT0>=0&&a.getString("id").equals(earlyPrevId)&&a.getInteger("rev")==earlyPrevRev
+            &&b.getLong("t0")>=earlyT0-100&&b.getLong("t0")<earlyT0+2000;
+    }
+    void judgeContinuation(){
+        if(!modelJudges()||judging||stopped)return;
+        var ordered=orderedChunks();
+        for(int i=1;i<ordered.size();i++){
+            JsonObject a=ordered.get(i-1),b=ordered.get(i);
+            String bid=b.getString("id");
+            if(judged.contains(bid))continue;
+            boolean open="provisional".equals(a.getString("status"))&&"provisional".equals(b.getString("status"));
+            if(!open||sourcePriority(a.getString("source",""))>2||sourcePriority(b.getString("source",""))>2){judged.add(bid);continue;}
+            String aid=a.getString("id"),thought=a.getString("text");int arev=a.getInteger("rev"),brev=b.getInteger("rev");
+            if(earlyVerdict!=null&&earlyFits(a,b)){
+                boolean fresh=earlyVerdict;earlyVerdict=null;earlyT0=-1;
+                settleContinuation(aid,arev,bid,brev,fresh);
+                return;
+            }
+            String next=sentences.get(b.getJsonArray("sentence_ids").getString(0)).getString("text");
+            judging=true;
+            Thread.startVirtualThread(()->{
+                try{boolean fresh=designer.boundary(thought,next);submit(()->{judging=false;settleContinuation(aid,arev,bid,brev,fresh);});}
+                catch(Exception e){submit(()->{judging=false;boundaryDownUntil=System.currentTimeMillis()+(e instanceof Designer.ModelLoading?10000:30000);});}
+            });
+            return;
+        }
+    }
+    /** Пока модель думала, фрагменты могли поменяться: тогда вопрос задаётся заново по новой паре. */
+    void settleContinuation(String aid,int arev,String bid,int brev,boolean fresh){
+        JsonObject a=chunks.get(aid),b=chunks.get(bid);
+        if(a==null||b==null||a.getInteger("rev")!=arev||b.getInteger("rev")!=brev)return;
+        judged.add(bid);
+        List<String> ids=new ArrayList<>(a.getJsonArray("sentence_ids").getList());ids.addAll(b.getJsonArray("sentence_ids").getList());
+        int words=ids.stream().map(sentences::get).mapToInt(s->Text.words(s.getString("text"))).sum();
+        if(fresh||words>models.chunkSizeMax()){ // новая мысль или мысль длиннее слайда
+            newThoughts.add(bid);confirmChunk(a);
+            heldAt.remove(bid);JsonObject held=heldDrafts.remove(bid);if(held!=null)emitDraft(held);
+            return;
+        }
+        // Продолжение: в колонке остаётся осмысленный слайд мысли, пока модель собирает дополненный.
+        heldAt.remove(bid);heldDrafts.remove(bid);
+        JsonObject merged=chunk(ids,aid,arev+1,"provisional","merge").put("source","model");
+        event("chunk_revise",new JsonObject().put("operation","merge").put("source","model")
+            .put("replace_ids",new JsonArray().add(aid).add(bid)).put("chunks",new JsonArray().add(merged)));
+    }
+    /** Последний закрытый фрагмент ждёт ответа, новая ли это мысль: без ответа его черновик не показывается. */
+    boolean draftWaitsForJudgement(){
+        var ordered=orderedChunks();if(ordered.isEmpty())return false;
+        String last=ordered.getLast().getString("id");
+        return !judged.contains(last)&&awaitsJudgement(last);
+    }
+    /** Перед фрагментом стоит незакрытая мысль, и модель ещё не сказала, новая ли это мысль. */
+    boolean awaitsJudgement(String id){
+        if(newThoughts.contains(id)||!modelJudges())return false;
+        var ordered=orderedChunks();
+        for(int i=1;i<ordered.size();i++)if(ordered.get(i).getString("id").equals(id))return "provisional".equals(ordered.get(i-1).getString("status"));
+        return false;
+    }
+    void emitDraft(JsonObject s){
+        String id=s.getString("chunk_id");JsonObject current=chunks.get(id),have=slides.get(id);
+        if(current==null||!current.getInteger("rev").equals(s.getInteger("rev"))||(have!=null&&!"draft".equals(have.getString("source"))))return;
+        event("slide",new JsonObject().put("slide",s));
+    }
+    /** Черновик за миллисекунды: сказанный текст на фоне образца. Слайд модели придёт следом и заменит его;
+     *  черновик не перекрывает уже готовый слайд модели. */
+    void requestDraft(JsonObject c){
+        if(!thoughtMode())return;
+        String id=c.getString("id"),text=c.getString("text"),dsId=designSystemId;int rev=c.getInteger("rev");
+        Thread.startVirtualThread(()->{
+            try{JsonObject s=designer.draft(dsId,text);submit(()->{
+                JsonObject current=chunks.get(id);
+                if(current==null||current.getInteger("rev")!=rev)return;
+                s.put("chunk_id",id).put("rev",rev).put("t0",current.getLong("t0")).put("t1",current.getLong("t1")).put("source","draft");
+                if(awaitsJudgement(id)){heldDrafts.put(id,s);heldAt.put(id,System.currentTimeMillis());}else emitDraft(s);
+            });}catch(Exception e){/* черновик необязателен: слайд модели всё равно придёт */}
+        });
+    }
+    void confirmChunk(JsonObject c){
+        revise(new JsonObject().put("type","revise").put("operation","confirm").put("source","confirmer").put("chunk_id",c.getString("id")).put("rev",c.getInteger("rev")+1).put("split_at",0));
     }
     JsonObject chunk(List<String> ids,String id,int rev,String status,String reason){
         return new JsonObject().put("id",id).put("rev",rev).put("status",status).put("reason",reason).put("sentence_ids",new JsonArray(ids))
@@ -281,12 +430,13 @@ public final class Session implements AutoCloseable {
         JsonObject c=chunk(ids,UUID.randomUUID().toString(),1,"provisional",reason);
         long latency=Math.max(0,System.currentTimeMillis()-(epoch+c.getLong("t1")));
         event("chunk",new JsonObject().put("chunk",c).put("reason",reason).put("latency_ms",latency));
+        requestDraft(c);
         Metrics.observe("chunk_latency",latency);
         latencies.add(latency);if(latencies.size()>1000)latencies.removeFirst();committedAt=System.currentTimeMillis();
         if(mode.equals("live"))coalesce();
     }
     void coalesce(){
-        if(!mode.equals("live"))return;
+        if(!mode.equals("live")||modelJudges())return;
         var ordered=orderedChunks();if(ordered.size()<2)return;
         var a=ordered.get(ordered.size()-2);var b=ordered.getLast();
         if(!a.getString("status").equals("provisional")||!b.getString("status").equals("provisional"))return;
@@ -306,7 +456,7 @@ public final class Session implements AutoCloseable {
     void finishFlush(boolean stop){commit("flush");if(stop){event("stopped",new JsonObject());runOfflinePass();}wire(new JsonObject().put("type","flushed"));}
     /** T-S13: bilateral resegmentation after stop. Skips when any chunk carries human source, when embeddings are sparse, or in demo mode. */
     void runOfflinePass(){
-        if(!mode.equals("live"))return;
+        if(!mode.equals("live")||thoughtMode())return;
         if(chunks.values().stream().anyMatch(c->"human".equals(c.getString("source","")))){warning("Офлайн-проход пропущен: есть ручные правки");return;}
         var ordered=sentences.values().stream().sorted(Comparator.comparingLong(s->s.getLong("t0"))).toList();
         List<String> ids=new ArrayList<>();List<float[]> vecs=new ArrayList<>();
@@ -347,9 +497,22 @@ public final class Session implements AutoCloseable {
         event("chunk_revise",new JsonObject().put("operation",op).put("source",source).put("replace_ids",replaced).put("chunks",updated));
     }
     void generate(){
-        if(generating||curating||System.currentTimeMillis()<retryAt)return;
-        JsonObject candidate=orderedChunks().stream().filter(c->!slides.containsKey(c.getString("id"))).findFirst().orElse(null);if(candidate==null)return;
-        if(designerMode){generateDesigner(candidate);return;}
+        if(curating||System.currentTimeMillis()<retryAt)return;
+        if(designerMode){
+            if(generating&&inFlight.isEmpty())return; // генерация остановлена снаружи
+            // Закрытый фрагмент ждёт ответа о границе, и его черновик держится: пока ответ в пути, новые слайды
+            // модель не нагружают. Ранние вопросы по частичной фразе слайды не держат, они идут, пока человек говорит.
+            if(judging&&draftWaitsForJudgement())return;
+            while(inFlight.size()<models.liveSlideParallel()){
+                JsonObject candidate=nextForSlide();if(candidate==null)return;
+                // Выросшая мысль пересобирается в одном месте: второе всегда свободно для новой мысли.
+                if(hasModelSlide(candidate)&&!regrowing.isEmpty())return;
+                generateDesigner(candidate);
+            }
+            return;
+        }
+        if(generating)return;
+        JsonObject candidate=orderedChunks().stream().filter(this::needsSlide).findFirst().orElse(null);if(candidate==null)return;
         // Store an explicit skipped entry for quota, so old chunks never starve later ones.
         if(!sketch&&!slideEligible.contains(candidate.getString("id"))&&candidate.getLong("t0")<lastSlideEnd+45000&&lastSlideEnd>=0){event("slide",new JsonObject().put("slide",new JsonObject().put("chunk_id",candidate.getString("id")).put("rev",candidate.getInteger("rev")).put("title",null).put("bullets",new JsonArray()).put("notes","").put("source","quota")));return;}
         generating=true;JsonObject c=candidate.copy();
@@ -359,19 +522,40 @@ public final class Session implements AutoCloseable {
             });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning("Локальная LLM недоступна: слайды будут дополнены после восстановления");});}
         });
     }
+    /** Какой фрагмент следующим получает слайд модели. В Live первой идёт свежая мысль без слайда модели:
+     *  зал смотрит на то, что говорится сейчас, а слайды прежних и выросших мыслей дособираются следом.
+     *  По порядку речи слайды шли так, что свежая мысль ждала 5 с, пока модель рисовала прежние. */
+    JsonObject nextForSlide(){
+        List<JsonObject> waiting=orderedChunks().stream().filter(c->!inFlight.contains(c.getString("id"))&&needsSlide(c)).toList();
+        if(waiting.isEmpty())return null;
+        if(!mode.equals("live"))return waiting.getFirst();
+        for(int i=waiting.size()-1;i>=0;i--){
+            JsonObject have=slides.get(waiting.get(i).getString("id"));
+            if(have==null||"draft".equals(have.getString("source")))return waiting.get(i);
+        }
+        return waiting.getLast();
+    }
     /** T-14: без квоты «раз в 45 с» — designer сам решает, когда слайд не нужен (204). */
+    boolean hasModelSlide(JsonObject c){JsonObject have=slides.get(c.getString("id"));return have!=null&&!"draft".equals(have.getString("source"));}
     void generateDesigner(JsonObject candidate){
-        generating=true;JsonObject c=candidate.copy();List<String> used=new ArrayList<>(recentPatternIds);String dsId=designSystemId;
+        String cid=candidate.getString("id");inFlight.add(cid);generating=true;
+        if(hasModelSlide(candidate))regrowing.add(cid);
+        JsonObject c=candidate.copy();List<String> used=new ArrayList<>(recentPatternIds);String dsId=designSystemId;
+        long requested=System.currentTimeMillis(),queued=Math.max(0,requested-(epoch+c.getLong("t1")));
         Thread.startVirtualThread(()->{
-            try{var scene=designer.slide(dsId,c.getString("text"),used);submit(()->{
-                try{var current=chunks.get(c.getString("id"));if(current!=null&&current.getInteger("rev").equals(c.getInteger("rev"))){
+            try{var scene=designer.slide(dsId,c.getString("text"),used);long designerMs=System.currentTimeMillis()-requested;submit(()->{
+                // Пока модель думала, фрагмент могли подтвердить или дополнить продолжением мысли: слайд по её началу
+                // всё равно показывается, а если мысль выросла, модель следом собирает дополненный.
+                try{var current=chunks.get(c.getString("id"));if(current!=null&&startsWith(current.getJsonArray("sentence_ids"),c.getJsonArray("sentence_ids"))){
                     JsonObject s=scene==null?new JsonObject().put("title",null).put("bullets",new JsonArray()).put("notes",""):scene;
-                    s.put("chunk_id",c.getString("id")).put("rev",c.getInteger("rev")).put("t0",c.getLong("t0")).put("t1",c.getLong("t1")).put("source","designer");
+                    s.put("chunk_id",c.getString("id")).put("rev",current.getInteger("rev")).put("t0",c.getLong("t0")).put("t1",c.getLong("t1")).put("source","designer").put("sentences",c.getJsonArray("sentence_ids").size());
+                    // Где уходит время слайда: ожидание своей очереди после конца фразы и сам ответ designer.
+                    s.put("queued_ms",queued).put("designer_ms",designerMs);
                     event("slide",new JsonObject().put("slide",s));
                     String pid=s.getString("pattern_id");if(pid!=null){recentPatternIds.addLast(pid);while(recentPatternIds.size()>5)recentPatternIds.removeFirst();}
                     if(s.getValue("title")!=null)lastSlideEnd=c.getLong("t0");
-                }}finally{generating=false;}
-            });}catch(Exception e){submit(()->{generating=false;retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
+                }}finally{inFlight.remove(cid);regrowing.remove(cid);generating=!inFlight.isEmpty();}
+            });}catch(Exception e){submit(()->{inFlight.remove(cid);regrowing.remove(cid);generating=!inFlight.isEmpty();retryAt=System.currentTimeMillis()+10000;warning(e instanceof Designer.ModelLoading?"Модель загружается: слайды появятся, когда она будет готова":"Дизайнер недоступен: слайды будут дополнены после восстановления");});}
         });
     }
     /** T-S11: depth-score dips inside a chunk become curator candidates. */
@@ -420,7 +604,7 @@ public final class Session implements AutoCloseable {
         if(System.currentTimeMillis()-last.getLong("updated_at")<models.confirmerDelayMs())return; // chunk still growing
         List<String> lastIds=new ArrayList<>(last.getJsonArray("sentence_ids").getList());
         // 1) merge with previous provisional when look-ahead agrees
-        if(prov.size()>=2){
+        if(!modelJudges()&&prov.size()>=2){
             JsonObject prev=prov.get(prov.size()-2);
             List<String> prevIds=prev.getJsonArray("sentence_ids").getList();
             float[] a=embeddings.get(prevIds.get(prevIds.size()-1));
@@ -432,7 +616,7 @@ public final class Session implements AutoCloseable {
             }
         }
         // 2) split on an internal depth dip
-        if(lastIds.size()>=6){
+        if(!modelJudges()&&lastIds.size()>=6){
             int mid=lastIds.size()/2;
             float[] a=embeddings.get(lastIds.get(mid-1));
             float[] b=embeddings.get(lastIds.get(mid));
