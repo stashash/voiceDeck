@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-const base='http://127.0.0.1:8091';
+const base=process.env.VOICE_FACTORY_DESIGNER_URL??'http://127.0.0.1:8091';
+const origin=new URL(base);
+assert.ok(origin.protocol==='http:'&&['127.0.0.1','localhost'].includes(origin.hostname)&&['8091','8191'].includes(origin.port)&&origin.pathname==='/'&&!origin.username&&!origin.password&&!origin.search&&!origin.hash,'Model verification requires an isolated local designer');
 const send=async(path,body,method='POST')=>{const r=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(40000)});const data=await r.json();return {status:r.status,data};};
 const wait=async(fn)=>{const deadline=Date.now()+65000;while(!await fn()){if(Date.now()>deadline)throw Error('Timed out');await new Promise(r=>setTimeout(r,100));}};
 const report={scope:'local-model-generated-deck-editing',results:[]};

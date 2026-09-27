@@ -42,3 +42,20 @@ it('stop cancels pending work and new commands still run after a failure', async
   await Promise.allSettled([cancelled, failed, next]);
   expect(events).toEqual(['next']);
 });
+
+it('rejects excess backlog without dropping the already accepted commands',async()=>{
+ let release!:()=>void;const ran:string[]=[];
+ const q=new VoiceCommandQueue(()=>{},{maxPending:2});
+ const first=q.enqueue(()=>new Promise<void>(r=>{release=r;}));
+ const second=q.enqueue(async()=>{ran.push('second');});
+ await expect(q.enqueue(async()=>{ran.push('overflow');})).rejects.toThrow('Очередь заполнена');
+ release();await Promise.all([first,second]);expect(ran).toEqual(['second']);
+});
+
+it('rejects a command that ages out while waiting, without executing its mutation',async()=>{
+ let time=0,release!:()=>void,mutated=false;
+ const q=new VoiceCommandQueue(()=>{},{maxAgeMs:100,now:()=>time});
+ const first=q.enqueue(()=>new Promise<void>(r=>{release=r;}));await Promise.resolve();
+ const second=q.enqueue(async()=>{mutated=true;});const rejected=expect(second).rejects.toThrow('устарела');
+ time=101;release();await first;await rejected;expect(mutated).toBe(false);
+});

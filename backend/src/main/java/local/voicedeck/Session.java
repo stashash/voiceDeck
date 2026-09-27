@@ -163,10 +163,14 @@ public final class Session implements AutoCloseable {
             });
         });
     }
+    static JsonObject editorUtterance(String text,long t0,long t1){
+        return new JsonObject().put("text",text).put("utterance_id",UUID.randomUUID().toString())
+                .put("t0",t0).put("t1",t1);
+    }
     void acceptFinal(String text,long t0,long t1){
         Metrics.observe("final_latency",System.currentTimeMillis()-epoch-t1);
         if(sentences.size()>=20000)throw new IllegalStateException("Лимит сессии достигнут; начните новую");
-        if(editorMode){if(!text.isBlank())event("editor_utterance",new JsonObject().put("text",text).put("utterance_id",UUID.randomUUID().toString()));return;}
+        if(editorMode){if(!text.isBlank())event("editor_utterance",editorUtterance(text,t0,t1));return;}
         askEarly(text,t0,1);
         List<String> list=Text.sentences(text);long total=Math.max(1,text.length()),cursor=t0;
         for(int i=0;i<list.size();i++){

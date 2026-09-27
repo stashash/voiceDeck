@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {flushSync} from 'react-dom';
 import {VoiceCommandQueue} from '../stage/voiceCommandQueue';
+import {deletionStillValid,type DeleteConfirmation,type VoicePhrase} from '../stage/voiceContext';
+import {editDictation,type DictationDraft} from '../stage/voiceDictation';
+import {voiceRewriteConstraints} from '../stage/voiceRewriteConstraints';
 import './voiceWorkspace.css';
 import {useVoiceInput} from '../stage/useVoiceInput';
 import {parseDeckVoice} from '../stage/deckVoice';
@@ -8,10 +11,10 @@ import {executeDeckVoice,deckSelectable,type DeckVoiceResult} from '../stage/dec
 import {deckRewriteTarget} from '../stage/deckVoiceTarget';
 import {editorRequest} from '../stage/editorRequest';
 import {prepareEditorModel} from '../stage/editorModel';
-import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X } from 'lucide-react';
+import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X, Check, TextCursorInput } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation,
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
 
@@ -40,32 +43,40 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   const [error, setError] = useState('');
   const operation = useRef(false);
   const epoch=useRef(0), blocked=useRef(false);
+  const manualContext=useRef(0);
+  const manualAudioEpoch=useRef(0);
+  const commandContextKey=()=>`${deckId}/${variant}/${manualContext.current}`;
+  const voiceContextKey=()=>`${commandContextKey()}/${manualAudioEpoch.current}`;
   const [needsRecovery,setNeedsRecovery]=useState(false),[recovering,setRecovering]=useState(false);
   const [elapsed,setElapsed]=useState(0);
   const [pending,setPending]=useState(0);
   useEffect(()=>{if(!pending){setElapsed(0);return;}const started=Date.now();const timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>clearInterval(timer);},[pending>0]);
-  const queue=useRef(new VoiceCommandQueue(setPending));
+  const queue=useRef(new VoiceCommandQueue(setPending,{maxPending:4,maxAgeMs:2500}));
   const mutations=useRef(new VoiceCommandQueue());
   const commandHandler=useRef<(raw:string)=>Promise<void>>(async()=>{});
   const lastMove=useRef<{dx:number;dy:number;align?:'left'|'right'|'top'|'bottom'|'center'}|null>(null);
-  const dictation = useRef<{slide:number;id:string}|null>(null);
+  const dictation = useRef<Omit<DictationDraft,'text'>|null>(null);
+  const longDictation=useRef<DictationDraft|null>(null);
+  const [dictationText,setDictationText]=useState('');
   const [waitingText,setWaitingText]=useState(false);
   const [previewVersion,setPreviewVersion]=useState(0);
   const [livePreview,setLivePreview]=useState<{key:string;html:string}|null>(null);
   const [previewError,setPreviewError]=useState('');
   const [previewLoaded,setPreviewLoaded]=useState('');
   const [voiceNotice,setVoiceNotice]=useState('Ожидание команды');
-  const [confirmDelete,setConfirmDelete]=useState<number|null>(null);
+  const [confirmDelete,setConfirmDelete]=useState<DeleteConfirmation|null>(null);
   const [thinking,setThinking]=useState(false);
   const modelJob=useRef<{id:string;controller:AbortController}|null>(null);
   function cancelModel(){const job=modelJob.current;if(!job)return;modelJob.current=null;job.controller.abort();setThinking(false);void editorRequest(`intent/${job.id}/cancel`,{}, {timeout:2000}).catch(()=>{});}
 
-  useEffect(() => { getDeckState(deckId).then(setState).catch(e => setError(String(e))); }, [deckId]);
-  useEffect(()=>{blocked.current=false;setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;lastMove.current=null;return()=>{cancelModel();epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
+  useEffect(() => {let cancelled=false;setState(null);getDeckState(deckId).then(next=>{if(!cancelled)setState(next);}).catch(e=>{if(!cancelled)setError(String(e));});return()=>{cancelled=true;};}, [deckId]);
+  useEffect(()=>{manualContext.current++;blocked.current=false;setNeedsRecovery(false);setRecovering(false);setBusy(false);operation.current=false;dictation.current=null;longDictation.current=null;setDictationText('');setWaitingText(false);setConfirmDelete(null);lastMove.current=null;return()=>{cancelModel();epoch.current++;queue.current.reset();mutations.current.reset();};},[deckId,variant]);
 
   const active = state?.variants[variant];
   const scenes = useMemo(() => active?.scenes ?? [], [active]);
   const scene = scenes[index];
+  useEffect(()=>{if(!confirmDelete)return;const timer=setTimeout(()=>setConfirmDelete(null),Math.max(0,confirmDelete.expiresAt-performance.now()));return()=>clearTimeout(timer);},[confirmDelete]);
+  useEffect(()=>{setConfirmDelete(null);},[active?.revision]);
   const previewKey=`${deckId}/${variant}/${scene?.slide_id}`;
   const previewRequestKey=`${previewKey}/${previewVersion}`;
   useEffect(()=>{
@@ -95,11 +106,13 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   }, [deckId, variant, index, scene?.pattern_id]);
 
   async function refresh() { const version=epoch.current;const next=await getDeckState(deckId);if(version!==epoch.current)return;flushSync(()=>{setState(next);setPreviewVersion(v=>v+1);}); }
+  function cancelDictation(){dictation.current=null;longDictation.current=null;setDictationText('');setWaitingText(false);}
+  function manualChange(){manualContext.current++;queue.current.clear();cancelModel();cancelDictation();setConfirmDelete(null);lastMove.current=null;}
   async function recover(){
     if(recovering)return;
-    cancelModel();
+    cancelModel();manualContext.current++;voice.invalidate();
     epoch.current++;blocked.current=true;setRecovering(true);setNeedsRecovery(true);
-    queue.current.reset();mutations.current.reset();dictation.current=null;lastMove.current=null;
+    queue.current.reset();mutations.current.reset();cancelDictation();lastMove.current=null;
     setWaitingText(false);setConfirmDelete(null);setBusy(false);operation.current=false;
     setVoiceNotice('Сверяю сохранённый документ и останавливаю старые команды…');
     try{
@@ -108,7 +121,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     }catch(e){setError(`Связь не восстановлена: ${String(e)}. Нажмите «Восстановить управление» повторно.`);}
     finally{setRecovering(false);}
   }
-  async function guard(fn: () => Promise<unknown>) {
+  async function guard(fn: () => Promise<unknown>,fromVoice=false) {
+    if(!fromVoice)manualChange();
     cancelModel();
     const version=epoch.current;
     if(blocked.current)return false;
@@ -124,12 +138,17 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     return saved;
   }
 
-  function voiceCommand(raw:string):Promise<void>{
+  function voiceCommand(raw:string,phrase?:VoicePhrase):Promise<void>{
     if(/^(стоп|остановись|восстанови управление|сбрось очередь)[.!]?$/i.test(raw.trim()))return recover();
     if(blocked.current){setVoiceNotice('Нажмите «Восстановить управление» или скажите «Стоп».');return Promise.resolve();}
-    const version=epoch.current;
-    return queue.current.enqueue(async()=>{const started=performance.now();await commandHandler.current(raw);if(version===epoch.current)setLatency(Math.round(performance.now()-started));}).catch(e=>{if(version===epoch.current)setError(String(e));});
+    const version=epoch.current,context=commandContextKey(),started=performance.now();
+    return queue.current.enqueue(async()=>{
+      if(context!==commandContextKey()||phrase&&phrase.contextKey!==voiceContextKey()){setVoiceNotice('Выбор изменился. Команда не выполнена.');return;}
+      await commandHandler.current(raw);
+      if(version===epoch.current)setLatency(Math.round(performance.now()-started));
+    }).catch(e=>{if(version===epoch.current)setVoiceNotice(String(e));});
   }
+  function manualVoiceCommand(raw:string){manualAudioEpoch.current++;return voiceCommand(raw);}
   const [latency,setLatency]=useState<number|null>(null);
   function applyVoiceResult(result:DeckVoiceResult){
     flushSync(()=>{
@@ -137,8 +156,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       if(result.state)setPreviewVersion(v=>v+1);
       if(result.index!==undefined)setIndex(result.index);
       if(result.selectedId!==undefined)setActiveEl(result.selectedId);
-      if(result.dictate){dictation.current=result.dictate;setWaitingText(true);}
-      if(result.confirmDelete!==undefined)setConfirmDelete(result.confirmDelete);
+      if(result.dictate){const target=scenes[result.dictate.slide-1];if(target){dictation.current={...result.dictate,slideId:target.slide_id,revision:active?.revision??''};setWaitingText(true);}}
+      if(result.confirmDelete!==undefined){const n=result.confirmDelete;const slide=scenes[n-1];if(slide)setConfirmDelete({deckId,variant,revision:active?.revision??'',slideId:slide.slide_id,index:n,expiresAt:performance.now()+10000});}
     });
     if(result.movement)lastMove.current=result.movement;
     else if(result.selectedId!==undefined||result.index!==undefined)lastMove.current=null;
@@ -153,22 +172,53 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     try{
       await prepareEditorModel(job.controller.signal,status=>{if(modelJob.current===job)setVoiceNotice(status.state==='ready'?'Локальная модель редактирует текст…':status.message??'Загрузка локальной модели…');});
       if(modelJob.current!==job||version!==epoch.current)return;
-      const result=await rewriteDeckVoice(deckId,variant,target.slide,{request_id:job.id,element_id:target.id,instruction},job.controller.signal);
+      const constraints=voiceRewriteConstraints(instruction);
+      const result=await rewriteDeckVoice(deckId,variant,target.slide,{request_id:job.id,element_id:target.id,instruction,constraints},job.controller.signal);
       if(modelJob.current!==job||version!==epoch.current)return;
       applyVoiceResult(result);setLatency(Math.round(performance.now()-started));
     }catch(e){if(modelJob.current===job&&!job.controller.signal.aborted)setVoiceNotice(String(e));}
     finally{if(modelJob.current===job){modelJob.current=null;setThinking(false);}}
   }
+  function startDictation(){
+    const element=scene?.elements.find(el=>el.id===activeEl&&el.type==='text');
+    if(!element){setVoiceNotice('Выберите текстовый элемент');return;}
+    cancelModel();setConfirmDelete(null);dictation.current=null;
+    longDictation.current={slide:index+1,slideId:scene.slide_id,id:element.id,revision:active?.revision??'',text:''};
+    setDictationText('');setWaitingText(true);setVoiceNotice('Диктовка');
+  }
+  async function finishDictation(){
+    const draft=longDictation.current;if(!draft)return;
+    if(draft.slideId!==scene?.slide_id||draft.id!==activeEl||draft.revision!==(active?.revision??'')){cancelDictation();setVoiceNotice('Документ или выбор изменился. Черновик не применён.');return;}
+    if(!draft.text.trim()){setVoiceNotice('Черновик пуст');return;}
+    const saved=await guard(()=>commitDeckDictation(deckId,variant,draft.slide,{element_id:draft.id,text:draft.text.trim(),expected_revision:draft.revision,target_slide_id:draft.slideId}),true);
+    if(saved)cancelDictation();
+  }
   async function executeVoice(raw:string){
     if(!scene)return;
+    if(longDictation.current){
+      const change=editDictation(longDictation.current.text,raw);
+      if(change.kind==='cancel'){cancelDictation();setVoiceNotice('Диктовка отменена');return;}
+      if(change.kind==='finish'){await finishDictation();return;}
+      if(change.text.length>12000){setVoiceNotice('Достигнут предел 12000 символов');return;}
+      longDictation.current.text=change.text;setDictationText(change.text);return;
+    }
     if(dictation.current){
       const bound=dictation.current;
       if(/^(стоп|отмена|отмени)[.!]?$/i.test(raw.trim())){dictation.current=null;setWaitingText(false);setVoiceNotice('Ввод текста отменён');return;}
-      if(bound.slide!==index+1||bound.id!==activeEl){dictation.current=null;setWaitingText(false);setVoiceNotice('Выбор изменился. Скажите «Измени текст» для нового элемента.');return;}
-      const saved=await guard(()=>patchSlideText(deckId,variant,bound.slide,bound.id,raw.trim()));
+      if(bound.slideId!==scene.slide_id||bound.slide!==index+1||bound.id!==activeEl||bound.revision!==(active?.revision??'')){dictation.current=null;setWaitingText(false);setVoiceNotice('Документ или выбор изменился. Скажите «Измени текст» для нового элемента.');return;}
+      const saved=await guard(()=>commitDeckDictation(deckId,variant,bound.slide,{element_id:bound.id,text:raw.trim(),expected_revision:bound.revision,target_slide_id:bound.slideId}),true);
       if(saved){dictation.current=null;flushSync(()=>setWaitingText(false));}return;
     }
-    if(confirmDelete!==null){if(/^да[.!]?$/i.test(raw.trim())){const n=confirmDelete;setConfirmDelete(null);const saved=await guard(()=>slidesAction(deckId,variant,{action:'delete',index:n}));if(saved)setIndex(i=>Math.max(0,i-1));return;}if(/^(нет|отмена|стоп)[.!]?$/i.test(raw.trim())){setConfirmDelete(null);return;}}
+    if(/^(?:начни диктовку|режим диктовки)[.!?]?$/i.test(raw.trim())){startDictation();return;}
+    if(confirmDelete!==null){
+      const confirmation=confirmDelete;setConfirmDelete(null);
+      if(/^да[.!]?$/i.test(raw.trim())){
+        if(!deletionStillValid(confirmation,{deckId,variant,revision:active?.revision??'',slideIds:scenes.map(s=>s.slide_id)})){setVoiceNotice('Подтверждение удаления устарело. Повторите команду.');return;}
+        const saved=await guard(()=>slidesAction(deckId,variant,{action:'delete',index:confirmation.index,expected_revision:confirmation.revision,target_slide_id:confirmation.slideId}),true);
+        if(saved)setIndex(i=>Math.max(0,i-1));return;
+      }
+      if(/^(нет|отмена|стоп)[.!]?$/i.test(raw.trim()))return;
+    }
     let resolved=parseDeckVoice(raw);setVoiceNotice(raw);
     if(resolved.kind==='repeat'){if(!lastMove.current){setVoiceNotice('Сначала переместите выбранный объект.');return;}resolved={kind:'move',...lastMove.current,dx:lastMove.current.dx*resolved.factor,dy:lastMove.current.dy*resolved.factor};}
     const a=resolved;
@@ -176,17 +226,17 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     if(a.kind==='ask'){void modelRewrite(a.text,a.slide);return;}
     if(a.kind==='unknown'){setVoiceNotice('Команда не распознана. Документ не изменён.');return;}
     cancelModel();
-    const version=epoch.current;
+    const version=epoch.current,context=commandContextKey();
     await mutations.current.enqueue(async()=>{
-      if(version!==epoch.current||blocked.current)return;
+      if(version!==epoch.current||blocked.current||context!==commandContextKey())return;
       setBusy(true);setError('');
-      try{const result=await executeDeckVoice(a,{deckId,variant,scenes,index,selectedId:activeEl,patterns});if(version===epoch.current)applyVoiceResult(result);}
+      try{const result=await executeDeckVoice(a,{deckId,variant,scenes,index,selectedId:activeEl,patterns});if(version===epoch.current)applyVoiceResult(context===commandContextKey()?result:{state:result.state});}
       catch(e){if(version!==epoch.current)return;const status=(e as {status?:number}).status;if(status&&status>=400&&status<500){setVoiceNotice(String(e));return;}blocked.current=true;setNeedsRecovery(true);queue.current.clear();setError(`Не удалось подтвердить сохранение: ${String(e)}`);}
       finally{if(version===epoch.current)setBusy(false);}
     });
   }
   commandHandler.current=executeVoice;
-  const voice=useVoiceInput(raw=>void voiceCommand(raw));
+  const voice=useVoiceInput((raw,phrase)=>void voiceCommand(raw,phrase),voiceContextKey);
   useEffect(()=>{if(scenes.length)setIndex(i=>Math.min(i,scenes.length-1));},[scenes.length]);
 
   if (!scene) return <div className="edit-shell"><div className="page-loading">{error || 'Загрузка'}</div></div>;
@@ -206,7 +256,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
         {['a', 'b', 'c'].map(v => {
           const has = state?.variants[v]?.status === 'done';
           return <a key={v} className={`edit-variant-tab ${v === variant ? 'active' : ''}`}
-            href={`#/decks/${deckId}/edit/${v}`} onClick={onVariantChange ? e => { e.preventDefault(); if (has) onVariantChange(v); } : undefined} aria-current={v === variant ? 'page' : undefined}
+            href={`#/decks/${deckId}/edit/${v}`} onClick={onVariantChange ? e => { e.preventDefault(); if (has){manualChange();onVariantChange(v);} } : undefined} aria-current={v === variant ? 'page' : undefined}
             title={v === 'a' || !has ? undefined : 'Проверки смысла у этого варианта не было'}>
             Вариант {v === 'a' ? 1 : v === 'b' ? 2 : 3}
           </a>;
@@ -228,27 +278,29 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     {error && <div className="notice" role="alert">{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
     <section className="deck-voice-bar voice-console" aria-label="Голосовое редактирование">
       <div className="voice-console-controls">
-        <button className={`button deck-mic-button ${voice.recording?'is-recording':''}`} disabled={voice.starting} onClick={()=>void(voice.recording?voice.stop():voice.start())}>
-          {voice.recording?<Square size={18}/>:<Mic size={18}/>}{voice.starting?'Подключение…':voice.recording?'Микрофон включён':'Включить микрофон'}
+        <button className={`button deck-mic-button ${voice.recording?'is-recording':''}`} disabled={voice.starting||voice.stopping} onClick={()=>void(voice.recording?voice.stop():voice.start())}>
+          {voice.recording?<Square size={18}/>:<Mic size={18}/>}{voice.stopping?'Завершение фразы…':voice.starting?'Подключение…':voice.recording?'Микрофон включён':'Включить микрофон'}
         </button>
-        <button className="button-icon" title="Переподключить микрофон" aria-label="Переподключить микрофон" disabled={voice.starting} onClick={()=>void voice.restart()}><RefreshCw size={18}/></button>
+        <button className="button-icon" title="Переподключить микрофон" aria-label="Переподключить микрофон" disabled={voice.starting||voice.stopping} onClick={()=>void voice.restart()}><RefreshCw size={18}/></button>
         <button className="button-icon" title="Остановить команды и сверить документ" aria-label="Остановить команды и сверить документ" disabled={recovering} onClick={()=>void recover()}><Square size={18}/></button>
-        <button className="button-icon" title="Отменить последнюю правку" aria-label="Отменить последнюю правку" disabled={busy||waitingText} onClick={()=>void voiceCommand('Отмени')}><Undo2 size={18}/></button>
+        <button className="button-icon" title="Отменить последнюю правку" aria-label="Отменить последнюю правку" disabled={busy||waitingText} onClick={()=>void manualVoiceCommand('Отмени')}><Undo2 size={18}/></button>
+        <button className="button-icon" title="Начать многофразовую диктовку" aria-label="Начать многофразовую диктовку" aria-pressed={!!longDictation.current} disabled={busy||waitingText||!activeEl} onClick={()=>{manualChange();startDictation();}}><TextCursorInput size={18}/></button>
         <span className="voice-console-state" role="status">{recovering?'Сверка документа':needsRecovery?'Сохранение не подтверждено':thinking?'Локальная модель':pending?`Сохранение · ${elapsed} с`:'Готово'}</span>
-        {latency!==null&&<output className="voice-console-latency">{latency} мс</output>}
+        {latency!==null&&<output className="voice-console-latency" title="Очередь и выполнение после распознавания; без ASR и отрисовки">Выполнение: {latency} мс</output>}
       </div>
       <div className="voice-console-feedback">
         <span className="deck-voice-status" aria-live="polite"><i className={`deck-connection-dot ${voice.recording?'live':''}`}/>{voice.error||voice.partial||voiceNotice}</span>
         <span className="voice-console-selection">Слайд {index+1}/{scenes.length} · {activeEl?`Элемент ${selectable(scene).findIndex(e=>e.id===activeEl)+1}`:'Нет выделения'}</span>
       </div>
-      {waitingText&&<div role="status" className="voice-console-dictation">Ожидается новый текст<button className="button-icon" title="Отменить диктовку" aria-label="Отменить диктовку" onClick={()=>{dictation.current=null;setWaitingText(false);setVoiceNotice('Ввод текста отменён');}}><X size={16}/></button></div>}
+      {waitingText&&<div className="voice-console-dictation"><span role="status">{longDictation.current?'Черновик диктовки':'Ожидается новый текст'}</span>{longDictation.current&&<button className="button-icon" title="Сохранить диктовку" aria-label="Сохранить диктовку" disabled={!dictationText.trim()||busy} onClick={()=>void manualVoiceCommand('Готово')}><Check size={16}/></button>}<button className="button-icon" title="Отменить диктовку" aria-label="Отменить диктовку" onClick={()=>{manualChange();setVoiceNotice('Ввод текста отменён');}}><X size={16}/></button></div>}
+      {longDictation.current&&<textarea className="voice-dictation-draft" aria-label="Черновик диктовки" maxLength={12000} value={dictationText} onChange={e=>{if(longDictation.current){longDictation.current.text=e.target.value;setDictationText(e.target.value);}}}/>}
       {voice.recording&&<div className="voice-console-device"><meter aria-label="Уровень микрофона" min={0} max={100} value={voice.level}/><span>{voice.device}</span><span>{voice.connection}</span></div>}
       {voice.heard&&<div className="voice-console-heard">Распознано: «{voice.heard}»</div>}
       <div className="voice-console-command">
-        <form onSubmit={e=>{e.preventDefault();if(commandDraft.trim()){void voiceCommand(commandDraft);setCommandDraft('');}}}><input aria-label="Команда редактирования" value={commandDraft} onChange={e=>setCommandDraft(e.target.value)} placeholder="Команда редактирования"/><button className="button-icon" title="Выполнить команду" aria-label="Выполнить команду" disabled={!commandDraft.trim()}><Send size={18}/></button></form>
-        {activeEl&&<div className="voice-console-arrows" aria-label="Перемещение выбранного элемента">{[[ArrowLeft,'Влево'],[ArrowUp,'Вверх'],[ArrowDown,'Вниз'],[ArrowRight,'Вправо'],[AlignCenter,'В центр']].map(([Icon,command])=>{const Symbol=Icon as typeof ArrowLeft;return <button key={command as string} className="button-icon" disabled={busy||waitingText} title={command as string} aria-label={`Переместить ${(command as string).toLowerCase()}`} onClick={()=>void voiceCommand(command as string)}><Symbol size={18}/></button>;})}</div>}
+        <form onSubmit={e=>{e.preventDefault();if(commandDraft.trim()){void manualVoiceCommand(commandDraft);setCommandDraft('');}}}><input aria-label="Команда редактирования" value={commandDraft} onChange={e=>setCommandDraft(e.target.value)} placeholder="Команда редактирования"/><button className="button-icon" title="Выполнить команду" aria-label="Выполнить команду" disabled={!commandDraft.trim()}><Send size={18}/></button></form>
+        {activeEl&&<div className="voice-console-arrows" aria-label="Перемещение выбранного элемента">{[[ArrowLeft,'Влево'],[ArrowUp,'Вверх'],[ArrowDown,'Вниз'],[ArrowRight,'Вправо'],[AlignCenter,'В центр']].map(([Icon,command])=>{const Symbol=Icon as typeof ArrowLeft;return <button key={command as string} className="button-icon" disabled={busy||waitingText} title={command as string} aria-label={`Переместить ${(command as string).toLowerCase()}`} onClick={()=>void manualVoiceCommand(command as string)}><Symbol size={18}/></button>;})}</div>}
       </div>
-      {confirmDelete!==null&&<div>Удалить слайд {confirmDelete}? <button className="button" onClick={()=>void voiceCommand('да')}>Удалить</button><button className="button" onClick={()=>setConfirmDelete(null)}>Отмена</button></div>}
+      {confirmDelete!==null&&<div>Удалить слайд {confirmDelete.index}? <button className="button" onClick={()=>void manualVoiceCommand('да')}>Удалить</button><button className="button" onClick={()=>setConfirmDelete(null)}>Отмена</button></div>}
     </section>
     <div className="edit-body">
       <aside className="edit-rail" aria-label="Слайды">
@@ -257,7 +309,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           const hasError = fs.some(f => f.severity === 'error');
           return <a key={s.slide_id} className={`edit-thumb-row ${i === index ? 'current' : ''}`}
             aria-label={`Слайд ${i + 1}`} aria-current={i === index ? 'true' : undefined}
-            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); cancelModel();setIndex(i); }}>
+            href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); manualChange();setIndex(i); }}>
             <span className="edit-thumb-num">{i + 1}</span>
             <span className="edit-thumb-wrap">
               {active?.slide_images?.[i] ? <img className="edit-thumb" src={freshImage(active.slide_images[i])} alt=""/> : <div className="edit-thumb"/>}
@@ -282,7 +334,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
             const [x, y, w, h] = el.box;
             const style: React.CSSProperties = { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` };
             return <div key={el.id} className={`edit-el-box ${activeEl === el.id ? 'active' : ''}`} style={style}
-              onClick={() => {cancelModel();setActiveEl(el.id);}}>
+              onClick={() => {manualChange();setActiveEl(el.id);}}>
               <span style={{position:'absolute',top:y>.04?-22:0,left:x>.04?-22:0,background:'var(--accent)',color:'white',padding:'2px 6px',borderRadius:4}}>{elementIndex+1}</span>
               {activeEl === el.id && editingEl !== el.id && <div className="edit-el-toolbar" role="toolbar" aria-label="Текст на слайде"
                 style={{ left: 0, top: '100%', marginTop: 4 }}>
@@ -317,7 +369,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
             <button type="button" className="button-icon" aria-label="Копия слайда" title="Копия слайда" disabled={busy}
               onClick={() => guard(() => slidesAction(deckId, variant, { action: 'copy', index:index+1 }))}><Copy size={20} strokeWidth={1.5}/></button>
             <button type="button" className="button-icon" aria-label="Удалить слайд" title="Удалить слайд" disabled={busy}
-              onClick={() => setConfirmDelete(index+1)}><Trash2 size={20} strokeWidth={1.5}/></button>
+              onClick={() => {manualChange();applyVoiceResult({confirmDelete:index+1});}}><Trash2 size={20} strokeWidth={1.5}/></button>
           </div>
         </div>
         <div>

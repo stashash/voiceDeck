@@ -51,7 +51,7 @@ export function parseDeckVoice(raw:string):DeckVoiceAction{
  const slidePhrase=c.replace(/^(?:(?:выбери|открой|покажи|переключись на|перейди на|перейди к) |на )/,'');
  const slideMatch=slidePhrase.match(/^слайд[уе]? (?:номер )?(.+)$/)??slidePhrase.match(/^(.+) слайд[е]?$/);
  if(slideMatch){const number=voiceNumber(slideMatch[1]);if(number!==undefined)return {kind:'select',number};}
- const selection=c.replace(/^(?:выбери|выдели|покажи|открой) /,'').replace(/^(?:элемент |номер )(?:номер )?/,'');
+ const selection=c.replace(/^(?:выбери|выдели|покажи|открой) /,'').replace(/^(?:элемент |объект |номер )(?:номер )?/,'').replace(/ (?:элемент|объект)$/,'');
  const selectedNumber=voiceNumber(selection);if(selectedNumber!==undefined)return {kind:'element',number:selectedNumber};
  const map:Record<string,DeckVoiceAction['kind']>={'следующий':'next','следующий слайд':'next','на следующий слайд':'next','перейди на следующий слайд':'next','перейди вперед':'next','перейди вперёд':'next','вперед':'next','вправо':'next','дальше':'next','предыдущий':'previous','предыдущий слайд':'previous','на предыдущий слайд':'previous','перейди на предыдущий слайд':'previous','перейди назад':'previous','назад':'previous','влево':'previous','отмени':'undo','отмена':'undo','отменить правку':'undo','новый слайд':'add','добавь слайд':'add','создай слайд':'add','скопируй слайд':'copy','дублируй слайд':'copy','удали слайд':'delete','удали текущий слайд':'delete','стоп':'cancel','остановись':'cancel'};
  if(map[c])return {kind:map[c]} as DeckVoiceAction;

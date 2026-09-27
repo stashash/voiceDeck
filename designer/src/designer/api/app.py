@@ -13,7 +13,7 @@ import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
-from designer.edit_runtime import ensure_export
+from designer.edit_runtime import ensure_export, lock
 
 from designer import edit, pipeline, store
 from designer.agent_hook import AgentCheckUnavailable, _client_for
@@ -459,10 +459,21 @@ def post_slide_ask(deck_id: str, variant: str, number: int, payload: SlideAskReq
 @app.post("/decks/{deck_id}/{variant}/slides", response_model=DeckVariantState)
 def post_slide_action(deck_id: str, variant: str, payload: SlideActionRequest) -> DeckVariantState:
     try:
-        edit.apply_slide_action(deck_id, variant, payload.action, payload.index, payload.to)
+        with lock(deck_id, variant):
+            if payload.expected_revision is not None or payload.target_slide_id is not None:
+                current = store.load_deck_state(deck_id, variant)
+                if (payload.expected_revision is not None
+                        and (current.get('revision') or '') != payload.expected_revision):
+                    raise HTTPException(409, 'Документ уже изменён. Подтвердите действие заново.')
+                if payload.target_slide_id is not None:
+                    scenes = current.get('scenes', [])
+                    if (not 1 <= payload.index <= len(scenes)
+                            or scenes[payload.index - 1].get('slide_id') != payload.target_slide_id):
+                        raise HTTPException(409, 'Выбранный слайд уже изменился. Подтвердите действие заново.')
+            edit.apply_slide_action(deck_id, variant, payload.action, payload.index, payload.to)
+            return _variant_state(deck_id, variant)
     except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
         raise _edit_error(exc)
-    return _variant_state(deck_id, variant)
 
 
 @app.patch("/decks/{deck_id}/{variant}/notes/{number}", response_model=DeckVariantState)

@@ -253,6 +253,15 @@ class SlideActionRequest(BaseModel):
     action: Literal["add", "copy", "delete", "move"]
     index: int
     to: int | None = None
+    expected_revision: str | None = Field(default=None, strict=True)
+    target_slide_id: str | None = Field(default=None, min_length=1, strict=True)
+
+    @model_validator(mode='after')
+    def complete_preconditions(self) -> SlideActionRequest:
+        if {'expected_revision', 'target_slide_id'} & self.model_fields_set:
+            if self.expected_revision is None or self.target_slide_id is None:
+                raise ValueError('expected_revision and target_slide_id must be supplied together')
+        return self
 
 
 class SlideNotesRequest(BaseModel):

@@ -54,6 +54,7 @@ export type Finding = {
 
 // ---------- состояние колоды ----------
 export type DeckVariantState = {
+  revision?: string | null;
   status: 'running' | 'done' | 'error';
   design_system_id: string;
   plan: DeckPlan | null;
@@ -260,7 +261,7 @@ export function deckElementAction(deckId:string,variant:string,n:number,payload:
   return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/elements`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>uploadResponse<DeckVariantState>(r));
 }
 
-export type SlidesAction = { action: 'add' | 'copy' | 'delete' | 'move'; index: number; to?: number };
+export type SlidesAction = { action: 'add' | 'copy' | 'delete' | 'move'; index: number; to?: number; expected_revision?:string; target_slide_id?:string };
 export function slidesAction(deckId: string, variant: string, action: SlidesAction): Promise<DeckVariantState> {
   return fetch(url(`/decks/${deckId}/${variant}/slides`), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(action),
@@ -291,7 +292,11 @@ export function recoverEditor(deckId:string,variant:string):Promise<DeckVariantS
   return fetch(url(`/decks/${deckId}/${variant}/recover`),{method:'POST'}).then(r=>asJson<DeckVariantState>(r));
 }
 
-export function rewriteDeckVoice(deckId:string,variant:string,n:number,payload:{request_id:string;element_id:string;instruction:string},signal:AbortSignal):Promise<{state?:DeckVariantState;notice:string;elapsed_ms?:number}>{
+export function commitDeckDictation(deckId:string,variant:string,n:number,payload:{element_id:string;text:string;expected_revision:string;target_slide_id:string}):Promise<DeckVariantState>{
+ return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-text`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>uploadResponse<DeckVariantState>(r));
+}
+
+export function rewriteDeckVoice(deckId:string,variant:string,n:number,payload:{request_id:string;element_id:string;instruction:string;constraints?:{preserve_numbers?:boolean;preserve_dates?:boolean}},signal:AbortSignal):Promise<{state?:DeckVariantState;notice:string;elapsed_ms?:number}>{
  return fetch(url(`/decks/${deckId}/${variant}/slides/${n}/voice-rewrite`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal},35000).then(r=>uploadResponse(r));
 }
 

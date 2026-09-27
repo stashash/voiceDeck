@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "corpus_id": "espeak-ng-ru135-preserved",
+  "corpus_sha256": "84fc89d6ac84d2b23f87b801256561d30ca3804104b0412a1e7e928bee952e79",
+  "speakers": [
+    {
+      "id": "espeak-ng-ru",
+      "kind": "synthetic",
+      "split": "development",
+      "provenance": "Preserved eSpeak NG 1.52.0 ru135 WAVs from voice-factory-output/audio; same synthetic voice is one speaker. Historical result 5/9 in scripts/voice-factory-verdict.md.",
+      "consent": "not-applicable"
+    }
+  ],
+  "cases": [
+    {
+      "id": "select",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "select.wav",
+      "sha256": "5199f158856bb734d13bd4587d8e3b9965e62a1427b54da347b7ed744651fa1e",
+      "expected": {
+        "transcript": "Выбери элемент один",
+        "action": "element",
+        "target": {
+          "slide": null,
+          "element": 1
+        },
+        "arguments": {}
+      }
+    },
+    {
+      "id": "size",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "size.wav",
+      "sha256": "920766cd8d26938fadf48fe1fb37e91f7689c62dc2c62ec11061e9f1a736ae5d",
+      "expected": {
+        "transcript": "Размер шрифта двадцать четыре",
+        "action": "style",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {
+          "size_pt": 24
+        }
+      }
+    },
+    {
+      "id": "color",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "color.wav",
+      "sha256": "af8fbbd794df216a2bfe418f80cdeab36c4f65f649051518eb2e50ccc40a58bb",
+      "expected": {
+        "transcript": "Сделай текст красным",
+        "action": "style",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {
+          "color": "DC2626"
+        }
+      }
+    },
+    {
+      "id": "move",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "move.wav",
+      "sha256": "680910c0409da0be31a8bf924c7c6c1fcd2a8343511b9ef117945839d0ab7110",
+      "expected": {
+        "transcript": "Вправо на двадцать",
+        "action": "move",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {
+          "dx": 0.015625,
+          "dy": 0
+        }
+      }
+    },
+    {
+      "id": "replace",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "replace.wav",
+      "sha256": "279147cf2b8fdc3b5056ad4025ac4c257ae34d71c5206fb9812874d0f8b572e7",
+      "expected": {
+        "transcript": "Замени текст на План запуска",
+        "action": "text",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {
+          "text": "План запуска"
+        }
+      }
+    },
+    {
+      "id": "append",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "append.wav",
+      "sha256": "7bdaa8cd91fe36dd4039c1d23d2137c1532a6478cb9c4051a8f6fb7aa1c9295a",
+      "expected": {
+        "transcript": "Добавь в конец Готово",
+        "action": "appendText",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {
+          "text": "Готово"
+        }
+      }
+    },
+    {
+      "id": "undo",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "undo.wav",
+      "sha256": "1717222abb21054fcc8cd58c7173750d44de30c66afc3d939baf73ff114e3e76",
+      "expected": {
+        "transcript": "Отмени",
+        "action": "undo",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {}
+      }
+    },
+    {
+      "id": "next",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "next.wav",
+      "sha256": "dad17c7b16d0567837fa8dcb64c6ba0ae628258795acf5f087b120d0d6fff235",
+      "expected": {
+        "transcript": "Следующий слайд",
+        "action": "next",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {}
+      }
+    },
+    {
+      "id": "previous",
+      "speaker_id": "espeak-ng-ru",
+      "condition": "Offline synthetic ru135; original 16 kHz PCM, no microphone capture",
+      "wav": "previous.wav",
+      "sha256": "72758185dfb163a330409be0dd0aca90431308414d51d0ad95dc9221602c1ec7",
+      "expected": {
+        "transcript": "Предыдущий слайд",
+        "action": "previous",
+        "target": {
+          "slide": null,
+          "element": null
+        },
+        "arguments": {}
+      }
+    }
+  ]
+}
