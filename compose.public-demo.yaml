@@ -1,0 +1,26 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_DESIGNER_URL: /designer
+    environment:
+      ALLOWED_ORIGIN: ${PUBLIC_DEMO_URL:-http://localhost:8087}
+      DESIGNER_PUBLIC_URL: ${PUBLIC_DEMO_URL:-http://localhost:8087}
+
+  designer:
+    environment:
+      DESIGNER_ALLOWED_ORIGINS: ${PUBLIC_DEMO_URL:-http://localhost:8087}
+
+  public-proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8087:80"
+    volumes:
+      - ./deploy/public-demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      app:
+        condition: service_started
+      designer:
+        condition: service_started
