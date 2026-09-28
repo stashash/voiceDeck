@@ -1,7 +1,9 @@
 # Публичный доступ к локальному VoiceDeck
 
-Эта схема публикует VoiceDeck с компьютера через временный HTTPS-адрес
-`*.trycloudflare.com`. Порты роутера и Windows открывать не требуется.
+Эта схема публикует VoiceDeck с компьютера через HTTPS. Для постоянного
+бесплатного адреса используется закреплённый dev-домен ngrok. Временный
+`*.trycloudflare.com` остаётся запасным вариантом. Порты роутера и Windows
+открывать не требуется.
 
 Снаружи используется один адрес. Nginx направляет запросы приложения в `app`,
 а запросы `/designer/*` — в `designer`. Это сохраняет единый origin для UI,
@@ -14,6 +16,52 @@ API, изображений слайдов и WebSocket голосового р�
 - настроенный VoiceDeck (`setup.cmd` уже выполнен);
 - запущенные локальные модели, если нужны генерация и голосовое управление;
 - исходящие HTTPS- и QUIC-соединения не заблокированы сетью.
+
+## Постоянный бесплатный адрес через ngrok
+
+Создайте бесплатный аккаунт ngrok и закрепите dev-домен в разделе `Domains`.
+В локальный `.env` добавьте адрес и токен, полученный через `Show authtoken`:
+
+```env
+PUBLIC_DEMO_URL=https://example.ngrok-free.dev
+NGROK_AUTHTOKEN=secret-token
+```
+
+`.env` исключён из Git. Не добавляйте токен в compose-файл, документацию,
+команды CI или сообщения.
+
+Запуск и перезапуск всего публичного контура:
+
+```powershell
+docker compose -f compose.yaml -f compose.public-demo.yaml --profile ngrok up -d --build
+```
+
+Проверка:
+
+```powershell
+$publicUrl = (Select-String -Path .env -Pattern '^PUBLIC_DEMO_URL=').Line.Split('=', 2)[1]
+Invoke-RestMethod "$publicUrl/health" -Headers @{
+  Origin = $publicUrl
+  'ngrok-skip-browser-warning' = '1'
+}
+docker compose -f compose.yaml -f compose.public-demo.yaml --profile ngrok ps
+```
+
+Откройте `$publicUrl/#/voice-editor`. Бесплатный ngrok показывает каждому
+новому посетителю одноразовую защитную страницу: нужно проверить адрес и нажать
+`Visit Site`. После этого UI, API и WebSocket работают на том же origin.
+
+Остановить внешний доступ:
+
+```powershell
+docker compose -f compose.yaml -f compose.public-demo.yaml --profile ngrok stop stable-tunnel
+```
+
+Контейнер имеет `restart: unless-stopped`, поэтому после обычного перезапуска
+Docker адрес не меняется и туннель поднимается автоматически. Если контейнер
+был явно остановлен командой выше, запустите его через `up -d`.
+
+## Временный адрес через Cloudflare Quick Tunnel
 
 ## Первый запуск
 

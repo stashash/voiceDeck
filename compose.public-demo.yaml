@@ -24,3 +24,20 @@ services:
         condition: service_started
       designer:
         condition: service_started
+
+  stable-tunnel:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    profiles: ["ngrok"]
+    command:
+      - http
+      - http://host.docker.internal:8087
+      - --url=${PUBLIC_DEMO_URL}
+      - --log=stdout
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      public-proxy:
+        condition: service_started
