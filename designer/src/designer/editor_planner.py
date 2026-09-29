@@ -76,11 +76,16 @@ async def complete_plan(instruction: str, context: str) -> dict:
                         'options': {'temperature': 0, 'num_predict': 1800, 'num_ctx': int(os.environ.get('DESIGNER_EDITOR_NUM_CTX', '8192'))}}
             else:
                 url = base + '/v1/chat/completions'
+                # Без reasoning_effort Qwen3.8-27B в LM Studio думает 600+ токенов: план идёт 20 с вместо 8.
                 body = {'model': model, 'messages': messages, 'stream': False,
-                        'temperature': 0, 'max_tokens': 1800,
+                        'temperature': 0, 'max_tokens': 1800, 'reasoning_effort': 'none',
                         'response_format': {'type': 'json_schema', 'json_schema': {
                             'name': 'editor_plan', 'strict': True, 'schema': Plan.model_json_schema()}}}
             response = await client.post(url, json=body)
+            if response.status_code == 400 and 'reasoning' in response.text.lower() and 'reasoning_effort' in body:
+                # Сервер не знает параметра: модель думает по своему умолчанию, но отвечает.
+                body.pop('reasoning_effort')
+                response = await client.post(url, json=body)
             response.raise_for_status()
             raw = response.json()
             content = raw['message']['content'] if native else raw['choices'][0]['message']['content']
@@ -142,7 +147,7 @@ class Planner:
             raise HTTPException(409, 'Этот запрос уже выполняется')
         if any(j.task is not None for j in self.jobs.values()):
             raise HTTPException(429, 'Модель занята другим запросом. Быстрые команды доступны.')
-        budget = max(.05, min(30, float(os.environ.get('DESIGNER_EDITOR_DEADLINE_S', '8'))))
+        budget = max(.05, min(30, float(os.environ.get('DESIGNER_EDITOR_DEADLINE_S', '20'))))
         task = asyncio.create_task(complete_plan(instruction, context))
         job = Job(fingerprint, task, time.monotonic() + 60)
         self.jobs[request_id] = job
