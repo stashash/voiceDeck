@@ -6,6 +6,7 @@ import {editDictation,type DictationDraft} from '../stage/voiceDictation';
 import {voiceRewriteConstraints} from '../stage/voiceRewriteConstraints';
 import './voiceWorkspace.css';
 import {useVoiceInput} from '../stage/useVoiceInput';
+import {joinPrefix,type PendingPrefix} from '../stage/voicePrefix';
 import {parseVoiceOperation,VOICE_OPERATIONS} from '../stage/voiceOperations';
 import {resolveVoiceSelection} from '../stage/voiceSelection';
 import {planVoiceBatch} from '../stage/voiceBatch';
@@ -60,6 +61,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   const mutations=useRef(new VoiceCommandQueue());
   const commandHandler=useRef<(raw:string)=>Promise<void>>(async()=>{});
   const lastMove=useRef<{dx:number;dy:number;align?:'left'|'right'|'top'|'bottom'|'center'}|null>(null);
+  const pendingPrefix=useRef<PendingPrefix>(null);
   const dictation = useRef<Omit<DictationDraft,'text'>|null>(null);
   const longDictation=useRef<DictationDraft|null>(null);
   const [dictationText,setDictationText]=useState('');
@@ -94,6 +96,23 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
     return()=>controller.abort();
   },[previewKey,previewVersion,index]);
   const deckTitle = active?.plan?.title ?? state?.plan?.title ?? '';
+  // Картинка pptx точнее HTML-предпросмотра (значки, логотип, фоны образца). HTML нужен только, пока
+  // картинки после правки ещё рисуются; готовы картинки этой правки — показываем их.
+  const imageFresh=!!active?.slide_images?.[index]&&(!active?.revision||active.images_revision===active.revision);
+  useEffect(()=>{
+    if(!active?.revision||active.images_revision===active.revision||!active.slide_images?.length)return;
+    let stopped=false,tries=0;
+    const timer=setInterval(()=>{
+      if(stopped||++tries>60){clearInterval(timer);return;}
+      const version=epoch.current;
+      getDeckState(deckId).then(next=>{
+        const v=next.variants[variant];
+        if(stopped||version!==epoch.current||!v||v.revision!==active.revision||v.images_revision!==v.revision)return;
+        stopped=true;clearInterval(timer);setState(next);
+      }).catch(()=>{});
+    },2000);
+    return()=>{stopped=true;clearInterval(timer);};
+  },[deckId,variant,active?.revision,active?.images_revision]);
   const freshImage=(url:string)=>`${absoluteUrl(url)}${url.includes('?')?'&':'?'}edit=${previewVersion}`;
   const findingsBySlide = useMemo(() => {
     const map = new Map<string, Finding[]>();
@@ -146,6 +165,10 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
 
   function voiceCommand(raw:string,phrase?:VoicePhrase):Promise<void>{
     if(/^(стоп|остановись|восстанови управление|сбрось очередь)[.!]?$/i.test(raw.trim()))return recover();
+    const joined=joinPrefix(raw,pendingPrefix.current,performance.now());
+    pendingPrefix.current=joined.pending;
+    if(joined.text===null){setVoiceNotice(`${raw.trim().replace(/[.!?…]+$/,'')}…`);return Promise.resolve();}
+    raw=joined.text;
     if(blocked.current){setVoiceNotice('Нажмите «Восстановить управление» или скажите «Стоп».');return Promise.resolve();}
     const version=epoch.current,context=commandContextKey(),started=performance.now();
     return queue.current.enqueue(async()=>{
@@ -367,10 +390,10 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       </aside>
       <div className="edit-canvas">
         <div className="edit-slide-stage">
-          {previewLoaded!==previewRequestKey&&<div style={{position:'absolute',inset:0}}>
+          {(imageFresh||previewLoaded!==previewRequestKey)&&<div style={{position:'absolute',inset:0}}>
             {active?.slide_images?.[index]?<img className="edit-slide-img" src={absoluteUrl(active.slide_images[index])} alt={`Слайд ${index+1}: сохранённый предпросмотр`}/>:<div role="status">Загружаю слайд…</div>}
           </div>}
-          {livePreview?.key===previewRequestKey&&<iframe key={previewRequestKey} title="Живой слайд" className="edit-slide-img" sandbox="" onLoad={()=>setPreviewLoaded(previewRequestKey)} style={{position:'absolute',inset:0,width:'100%',height:'100%',border:0,pointerEvents:'none',visibility:previewLoaded===previewRequestKey?'visible':'hidden'}} srcDoc={livePreview.html}/>}
+          {!imageFresh&&livePreview?.key===previewRequestKey&&<iframe key={previewRequestKey} title="Живой слайд" className="edit-slide-img" sandbox="" onLoad={()=>setPreviewLoaded(previewRequestKey)} style={{position:'absolute',inset:0,width:'100%',height:'100%',border:0,pointerEvents:'none',visibility:previewLoaded===previewRequestKey?'visible':'hidden'}} srcDoc={livePreview.html}/>}
           {selectable(scene).map((el,elementIndex) => {
             const [x, y, w, h] = el.box;
             const style: React.CSSProperties = { left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%` };

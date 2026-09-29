@@ -59,3 +59,21 @@ it.each([
  ['Измени текст, добавь в конце слова «привет»',{kind:'appendText',text:'привет'}],
  ['Замени текст на Рост 20%.',{kind:'text',text:'Рост 20%.'}],
 ])('edits text for recorded phrase %s',(phrase,expected)=>expect(parseDeckVoice(phrase as string)).toEqual(expected));
+
+import {replacementText} from './deckVoiceExecutor';
+it('dictated replacement starts with a capital and keeps a period only where the old text had one',()=>{
+ expect(replacementText('отчёты готовы к началу рабочего дня.','Отчёты готовы на 2,5 часа раньше')).toBe('Отчёты готовы к началу рабочего дня');
+ expect(replacementText('данные приходят утром.','Данные доступны к началу дня.')).toBe('Данные приходят утром.');
+ expect(replacementText('и так далее...','Заголовок')).toBe('И так далее...');
+});
+it('dictated replacement drops quotes and an ASR capital around the whole text',()=>{
+ expect(replacementText('«отчёты Готовы к началу рабочего дня».','Отчёты готовы на 2,5 часа раньше')).toBe('Отчёты готовы к началу рабочего дня');
+ expect(replacementText('отчёты Готовы к началу рабочего дня»','Отчёты готовы')).toBe('Отчёты готовы к началу рабочего дня');
+ expect(replacementText('запуск проекта «Альфа»','Заголовок')).toBe('Запуск проекта «Альфа»');
+ expect(replacementText('"итоги квартала".','Заголовок')).toBe('Итоги квартала');
+ expect(replacementText('Итоги пилота в Москве','Заголовок')).toBe('Итоги пилота в Москве');
+});
+it('style commands accept the infinitive the recognizer often hears',()=>{
+ expect(parseDeckVoice('Сделать текст синим.')).toEqual({kind:'style',color:'2563EB'});
+ expect(parseDeckVoice('сделать текст крупнее')).toEqual({kind:'style',scale:1.15});
+});

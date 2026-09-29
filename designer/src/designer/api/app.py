@@ -302,6 +302,11 @@ def _variant_state(deck_id: str, variant: str) -> DeckVariantState:
 
     state.slide_images = [f"/decks/{deck_id}/{variant}/slides/{number}.png?v={_stamp(number)}"
                            for number in store.deck_variant_slide_numbers(deck_id, variant)]
+    marker = store.deck_variant_files_dir(deck_id, variant) / "export-revision.json"
+    if marker.is_file():
+        exported = store.read_json_file(marker)
+        if exported.get("images", True):
+            state.images_revision = exported.get("revision")
     return state
 
 

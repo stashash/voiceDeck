@@ -55,6 +55,8 @@ export type Finding = {
 // ---------- состояние колоды ----------
 export type DeckVariantState = {
   revision?: string | null;
+  /** Правка, по которой нарисованы картинки слайдов: пока не равна revision, экспорт ещё идёт. */
+  images_revision?: string | null;
   status: 'running' | 'done' | 'error';
   design_system_id: string;
   plan: DeckPlan | null;

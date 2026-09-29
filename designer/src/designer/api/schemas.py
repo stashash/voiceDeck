@@ -33,6 +33,8 @@ class DeckVariantState(BaseModel):
     error: str | None = None
     slide_images: list[str] = Field(default_factory=list,
                                      description="адреса картинок слайдов по порядку; пусто, если движка нет")
+    images_revision: str | None = Field(default=None,
+                                        description="правка, по которой нарисованы картинки слайдов; не равна revision, пока экспорт идёт")
     brief: str = Field(default="", description="бриф автора, с которого собрана колода")
 
 

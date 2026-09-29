@@ -69,7 +69,9 @@ def _export(deck_id, variant, revision):
                 target = store.deck_variant_slides_dir(deck_id, variant)
                 for path in images.iterdir():
                     os.replace(path, target / path.name)
-            store._write_json(files / "export-revision.json", {"revision": revision})
+            # images: картинки слайдов этой правки готовы; без конвертера их нет и редактор
+            # показывает HTML-предпросмотр.
+            store._write_json(files / "export-revision.json", {"revision": revision, "images": images.exists()})
 
 
 def ensure_export(deck_id, variant):
