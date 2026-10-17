@@ -31,6 +31,7 @@ from pathlib import Path
 from designer import store
 from designer.agent_hook import _client_for
 from designer.audit import fixes as audit_fixes
+from designer.audit.advice import advise_deck
 from designer.audit.contextual import audit_deck, audit_slide
 from designer.audit.deterministic import run_checks
 from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideKind, SlideSpec
@@ -688,6 +689,7 @@ def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text
     for job in zip(scenes, png_paths):
         findings.extend(_one(job))
     findings.extend(audit_deck(scenes, client))
+    findings.extend(advise_deck(scenes, client))
     return findings
 
 

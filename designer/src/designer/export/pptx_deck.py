@@ -606,17 +606,62 @@ def _drop_samples(prs, count: int) -> None:
         prs.part.drop_rel(rel_id)
 
 
+_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+_P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
+FADE_MS = 900
+MORPH_MS = 1000
+
+
+def _transition_xml(morph: bool) -> str:
+    """Переход слайда по правилам кинодек: между темами растворение 0,9 с, не через чёрный; внутри
+    одной сцены (тот же образец и тот же заголовок) морф 1 с. Старый PowerPoint видит растворение."""
+    p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    fade = f'<p:transition xmlns:p="{p}" spd="slow"><p:fade/></p:transition>'
+    if morph:
+        choice = (f'<mc:Choice xmlns:p159="{_P159}" xmlns:p14="{_P14}" Requires="p159">'
+                  f'<p:transition xmlns:p="{p}" spd="slow" p14:dur="{MORPH_MS}"><p159:morph option="byObject"/></p:transition>'
+                  '</mc:Choice>')
+    else:
+        choice = (f'<mc:Choice xmlns:p14="{_P14}" Requires="p14">'
+                  f'<p:transition xmlns:p="{p}" spd="slow" p14:dur="{FADE_MS}"><p:fade/></p:transition></mc:Choice>')
+    return f'<mc:AlternateContent xmlns:mc="{_MC}">{choice}<mc:Fallback>{fade}</mc:Fallback></mc:AlternateContent>'
+
+
+def _set_transition(slide, morph: bool) -> None:
+    from lxml import etree
+
+    root = slide._element
+    for old in list(root):
+        if old.tag == qn("p:transition") or (old.tag == f"{{{_MC}}}AlternateContent"
+                                              and old.find(".//" + qn("p:transition")) is not None):
+            root.remove(old)
+    node = etree.fromstring(_transition_xml(morph))
+    anchor = root.find(qn("p:clrMapOvr"))
+    if anchor is None:
+        anchor = root.find(qn("p:cSld"))
+    anchor.addnext(node)
+
+
+def _title_text(spec: SlideSpec, pattern: Pattern) -> str:
+    return " ".join(spec.slot_text.get(slot.id, "") for slot in pattern.slots if slot.role == "title").strip()
+
+
 def export_pptx(specs: list[SlideSpec], ds: DesignSystem, package_dir: Path, out_path: Path) -> Path:
     """Собирает pptx по инструкциям вёрстки и возвращает путь к сохранённому файлу."""
     prs = Presentation(str(Path(package_dir) / SOURCE_NAME))
     patterns = {pattern.id: pattern for pattern in ds.patterns}
     samples = len(prs.slides)
+    previous: tuple[str, str] | None = None
     for spec in specs:
         pattern = patterns.get(spec.pattern_id)
         if pattern is None:
             raise KeyError(f"в дизайн-системе нет паттерна {spec.pattern_id}")
         slide = clone_slide(prs, pattern.source_slide - 1)
         _fill_slide(slide, spec, pattern, ds)
+        scene_key = (spec.pattern_id, _title_text(spec, pattern))
+        _set_transition(slide, morph=bool(scene_key[1]) and scene_key == previous)
+        previous = scene_key
     _drop_samples(prs, samples)
 
     out_path = Path(out_path)

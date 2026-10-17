@@ -14,7 +14,7 @@ import {executeDeckVoice,deckSelectable,type DeckVoiceResult} from '../stage/dec
 import {deckRewriteTarget} from '../stage/deckVoiceTarget';
 import {editorRequest} from '../stage/editorRequest';
 import {prepareEditorModel} from '../stage/editorModel';
-import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X, Check, TextCursorInput } from 'lucide-react';
+import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, Lightbulb, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X, Check, TextCursorInput } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
   getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation, commitVoiceBatch,
@@ -465,18 +465,26 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
         <div>
           <div className="panel-section-head"><h3>Замечания проверки</h3><span className="findings-count">{sceneFindings.length}</span></div>
           <ul className="findings-list">
-            {sceneFindings.map(f => <li key={f.id} className="finding-item">
-              <AlertTriangle size={18} strokeWidth={1.5} color={f.severity === 'error' ? 'var(--danger)' : 'var(--text-muted)'}/>
-              <span className="finding-body">
-                <span className={`finding-kind ${f.severity}`}>{f.severity === 'error' ? 'Ошибка' : 'Предупреждение'}</span>
-                {f.message}
-              </span>
-              {f.fixable
-                ? <button type="button" className="button small" disabled={busy}
-                  onClick={() => guard(() => fixFindings(deckId, variant, [f.id]))}>Исправить</button>
-                : <button type="button" className="button small" disabled={busy}
-                  onClick={() => guard(() => rewriteFinding(deckId, variant, f.id))}>Переписать</button>}
-            </li>)}
+            {sceneFindings.map(f => {
+              // Совет по правилам сильной презентации, а не огрех вёрстки: «Применить» отдаёт слайд агенту с текстом совета.
+              const advice = f.check_id.startsWith('advice.');
+              return <li key={f.id} className="finding-item">
+                {advice
+                  ? <Lightbulb size={18} strokeWidth={1.5} color="var(--accent)"/>
+                  : <AlertTriangle size={18} strokeWidth={1.5} color={f.severity === 'error' ? 'var(--danger)' : 'var(--text-muted)'}/>}
+                <span className="finding-body">
+                  <span className={`finding-kind ${advice ? 'advice' : f.severity}`}>
+                    {advice ? 'Совет' : f.severity === 'error' ? 'Ошибка' : 'Предупреждение'}
+                  </span>
+                  {f.message}
+                </span>
+                {f.fixable
+                  ? <button type="button" className="button small" disabled={busy}
+                    onClick={() => guard(() => fixFindings(deckId, variant, [f.id]))}>Исправить</button>
+                  : <button type="button" className="button small" disabled={busy}
+                    onClick={() => guard(() => rewriteFinding(deckId, variant, f.id))}>{advice ? 'Применить' : 'Переписать'}</button>}
+              </li>;
+            })}
           </ul>
         </div>
       </aside>

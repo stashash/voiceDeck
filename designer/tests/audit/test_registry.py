@@ -16,6 +16,8 @@ def _ds() -> DesignSystem:
             margins=Margins(left=0.05, top=0.05, right=0.05, bottom=0.05),
         ),
         patterns=[Pattern(id="clean", source_slide=1, layout_name="L1", kind=SlideKind.bullets,
+                           kind_confidence=0.9, theme="light"),
+                  Pattern(id="clean2", source_slide=2, layout_name="L1", kind=SlideKind.cards,
                            kind_confidence=0.9, theme="light")],
     )
 
@@ -27,7 +29,8 @@ def _clean_scenes() -> list[Scene]:
                          text=f"Тема доклада {i}")
         body = Element(id=f"b{i}", type="text", role="body", box=(0.1, 0.25, 0.7, 0.4),
                         text=f"Краткое описание пункта номер {i} для примера содержания")
-        scenes.append(Scene(slide_id=f"s{i}", pattern_id="clean", elements=[title, body]))
+        # Образцы чередуются: три слайда подряд одного вида это совет advice.same_view, а не чистая колода.
+        scenes.append(Scene(slide_id=f"s{i}", pattern_id="clean" if i % 2 else "clean2", elements=[title, body]))
     return scenes
 
 
