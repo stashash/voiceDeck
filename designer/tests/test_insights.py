@@ -516,14 +516,15 @@ def test_image_table_is_read_in_pieces_and_cached(tmp_path, monkeypatch):
         elif "Это верх таблицы" in system:
             answer = {"columns": ["Время", "Зал", "Спикер"], "rows": [["14:00", "Космос", "Иванов"]]}
         else:
-            answer = {"columns": ["Время", "Зал", "Спикер"], "rows": [["", "МФ3", "Петров"], ["15:00", "Космос", "Ким"]]}
+            answer = {"columns": ["Время", "Зал", "Спикер"], "rows": [["", "МФ3", "Петров"], ["15:00", "Космос", "Ким"], ["16:00", "Обед", ""]]}
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(answer, ensure_ascii=False)}}]})
 
     client = LlmClient("http://test/v1", "m", transport=httpx.MockTransport(handler))
     picture = _picture()
     table = read_image_table(picture, "программа.png", client)
     assert len(calls) >= 3 and table.from_image and table.headers == ["Время", "Зал", "Спикер"]
-    assert ["14:00", "МФЗ", "Петров"] in table.rows  # зал по подписи шапки, время сверху  # время сетки подписано один раз на блок
+    assert ["14:00", "МФЗ", "Петров"] in table.rows  # зал по подписи шапки, время сверху
+    assert ["16:00", "", "Обед"] in table.rows  # обед не зал: уходит из столбца зала  # время сетки подписано один раз на блок
     asked = len(calls)
     again = read_image_table(picture, "программа.png", None)  # из кэша, без модели
     assert again.rows == table.rows and len(calls) == asked

@@ -216,6 +216,13 @@ def _to_grid_labels(rows: list[list[str]], grid: list[str]) -> list[list[str]]:
             ratio, label = best(row[column])
             if ratio >= 0.4:
                 row[column] = label
+                continue
+            # Не подпись шапки: обед или перерыв, вписанный в столбец зала («6 залов» вместо пяти, стек 17.10).
+            # Значение уходит в первый свободный столбец правее, как у строки регистрации.
+            free = next((c for c in range(column + 1, len(row)) if not row[c]), None)
+            if free is not None:
+                row[free] = row[column]
+            row[column] = ""
     return rows
 
 
