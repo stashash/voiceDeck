@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -114,6 +115,8 @@ def find_facts(table: Table) -> list[Fact]:
     for fact in wide:
         fact.topic = f"{metrics[-1].name} по строкам «{label_header}»"
     facts += wide
+    if not facts:
+        facts = _count_facts(table)
     for index, fact in enumerate(facts[:MAX_FACTS], start=1):
         fact.id = f"f{index}"
     return facts[:MAX_FACTS]
@@ -410,4 +413,42 @@ def _wide_facts(table: Table, metrics: list[_Metric], label_header: str) -> list
             numbers=[pct(change), fmt(total_old), fmt(total_new)], periods=[head_before, head_after],
             formula=f"({fmt(total_new)} − {fmt(total_old)}) / {fmt(total_old)} × 100 = {pct(change)}",
             source=source, chart=chart, big_number=pct(change), data_lines=lines))
+    return facts
+
+
+def _count_facts(table: Table) -> list[Fact]:
+    """Таблица без чисел (программа, список клиентов, реестр): выводы по счёту строк.
+
+    «Космос» встречается в 7 из 22 строк столбца «Зал», в столбце «Зал» 5 разных значений. Столбец идёт
+    в счёт, если значения повторяются: от 2 до 12 разных на хотя бы 4 заполненные строки.
+    """
+    facts: list[Fact] = []
+    for column, header in enumerate(table.headers):
+        filled = [(table.lines[i], row[column]) for i, row in enumerate(table.rows) if row[column]]
+        counts = Counter(value for _, value in filled)
+        if len(filled) < 4 or not 2 <= len(counts) <= 12 or counts.most_common(1)[0][1] < 2:
+            continue
+        ranked = counts.most_common()
+        total = len(filled)
+        top_value, top_count = ranked[0]
+        share = pct(Decimal(top_count) / Decimal(total) * _HUNDRED, signed=False)
+        source = f"столбец «{header}», {_rows_text([line for line, _ in filled])}"
+        shown = ranked[:8]
+        chart = ChartSpec(type="pie" if len(ranked) <= 6 else "bar", title=f"{header}: число строк",
+                          categories=[value for value, _ in shown],
+                          series=[Series(name="Строк", values=[float(count) for _, count in shown])])
+        lines = [f"{header}, «{value}»: {count} строк" for value, count in shown]
+        table_spec = TableSpec(columns=[header, "Строк"], rows=[[value, str(count)] for value, count in ranked[:7]])
+        facts.append(Fact(
+            id="", kind="count_top", topic=header,
+            statement=f"«{top_value}» в {top_count} из {total} строк столбца «{header}» ({share})",
+            numbers=[str(top_count), str(total), share],
+            formula=f"строк со значением «{top_value}»: {top_count} из {total}; {top_count} / {total} × 100 = {share}",
+            source=source, chart=chart, table=table_spec, big_number=f"{top_count} из {total}", data_lines=lines))
+        facts.append(Fact(
+            id="", kind="count_distinct", topic=header,
+            statement=f"В столбце «{header}» {len(counts)} разных значений на {total} строк",
+            numbers=[str(len(counts)), str(total)],
+            formula=f"разных значений в столбце «{header}»: {len(counts)}",
+            source=source, chart=chart, table=table_spec, big_number=str(len(counts)), data_lines=lines))
     return facts

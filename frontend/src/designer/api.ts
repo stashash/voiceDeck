@@ -176,7 +176,7 @@ export type InsightView = {
   number_at: [number, number] | null;
 };
 /** Разбор файла без модели: строки и столбцы на плашке и ошибка файла приходят сразу. */
-export type TablePreview = { table_name: string; sheet: string; rows: number; columns: number };
+export type TablePreview = { table_name: string; sheet: string; rows: number; columns: number; from_image?: boolean };
 
 export function tablePreview(file: File, signal?: AbortSignal): Promise<TablePreview> {
   const form = new FormData();
@@ -185,6 +185,8 @@ export function tablePreview(file: File, signal?: AbortSignal): Promise<TablePre
 }
 export type InsightsResponse = {
   id: string; table_name: string; sheet: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
+  /** Таблицу прочитала модель с картинки: числа надо сверить с оригиналом. */
+  from_image?: boolean;
 };
 
 export function tableInsights(file: File, brief: string, signal?: AbortSignal, useModel = true): Promise<InsightsResponse> {

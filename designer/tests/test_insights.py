@@ -62,8 +62,8 @@ def test_xlsx_first_sheet_with_cached_formula_values():
 
 @pytest.mark.parametrize("data,name,message", [
     (b"a,b\n1,2\n", "x.csv", "две строки"),
-    (b",b\n1,2\n3,4\n", "x.csv", "Шапка"),
-    (b"a,b\n1,2\n3,4\n", "x.pdf", "xlsx или csv"),
+    (b",b\n1,2\n3,4\n", "x.csv", "шапку"),
+    (b"a,b\n1,2\n3,4\n", "x.pdf", "xlsx, csv или картинка"),
     (b"x" * (1024 * 1024 + 1), "x.csv", "1 МБ"),
 ], ids=["one-row", "empty-header", "pdf", "too-big"])
 def test_bad_tables_say_what_to_fix(data, name, message):
@@ -334,7 +334,7 @@ def test_api_table_preview_comes_before_the_model(tmp_path, monkeypatch):
     monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
     with TestClient(app) as client:
         ok = client.post("/insights/table", files={"file": ("r.csv", REGIONS, "text/csv")})
-        assert ok.status_code == 200 and ok.json() == {"table_name": "r.csv", "sheet": "", "rows": 6, "columns": 3}
+        assert ok.status_code == 200 and ok.json() == {"table_name": "r.csv", "sheet": "", "rows": 6, "columns": 3, "from_image": False}
         bad = client.post("/insights/table", files={"file": ("x.csv", b"a,b\n1,2\n", "text/csv")})
         assert bad.status_code == 422 and "две строки" in bad.json()["detail"]
 
@@ -442,6 +442,113 @@ def test_years_inside_labels_are_periods():
     rows = "Год;Выручка\n2026 г.;177\n2024 г.;120\n2025 г.;150\n".encode()
     change = next(f for f in find_facts(read_table(rows, "y.csv")) if f.kind == "change_last")
     assert change.periods == ["2025 г.", "2026 г."]
+
+
+def _book(*sheets) -> bytes:
+    """Книга xlsx: каждый лист это (имя, строки, объединения)."""
+    from openpyxl import Workbook
+    book = Workbook()
+    book.remove(book.active)
+    for title, rows, merges in sheets:
+        sheet = book.create_sheet(title)
+        for row in rows:
+            sheet.append(row)
+        for merged in merges:
+            sheet.merge_cells(merged)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def test_table_is_found_under_titles_and_two_row_header():
+    """Андрей 17.10: «агент не всеяден?» на листе с заголовком над таблицей. Заголовок, источник и объединённая
+    шапка в две строки больше не мешают."""
+    data = _book(("Итоги", [
+        ["Итоги года по регионам"], [], ["Источник: отчёт продаж"], [],
+        ["Регион", "Выручка", None], [None, "2025", "2026"],
+        ["Север", 80, 112], ["Центр", 95, 90], ["Юг", 60, 50]], ["A1:C1", "A3:C3", "B5:C5"]))
+    table = read_table(data, "итоги.xlsx")
+    assert table.headers == ["Регион", "Выручка 2025", "Выручка 2026"]
+    assert table.lines == [7, 8, 9]
+    assert {f.kind for f in find_facts(table)} >= {"rows_grew", "total_change"}
+
+
+def test_sheet_without_table_is_skipped():
+    from designer.insights import source
+    data = _book(("Обложка", [["Отчёт"], ["Подготовил отдел продаж"]], []),
+                 ("Данные", [["Квартал", "Выручка"], ["I кв 2026", 120], ["II кв 2026", 135], ["III кв 2026", 150]], []))
+    table, facts = source.load(data, "отчёт.xlsx", None)
+    assert table.sheet == "Данные" and facts
+
+
+def test_text_table_gets_count_facts():
+    program = ("Время;Зал;Спикер\n14:00;Космос;Иванов\n14:00;МФЗ;Петров\n14:40;Космос;Сидорова\n"
+               "14:40;МФЗ;Орлова\n16:00;Космос;Ким\n").encode()
+    table = read_table(program, "программа.csv")
+    facts = find_facts(table)
+    top = next(f for f in facts if f.kind == "count_top" and f.topic == "Зал")
+    assert top.numbers[:2] == ["3", "5"] and "Космос" in top.statement
+    suggestions, _ = suggest(table, facts, "", "", None)
+    assert len(suggestions) >= 3 and all(s.number_at for s in suggestions)
+
+
+def _picture(width=500, height=1600) -> bytes:
+    from PIL import Image, ImageDraw
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    for y in range(0, height, 40):
+        draw.text((10, y + 10), f"строка {y // 40}", fill="black")
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def test_image_table_is_read_in_pieces_and_cached(tmp_path, monkeypatch):
+    from designer.insights.image_table import read_image_table
+    monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
+    calls = []
+
+    def handler(request):
+        system = json.loads(request.content)["messages"][0]["content"]
+        calls.append(system)
+        if "Выпиши в labels" in system:
+            answer = {"labels": ["Космос", "МФЗ"]}
+        elif "Это верх таблицы" in system:
+            answer = {"columns": ["Время", "Зал", "Спикер"], "rows": [["14:00", "Космос", "Иванов"]]}
+        else:
+            answer = {"columns": ["Время", "Зал", "Спикер"], "rows": [["", "МФ3", "Петров"], ["15:00", "Космос", "Ким"]]}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(answer, ensure_ascii=False)}}]})
+
+    client = LlmClient("http://test/v1", "m", transport=httpx.MockTransport(handler))
+    picture = _picture()
+    table = read_image_table(picture, "программа.png", client)
+    assert len(calls) >= 3 and table.from_image and table.headers == ["Время", "Зал", "Спикер"]
+    assert ["14:00", "МФЗ", "Петров"] in table.rows  # зал по подписи шапки, время сверху  # время сетки подписано один раз на блок
+    asked = len(calls)
+    again = read_image_table(picture, "программа.png", None)  # из кэша, без модели
+    assert again.rows == table.rows and len(calls) == asked
+
+
+def test_image_only_xlsx_goes_to_the_model(tmp_path, monkeypatch):
+    """Файл Андрея 17.10: на листе заголовок, а сетка программы вставлена картинкой."""
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image as SheetImage
+    from designer.insights import source
+    monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
+    book = Workbook()
+    book.active.title = "Программа"
+    book.active.append(["IT Community Day — деловая программа"])
+    picture = tmp_path / "grid.png"
+    picture.write_bytes(_picture())
+    book.active.add_image(SheetImage(str(picture)), "A3")
+    buffer = io.BytesIO()
+    book.save(buffer)
+    assert source.preview(buffer.getvalue(), "program.xlsx") == (None, True)
+    with pytest.raises(TableError, match="только модель"):
+        source.load(buffer.getvalue(), "program.xlsx", None)
+    with TestClient(app) as client:
+        shown = client.post("/insights/table", files={"file": ("program.xlsx", buffer.getvalue(), "application/octet-stream")})
+        assert shown.status_code == 200 and shown.json()["from_image"] is True
 
 
 def test_stop_in_browser_closes_the_model_call():

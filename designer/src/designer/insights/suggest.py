@@ -25,7 +25,7 @@ PREVIEW_ROWS = 30
 Visual = Literal["column", "bar", "line", "pie", "table", "big_number"]
 _PERIOD_KINDS = ("change_last", "change_total", "growth_count")
 _FALLBACK_ORDER = ("change_last", "rows_grew", "share_top", "total_change", "leader_gap",
-                   "change_total", "fastest_row", "growth_count")
+                   "change_total", "fastest_row", "growth_count", "count_top", "count_distinct")
 _NUM = re.compile(r"(?<![\d.,])\d{1,3}(?:[ \u00a0\u202f]\d{3}(?!\d))+(?:[.,]\d+)?|\d+(?:[.,]\d+)?")
 
 
@@ -287,7 +287,7 @@ def _visual(wanted: str, fact: Fact) -> str:
     """Вид показа, который у кандидата есть данными: таблица без таблицы становится диаграммой."""
     if wanted == "bar" and fact.kind in _PERIOD_KINDS:
         wanted = "column"  # периоды идут слева направо, горизонтальные полосы ставят их снизу вверх
-    if wanted == "pie" and fact.kind != "share_top":
+    if wanted == "pie" and fact.kind not in ("share_top", "count_top"):
         wanted = fact.chart.type if fact.chart else "big_number"
     if wanted == "table" and fact.table is None:
         wanted = fact.chart.type if fact.chart else "big_number"

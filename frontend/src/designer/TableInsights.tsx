@@ -5,9 +5,13 @@ import { plural } from './labels';
 
 // Пределы те же, что проверяет сервис (designer/insights/table.py): ошибку видно до загрузки.
 const MAX_BYTES = 1024 * 1024;
-const ACCEPT = /\.(xlsx|csv)$/i;
-// Обычное время ответа модели: по нему идёт полоса хода, пока выводы ищутся.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ACCEPT = /\.(xlsx|csv|png|jpe?g)$/i;
+const IMAGE = /\.(png|jpe?g)$/i;
+// Обычное время ответа модели: по нему идёт полоса хода, пока выводы ищутся. Таблицу с картинки модель
+// читает кусками по 20–30 с (проба 17.10 на программе конференции).
 const EXPECTED_S = 20;
+const EXPECTED_IMAGE_S = 180;
 
 export const VISUAL_NAME: Record<InsightVisual, string> = {
   column: 'Столбчатая диаграмма', bar: 'Линейчатая диаграмма', line: 'График',
@@ -88,8 +92,12 @@ export function useTableInsights() {
   async function attach(next: File, brief: string) {
     reset();
     setRemoved(null);
-    if (!ACCEPT.test(next.name)) { setError(`«${next.name}»: нужен файл xlsx или csv`); return; }
-    if (next.size > MAX_BYTES) {
+    if (!ACCEPT.test(next.name)) { setError(`«${next.name}»: нужен файл xlsx, csv или картинка таблицы (png, jpg)`); return; }
+    if (IMAGE.test(next.name) && next.size > MAX_IMAGE_BYTES) {
+      setError(`«${next.name}» больше 5 МБ: обрежьте картинку по таблице или сохраните в jpg`);
+      return;
+    }
+    if (!IMAGE.test(next.name) && next.size > MAX_BYTES) {
       const extra = /\.xlsx$/i.test(next.name) ? 'листы, строки и столбцы' : 'строки и столбцы';
       setError(`«${next.name}» больше 1 МБ: удалите лишние ${extra}`);
       return;
@@ -168,11 +176,11 @@ export function AttachTableButton({ onPick }: { onPick: (file: File) => void }) 
   const input = useRef<HTMLInputElement>(null);
   return <>
     <button type="button" className="picker-btn picker-icon" aria-label="Прикрепить таблицу"
-      title="Прикрепить таблицу: xlsx (первый лист) или csv, до 1 МБ, 2000 строк, 50 столбцов. Подскажу, что из неё показать"
+      title="Прикрепить таблицу: xlsx или csv до 1 МБ, 2000 строк и 50 столбцов, или картинку таблицы (png, jpg) до 5 МБ. Подскажу, что из неё показать"
       onClick={() => input.current?.click()}>
       <Paperclip size={18} strokeWidth={1.5}/>
     </button>
-    <input ref={input} type="file" accept=".xlsx,.csv" hidden
+    <input ref={input} type="file" accept=".xlsx,.csv,.png,.jpg,.jpeg" hidden
       onChange={e => { const next = e.target.files?.[0]; e.target.value = ''; if (next) onPick(next); }}/>
   </>;
 }
@@ -192,12 +200,14 @@ export function TableChip({ state, onRetry }: { state: TableInsightsState; onRet
       <X size={18} strokeWidth={1.5}/></button>
   </div>;
   if (!state.file) return error || null;
-  const shape = state.preview ?? state.result;
+  const shape = state.result ?? state.preview;
+  const fromImage = !!(state.result?.from_image ?? state.preview?.from_image);
   return <>{error}<div className="table-chip">
     <Sheet size={18} strokeWidth={1.5} className="icon-muted"/>
     <span className="table-chip-name">{state.file.name}</span>
     {shape && <span className="table-chip-meta">
-      {shape.sheet ? `лист «${shape.sheet}», ` : ''}{plural(shape.rows, 'строка', 'строки', 'строк')}, {plural(shape.columns, 'столбец', 'столбца', 'столбцов')}
+      {shape.rows ? <>{fromImage ? 'с картинки, ' : shape.sheet ? `лист «${shape.sheet}», ` : ''}{plural(shape.rows, 'строка', 'строки', 'строк')}, {plural(shape.columns, 'столбец', 'столбца', 'столбцов')}</>
+        : fromImage ? 'таблица на картинке' : ''}
     </span>}
     <button type="button" className="button-icon table-chip-remove" aria-label="Убрать таблицу" title="Убрать таблицу"
       onClick={state.clear}><X size={18} strokeWidth={1.5}/></button>
@@ -212,11 +222,15 @@ function Waiting({ state, refreshing }: { state: TableInsightsState; refreshing:
     return () => window.clearInterval(timer);
   }, []);
   const seconds = Math.max(0, Math.round((now - state.startedAt) / 1000));
-  const share = Math.min(seconds / EXPECTED_S, 0.95);
-  const pace = seconds > EXPECTED_S ? 'дольше обычного' : `обычно до ${EXPECTED_S} секунд`;
+  // Картинку модель читает впервые: до трёх минут. Прочитанная уже лежит в кэше, пересчёт идёт как обычно.
+  const reading = !!state.preview?.from_image && !state.result;
+  const expected = reading ? EXPECTED_IMAGE_S : EXPECTED_S;
+  const share = Math.min(seconds / expected, 0.95);
+  const pace = seconds > expected ? 'дольше обычного' : reading ? 'обычно до 3 минут' : `обычно до ${expected} секунд`;
+  const step = refreshing ? 'Пересчитываю выводы под новый бриф' : reading ? 'Читаю таблицу с картинки' : 'Ищу выводы в таблице';
   return <div className="insights-wait" role="status">
     <div className="insights-wait-row">
-      <span>{refreshing ? 'Пересчитываю выводы под новый бриф' : 'Ищу выводы в таблице'}: {seconds} с, {pace}</span>
+      <span>{step}: {seconds} с, {pace}</span>
       <button type="button" className="button" onClick={state.stop}>Остановить</button>
     </div>
     <div className="insights-progress" aria-hidden="true"><span style={{ width: `${share * 100}%` }}/></div>
@@ -264,6 +278,7 @@ export function InsightsList({ state, brief, onRetry }: { state: TableInsightsSt
       })}
     </ul>}
     {/* Под списком: строка не сдвигает список под курсором, когда снята последняя галочка (приёмка 17.10). */}
+    {r?.from_image && !state.loading && <p className="insights-note">Таблицу прочитала модель с картинки: сверьте числа с оригиналом, источник на числе.</p>}
     {r && !state.loading && state.chosen.length === 0 && <p className="insights-note">{brief.trim()
       ? 'Ни один вывод не отмечен: колода соберётся только по брифу.'
       : 'Ни один вывод не отмечен: отметьте вывод или впишите бриф.'}</p>}

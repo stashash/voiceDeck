@@ -41,8 +41,9 @@ class TablePreview(BaseModel):
     """Разбор файла до модели: плашка сразу показывает строки и столбцы, ошибка файла приходит сразу."""
     table_name: str
     sheet: str = ""
-    rows: int
-    columns: int
+    rows: int = 0
+    columns: int = 0
+    from_image: bool = Field(default=False, description="таблица на картинке: прочитает модель, строк и столбцов ещё нет")
 
 
 class InsightsResponse(BaseModel):
@@ -53,6 +54,7 @@ class InsightsResponse(BaseModel):
     columns: int
     suggestions: list[InsightView]
     note: str = Field(default="", description="почему выводы сформулировал код, а не модель")
+    from_image: bool = Field(default=False, description="таблицу прочитала модель с картинки: числа сверить с оригиналом")
 
 
 class DeckVariantState(BaseModel):
