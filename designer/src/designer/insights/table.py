@@ -17,6 +17,7 @@ MAX_BYTES = 1024 * 1024
 MAX_ROWS = 2000
 MAX_COLS = 50
 MAX_CELL = 2000
+MAX_EMPTY_RUN = 1000
 
 
 class TableError(ValueError):
@@ -59,16 +60,17 @@ def parse_number(text: str) -> Decimal | None:
 
 
 def read_table(data: bytes, filename: str) -> Table:
-    if len(data) > MAX_BYTES:
-        raise TableError("Файл больше 1 МБ: оставьте в таблице только нужный лист и строки")
     name = (filename or "таблица").replace("\\", "/").rsplit("/", 1)[-1][:200]
     lower = name.lower()
+    if len(data) > MAX_BYTES:
+        extra = "листы, строки и столбцы" if lower.endswith(".xlsx") else "строки и столбцы"
+        raise TableError(f"Файл больше 1 МБ: удалите лишние {extra}")
     if lower.endswith(".xlsx"):
         sheet, grid = _read_xlsx(data)
         try:
             return _to_table(name, grid, sheet)
         except TableError as exc:
-            raise TableError(f"Лист «{sheet}»: {exc} Сервис читает только первый лист книги.") from exc
+            raise TableError(f"Лист «{sheet}»: {exc} Читаю только первый лист книги.") from exc
     if lower.endswith(".csv") or lower.endswith(".txt"):
         return _to_table(name, _read_csv(data))
     raise TableError("Нужен файл xlsx или csv")
@@ -76,7 +78,7 @@ def read_table(data: bytes, filename: str) -> Table:
 
 def _read_csv(data: bytes) -> list[list[str]]:
     if b"\0" in data:
-        raise TableError("Файл не похож на таблицу csv: сохраните его из Excel заново как CSV.")
+        raise TableError("Файл сохранён не как csv: в Excel выберите «Сохранить как», тип «CSV UTF-8».")
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -84,7 +86,7 @@ def _read_csv(data: bytes) -> list[list[str]]:
         try:
             text = data.decode("cp1251")
         except UnicodeDecodeError as exc:
-            raise TableError("Не удалось прочитать кодировку: сохраните csv в UTF-8.") from exc
+            raise TableError("Не удалось распознать кодировку: сохраните файл как «CSV UTF-8».") from exc
     first_line = text.split("\n", 1)[0]
     delimiter = max((";", ",", "\t"), key=first_line.count)
     reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
@@ -92,7 +94,7 @@ def _read_csv(data: bytes) -> list[list[str]]:
         return [row for row in reader]
     except csv.Error as exc:
         raise TableError(f"Строка {reader.line_num}: кавычка в значении не закрыта или стоит не на месте. "
-                         "Сохраните таблицу из Excel заново как CSV.") from exc
+                         "Сохраните таблицу из Excel заново как «CSV UTF-8».") from exc
 
 
 def _read_xlsx(data: bytes) -> tuple[str, list[list[str]]]:
@@ -101,14 +103,25 @@ def _read_xlsx(data: bytes) -> tuple[str, list[list[str]]]:
     try:
         workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception as exc:  # повреждённый zip, не книга Excel, xls под видом xlsx
-        raise TableError("Файл не открывается как книга Excel xlsx") from exc
+        raise TableError("Файл не открывается как xlsx: откройте его в Excel и сохраните как «Книга Excel (.xlsx)».") from exc
     try:
         sheet = workbook.worksheets[0]
         grid: list[list[str]] = []
+        filled = empty_run = 0
         for row in sheet.iter_rows(values_only=True):
-            if len(grid) > MAX_ROWS + 1:
+            cells = [_cell_text(value) for value in row[:MAX_COLS + 1]]
+            grid.append(cells)
+            # К пределу идут только строки с данными: пустые строки листа раньше съедали предел, и хвост
+            # таблицы молча терялся, а сумма считалась по части (ред-тим 17.10, инженер ядра).
+            if any(cell.strip() for cell in cells):
+                filled += 1
+                empty_run = 0
+            else:
+                empty_run += 1
+            # Тысяча пустых строк подряд это конец таблицы: лист с оформлением до строки 1 000 000
+            # иначе читался секунду на каждый запрос (приёмка 17.10).
+            if filled > MAX_ROWS + 1 or empty_run > MAX_EMPTY_RUN:
                 break
-            grid.append([_cell_text(value) for value in row[:MAX_COLS + 1]])
         return sheet.title, grid
     finally:
         workbook.close()

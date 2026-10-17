@@ -1,6 +1,7 @@
 """FastAPI-сервис: пакеты дизайн-систем, генерация колоды, живой режим. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -10,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import httpx
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
@@ -53,6 +54,7 @@ from designer.api.schemas import (
     SlideTextRequest,
     SlideMoveElementRequest,
     ElementActionRequest,
+    TablePreview,
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
@@ -242,10 +244,42 @@ def list_decks() -> DeckListResponse:
     return DeckListResponse(items=[d for d in pipeline.list_decks() if not (store.deck_dir(d['id']) / '.deleted').exists()])
 
 
+_NO_NUMBERS = "В таблице нет столбца с числами: нужен столбец, где числа стоят хотя бы в двух строках."
+
+
+@app.post("/insights/table", response_model=TablePreview)
+async def table_preview(file: UploadFile = File(...)) -> TablePreview:
+    """Разбор файла без модели: строки и столбцы на плашке и ошибка файла приходят сразу, до подсказок."""
+    data = await file.read(insights_table.MAX_BYTES + 1)
+    try:
+        table = insights_table.read_table(data, file.filename or "")
+        if not insights_facts.find_facts(table):
+            raise insights_table.TableError(_NO_NUMBERS)
+    except insights_table.TableError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return TablePreview(table_name=table.name, sheet=table.sheet, rows=len(table.rows), columns=len(table.headers))
+
+
+async def _wait_unless_gone(task: asyncio.Future, request: Request, client: object, poll_s: float = 0.5) -> bool:
+    """Ждёт подсказки. Браузер оборвал запрос («Остановить», пересчёт под новый бриф): рвёт вызов модели.
+
+    Иначе модель дописывала ответ, который никто не прочтёт, и слот локальной модели был занят
+    до таймаута (ред-тим 17.10, инженер ядра). False, если клиент ушёл.
+    """
+    while True:
+        done, _ = await asyncio.wait({task}, timeout=poll_s)
+        if done:
+            return True
+        if await request.is_disconnected():
+            _close(client)
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            return False
+
+
 @app.post("/insights", response_model=InsightsResponse)
-async def table_insights(file: UploadFile = File(...), brief: str = Form(""), audience: str = Form(""),
+async def table_insights(request: Request, file: UploadFile = File(...), brief: str = Form(""), audience: str = Form(""),
                          use_model: bool = Form(True),
-                         client: LlmClient = Depends(get_llm_client)) -> InsightsResponse:
+                         client: LlmClient = Depends(get_llm_client)) -> InsightsResponse | Response:
     """Таблица автора -> подсказки, что из неё показать. Числа считает код, модель выбирает и формулирует.
 
     use_model=false: автор остановил долгий ответ модели, подсказки сразу формулирует код.
@@ -255,9 +289,12 @@ async def table_insights(file: UploadFile = File(...), brief: str = Form(""), au
         table = insights_table.read_table(data, file.filename or "")
         facts = insights_facts.find_facts(table)
         if not facts:
-            raise insights_table.TableError("В таблице нет столбца с числами: нужен столбец, где числа стоят хотя бы в двух строках.")
-        suggestions, note = await run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience,
-                                                    client if use_model else None)
+            raise insights_table.TableError(_NO_NUMBERS)
+        task = asyncio.ensure_future(run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience,
+                                                       client if use_model else None))
+        if not await _wait_unless_gone(task, request, client):
+            return Response(status_code=499)
+        suggestions, note = task.result()
         if not use_model:
             note = "Модель остановлена: выводы посчитаны и записаны без неё."
     except insights_table.TableError as exc:

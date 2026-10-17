@@ -33,6 +33,16 @@ class InsightView(BaseModel):
     source: str
     formula: str
     by_model: bool
+    fact_ids: list[str] = Field(default_factory=list, description="кандидаты кода: по ним экран узнаёт подсказку после пересчёта")
+    number_at: list[int] | None = Field(default=None, description="начало и конец главного числа в headline")
+
+
+class TablePreview(BaseModel):
+    """Разбор файла до модели: плашка сразу показывает строки и столбцы, ошибка файла приходит сразу."""
+    table_name: str
+    sheet: str = ""
+    rows: int
+    columns: int
 
 
 class InsightsResponse(BaseModel):

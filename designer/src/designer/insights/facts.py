@@ -14,6 +14,7 @@ from designer.insights.table import Table
 
 MAX_FACTS = 24
 MAX_METRICS = 6
+MAX_PERIODS = 12
 _TOTAL_ROW = re.compile(r"^\s*(итого|всего|total|сумма)\b", re.I)
 _PERIOD = re.compile(
     r"\b(19|20)\d{2}\b|\bQ[1-4]\b|\b[IV]{1,3}\s*кв|квартал|\bкв\.|\bH[12]\b|полугоди|\d{2}\.\d{2}\.\d{4}|недел"
@@ -91,17 +92,21 @@ def find_facts(table: Table) -> list[Fact]:
     keep = [i for i, label in enumerate(labels) if not _TOTAL_ROW.match(label)]
     periods = sum(bool(_PERIOD.search(labels[i])) for i in keep) >= max(2, 0.6 * len(keep))
     metrics = _metrics(table, label_col, labels, keep)
+    ordered: set[int] = set()
     if periods:
         # Таблица «новые сверху» иначе перевернула бы рост в спад: периоды идут по времени, а не по строкам файла.
         for metric in metrics:
             keys = [_period_key(label) for _, label, _ in metric.points]
-            if all(key is not None for key in keys):
+            if all(key is not None for key in keys) and len(set(keys)) == len(keys):
                 metric.points = [point for _, point in sorted(zip(keys, metric.points), key=lambda pair: pair[0])]
+                ordered.add(metric.column)
     label_header = table.headers[label_col] if label_col is not None else "Строка"
 
     facts: list[Fact] = []
     for metric in metrics[:MAX_METRICS]:
-        found = _period_facts(metric) if periods else _category_facts(metric, label_header)
+        # Порядок подписей не распознан («Весна 2026», «Неделя 12»): рост и спад по порядку строк файла
+        # были бы догадкой (ред-тим 17.10, инженер ядра), поэтому только выводы, которым порядок не нужен.
+        found = _period_facts(metric) if metric.column in ordered else _category_facts(metric, label_header)
         for fact in found:
             fact.topic = metric.name
         facts += found
@@ -160,14 +165,62 @@ def _period_key(label: str) -> tuple[int, int] | None:
     for index, stem in enumerate(_MONTHS, start=1):
         if stem in text or (stem == "мая" and re.search(r"\bмай\b", text)):
             return year, index
-    if year_match and _YEAR.match(text.strip()):
+    if year_match:
+        # «2025», «2025 год», «2024 г.», «Выручка 2025», «2025, млн ₽»: год без месяца и квартала. Два периода одного
+        # года («Весна 2026», «Лето 2026») получают один ключ, и порядок такого ряда считается нераспознанным.
         return year, 0
     return None
 
 
 def _trend(shown: str) -> str:
-    """Существительное вместо глагола: «рост», «снижение» читаются выводом без согласования с родом показателя."""
+    """Существительное вместо глагола, когда род показателя не узнан («Прибыль», «EBITDA»)."""
     return "рост на" if shown.startswith("+") else "снижение на" if shown.startswith("−") else "изменение"
+
+
+_VERBS = {
+    "up": {"m": "вырос", "f": "выросла", "n": "выросло", "pl": "выросли"},
+    "down": {"m": "снизился", "f": "снизилась", "n": "снизилось", "pl": "снизились"},
+    "same": {"m": "не изменился", "f": "не изменилась", "n": "не изменилось", "pl": "не изменились"},
+    "grew": {"m": "рос", "f": "росла", "n": "росло", "pl": "росли"},
+}
+
+
+def _gender(name: str) -> str | None:
+    """Род и число показателя по первому слову: «Выручка» f, «Отток» m, «Число заказов» n, «Новые клиенты» pl.
+
+    Слова на «ь» («Прибыль», «Рубль») и латиница не угадываются: для них вывод остаётся с существительным.
+    """
+    match = re.match(r"[а-яё-]+", name.strip().lower())
+    if not match:
+        return None
+    word = match.group()
+    if word in ("рост", "прирост", "снижение", "падение", "изменение", "динамика"):
+        return None  # «Рост выручки вырос» звучит тавтологией: запись с существительным
+    if word.endswith("мя"):
+        return "n"  # время, имя
+    if word.endswith(("ые", "ие", "ы", "и")):
+        return "pl"
+    if word.endswith(("ая", "яя", "а", "я")):
+        return "f"
+    if word.endswith(("ое", "ее", "о", "е")):
+        return "n"
+    if word.endswith(("ый", "ий", "ой")) or word[-1] in "бвгджзклмнпрстфхцчшщй":
+        return "m"
+    return None
+
+
+def _changed(name: str, shown: str) -> str:
+    """«Выручка выросла на 18 %», «Отток снизился на 1,3 п. п.»: вывод с глаголом (ред-тим 17.10, редактор).
+
+    Род не узнан: «Прибыль: рост на 18 %».
+    """
+    gender = _gender(name)
+    if gender is None:
+        return f"{name}: {_trend(shown)} {shown.lstrip('+−')}".rstrip()
+    if not shown.startswith(("+", "−")):
+        return f"{name} {_VERBS['same'][gender]}"
+    direction = "up" if shown.startswith("+") else "down"
+    return f"{name} {_VERBS[direction][gender]} на {shown.lstrip('+−')}"
 
 
 def _times_word(times: str) -> str:
@@ -209,37 +262,41 @@ def _data_lines(metric: _Metric, points: list[tuple[int, str, Decimal]]) -> list
 
 
 def _period_facts(metric: _Metric) -> list[Fact]:
+    """Выводы о ходе ряда. Все расчёты идут по тем же последним 12 периодам, что источник и диаграмма:
+    иначе у «+X % за период» на месячных данных за два года базы не было ни в тултипе, ни на слайде."""
     facts: list[Fact] = []
-    points = metric.points[-12:]
+    points = metric.points[-MAX_PERIODS:]
     chart = _chart("line" if len(points) >= 5 else "column", metric, points)
     lines = _data_lines(metric, points)
     source = f"столбец «{metric.name}», {_rows_text([r for r, _, _ in points])}"
-    (_, prev_label, prev), (_, last_label, last) = metric.points[-2], metric.points[-1]
+    (_, prev_label, prev), (_, last_label, last) = points[-2], points[-1]
     change_fact = _change(metric, prev, last)
     if change_fact:
         shown, formula = change_fact
         facts.append(Fact(
             id="", kind="change_last",
-            statement=f"{metric.name}: {_trend(shown)} {shown.lstrip('+−')}, {prev_label} → {last_label} "
+            statement=f"{_changed(metric.name, shown)}, {prev_label} → {last_label} "
                       f"({_with_unit(prev, metric.unit)} → {_with_unit(last, metric.unit)})",
             numbers=[shown, fmt(prev), fmt(last)], formula=formula, periods=[prev_label, last_label],
             source=source, chart=chart, big_number=shown, data_lines=lines))
-    (_, first_label, first) = metric.points[0]
+    (_, first_label, first) = points[0]
     change_fact = _change(metric, first, last)
-    if len(metric.points) >= 3 and change_fact:
+    if len(points) >= 3 and change_fact:
         shown, formula = change_fact
         facts.append(Fact(
             id="", kind="change_total",
-            statement=f"{metric.name}: {_trend(shown)} {shown.lstrip('+−')} с {first_label} по {last_label} "
+            statement=f"{_changed(metric.name, shown)} с {first_label} по {last_label} "
                       f"({_with_unit(first, metric.unit)} → {_with_unit(last, metric.unit)})",
             numbers=[shown, fmt(first), fmt(last)], formula=formula, periods=[first_label, last_label],
             source=source, chart=chart, big_number=shown, data_lines=lines))
-    if len(metric.points) >= 3:
-        steps = len(metric.points) - 1
-        grew = sum(b[2] > a[2] for a, b in zip(metric.points, metric.points[1:]))
+    if len(points) >= 3:
+        steps = len(points) - 1
+        grew = sum(b[2] > a[2] for a, b in zip(points, points[1:]))
+        gender = _gender(metric.name)
+        grew_text = f"{metric.name} {_VERBS['grew'][gender]}" if gender else f"{metric.name}: рост"
         facts.append(Fact(
             id="", kind="growth_count",
-            statement=f"{metric.name}: рост в {grew} из {steps} сравнений с прошлым периодом ({first_label} → {last_label})",
+            statement=f"{grew_text} в {grew} из {steps} сравнений с прошлым периодом ({first_label} → {last_label})",
             numbers=[str(grew), str(steps)], periods=[first_label, last_label],
             formula=f"сравнений с прошлым периодом, где значение выросло: {grew} из {steps}",
             source=source, chart=chart, big_number=f"{grew} из {steps}", data_lines=lines))
@@ -303,6 +360,13 @@ def _wide_facts(table: Table, metrics: list[_Metric], label_header: str) -> list
     before, after = metrics[-2], metrics[-1]
     if not (_PERIOD.search(table.headers[before.column]) and _PERIOD.search(table.headers[after.column])):
         return []
+    # Столбцы «2026; 2025» (новый год первым) давали «рост» там, где спад (приёмка 17.10): периоды идут по
+    # времени. Порядок не распознан или периоды равны: выводов о направлении нет.
+    keys = _period_key(table.headers[before.column]), _period_key(table.headers[after.column])
+    if None in keys or keys[0] == keys[1]:
+        return []
+    if keys[0] > keys[1]:
+        before, after = after, before
     previous = {row: value for row, _, value in before.points}
     pairs = [(row, label, previous[row], value) for row, label, value in after.points if row in previous]
     if len(pairs) < 2:
@@ -321,16 +385,17 @@ def _wide_facts(table: Table, metrics: list[_Metric], label_header: str) -> list
     grew = sum(new > old for _, _, old, new in pairs)
     facts.append(Fact(
         id="", kind="rows_grew",
-        statement=f"{label_header}: рост у {grew} из {len(pairs)}, {head_before} → {head_after}",
+        statement=f"Значение выросло в {grew} из {len(pairs)} строк «{label_header}», {head_before} → {head_after}",
         numbers=[str(grew), str(len(pairs))], periods=[head_before, head_after],
         formula=f"строк, где «{head_after}» больше «{head_before}»: {grew} из {len(pairs)}",
         source=source, chart=chart, big_number=f"{grew} из {len(pairs)}", data_lines=lines))
     growing = [(row, label, old, new, (new - old) / old * _HUNDRED) for row, label, old, new in pairs if old > 0]
     if growing:
         row, label, old, new, change = max(growing, key=lambda p: p[4])
+        best = "Быстрее всего выросла" if change > 0 else "Меньше всего снизилась" if change < 0 else "Не изменилась"
         facts.append(Fact(
             id="", kind="fastest_row",
-            statement=f"Лучшая динамика: «{label}», {pct(change)} ({fmt(old)} → {fmt(new)})",
+            statement=f"{best} строка «{label}»: {pct(change)}, {head_before} → {head_after} ({fmt(old)} → {fmt(new)})",
             numbers=[pct(change), fmt(old), fmt(new)], periods=[head_before, head_after],
             formula=f"({fmt(new)} − {fmt(old)}) / {fmt(old)} × 100 = {pct(change)}",
             source=f"строка {row}, столбцы «{head_before}» и «{head_after}»", chart=chart,
@@ -340,7 +405,7 @@ def _wide_facts(table: Table, metrics: list[_Metric], label_header: str) -> list
         change = (total_new - total_old) / total_old * _HUNDRED
         facts.append(Fact(
             id="", kind="total_change",
-            statement=f"Сумма по всем строкам, {head_before} → {head_after}: {pct(change)} "
+            statement=f"{_changed('Сумма по всем строкам', pct(change))}, {head_before} → {head_after} "
                       f"({_with_unit(total_old, unit)} → {_with_unit(total_new, unit)})",
             numbers=[pct(change), fmt(total_old), fmt(total_new)], periods=[head_before, head_after],
             formula=f"({fmt(total_new)} − {fmt(total_old)}) / {fmt(total_old)} × 100 = {pct(change)}",

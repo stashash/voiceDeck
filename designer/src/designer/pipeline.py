@@ -50,7 +50,7 @@ from designer.images.engine import ComfyEngine, ImageEngineError
 from designer.images.illustrate import SKILL as _ILLUSTRATE_SKILL
 from designer.images.illustrate import illustrate
 from designer.insights.suggest import SKILL as _SUGGEST_SKILL
-from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides, is_insight_slide, numbers_in
+from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides, is_insight_slide
 from designer.llm.client import LlmClient
 from designer.llm.run import RunRecorder
 from designer.llm.skills import load_skill
@@ -469,7 +469,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
                 plan_brief = brief_with_insights(brief, table_name, insights, with_data=False)
                 rest = max(4, (slide_count or _INSIGHTS_DECK_SIZE) - len(insights))
                 plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True)
-                insert_insight_slides(plan, insights)
+                insert_insight_slides(plan, insights, brief)
             else:
                 plan = make_plan(brief, purpose, audience, slide_count, client)
         recorder.use_skill(load_skill(_PLAN_SKILL))
@@ -671,9 +671,10 @@ def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_ev
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
             # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.
             filled.items = list(intent.items)
-        if is_insight_slide(intent) and numbers_in(filled.title) != numbers_in(intent.title):
-            # Заголовок вывода из таблицы сверен с расчётом: подгонка не вправе менять в нём числа.
-            filled.title = intent.title
+        if is_insight_slide(intent):
+            # Текст слайда вывода отмечен автором и сверен с расчётом: подгонка под макет его не переписывает.
+            # Прогон 17.10: числа совпали, а «с I по IV квартал 2026 года» стало «в течение 2026 года».
+            filled.title, filled.key_message, filled.items = intent.title, intent.key_message, list(intent.items)
         return filled
     except Exception:
         _emit(on_event, "slide-fallback", index, variant)

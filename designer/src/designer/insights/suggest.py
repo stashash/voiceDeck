@@ -57,6 +57,8 @@ class Suggestion(BaseModel):
     table: TableSpec | None = None
     data_lines: list[str] = Field(default_factory=list)
     by_model: bool
+    number_at: list[int] | None = None
+    """Начало и конец главного числа в headline; None, если его там нет."""
 
 
 def numbers_in(text: str) -> set[str]:
@@ -89,7 +91,34 @@ def suggest(table: Table, facts: list[Fact], brief: str, audience: str,
     picked += _fallback(facts, picked)
     for index, suggestion in enumerate(picked[:MAX_SUGGESTIONS], start=1):
         suggestion.id = f"s{index}"
+        suggestion.number_at = number_span(suggestion.headline, suggestion.number)
     return picked[:MAX_SUGGESTIONS], note
+
+
+_UNIT = re.compile(r"\s?(?:%|п\.\s?п\.|раза?\b|млн|млрд|тыс\.)(?:\s?(?:₽|руб\.|\$|€))?")
+
+
+def number_span(headline: str, number: str) -> list[int] | None:
+    """Где в выводе стоит главное число: экран выделяет его и вешает на него источник.
+
+    Число в строке подсказки одно (ред-тим 17.10, дизайнер и арт-директор): оно внутри вывода, с базой,
+    а не второй раз отдельной колонкой. Ищется запись числа без знака («47,5 %»), иначе первое число
+    вывода с тем же значением и единицей за ним. Знак перед числом входит в выделение.
+    """
+    bare = number.strip().lstrip("+−-").strip()
+    match = re.search(r"(?<![\d.,])" + re.escape(bare) + r"(?!\d)", headline) if bare else None
+    if match is None:
+        wanted = numbers_in(number)
+        match = next((m for m in _NUM.finditer(headline) if numbers_in(m.group()) & wanted), None)
+        if match is None:
+            return None
+    start, end = match.start(), match.end()
+    unit = _UNIT.match(headline, end)
+    if unit:
+        end = unit.end()
+    if start > 0 and headline[start - 1] in "+−-":
+        start -= 1
+    return [start, end]
 
 
 def _fallback(facts: list[Fact], picked: list[Suggestion]) -> list[Suggestion]:
@@ -118,7 +147,10 @@ def _fallback(facts: list[Fact], picked: list[Suggestion]) -> list[Suggestion]:
 def _reason(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403, 404):
         return "Модель недоступна: сервер модели не принял ключ."
-    if isinstance(exc, (httpx.HTTPError, ModelLoading)):
+    if isinstance(exc, ModelLoading):
+        # Причина временная: отправку не запирать, «Повторить» через минуту поможет (приёмка 17.10).
+        return "Модель ещё загружается."
+    if isinstance(exc, httpx.HTTPError):
         return "Модель недоступна: нет связи с сервером модели."
     return "Модель ответила не по формату."
 
@@ -150,31 +182,47 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
         if not pick.headline.strip() or not pick.number.strip():
             continue
         main = facts[0]
-        headline = _exact_period(pick.headline.strip(), main)
+        headline = _exact_period(_points(pick.headline.strip()), main)
         if not (_names_topic(headline, main) and _names_period(headline, main)
                 and _same_direction(headline + " " + pick.number, main)):
             continue
         seen.add(key)
-        # «Зачем показывать» идёт в заметки докладчика: число в нём проходит ту же сверку, а причину,
-        # которой в таблице нет («драйвер роста», «благодаря»), поле не несёт. Иначе поле пустое.
+        # «Зачем показывать» хранится с подсказкой, но на слайд и в заметки не идёт: число в нём проходит
+        # ту же сверку, а причину, которой в таблице нет («драйвер роста», «благодаря»), поле не несёт.
         why = pick.why.strip() if not numbers_in(pick.why) - allowed and not _CAUSAL.search(pick.why) else ""
         # Справа в строке и крупно на слайде стоит главное число расчёта (изменение со знаком), а не уровень:
         # у вывода «отток снизился на 1,3 п. п.» модель ставила «5,1 %» (ред-тим 17.10).
-        number = pick.number.strip()
+        number = _points(pick.number.strip())
         if main.big_number and not numbers_in(number) & numbers_in(main.big_number):
             number = main.big_number
+        # Главное число стоит в самом выводе: на экране оно одно, а заголовок слайда без него терял цифру
+        # у слайдов с диаграммой и таблицей. Вывод без числа уступает место формулировке кода.
+        if not numbers_in(number) & numbers_in(headline):
+            continue
         result.append(Suggestion(
             id="", headline=headline, number=number, visual=_visual(pick.visual, main),
             why=why, fact_ids=[fact.id for fact in facts], statement=main.statement, topic=main.topic,
-            source="; ".join(f.source for f in facts),
-            formula="; ".join(f.formula for f in facts), chart=main.chart, table=main.table,
+            source="; ".join(dict.fromkeys(f.source for f in facts)),
+            formula="; ".join(dict.fromkeys(f.formula for f in facts)), chart=main.chart, table=main.table,
             data_lines=[line for fact in facts for line in fact.data_lines], by_model=True))
     return result
+
+
+def _points(text: str) -> str:
+    """«п.п.» модели в той же записи, что у кода: «п. п.» (ред-тим 17.10, редактор)."""
+    return re.sub(r"п\.\s?п\.", "п. п.", text)
 
 
 _CAUSAL = re.compile(r"(благодаря|из-за|драйвер|свидетельств|подтвержда|обеспечи|повыша|привел|привёл|результат\w* (работ|усили)|потому что|вследствие)", re.I)
 _STEM = 4
 _UP = re.compile(r"\b(вырос|выросл|рост|увелич|прибав|подня|ускор|больше)", re.I)
+_CLAIM = re.compile(r"\b(вырос|выросл\w*|снизил\w*|сократил\w*|упал\w*|увеличил\w*|уменьшил\w*|демонстриру\w*"
+                    r"|показыва(ет|ют)|расширя(ет|ют)|расширил\w*|превзош\w*|превысил\w*|влия(ет|ют|л)\w*"
+                    r"|подтвержда(ет|ют)|свидетельству\w*|обеспечива(ет|ют)|обеспечил\w*|повыша(ет|ют)|повысил\w*"
+                    r"|благодаря|из-за|драйвер\w*|стал[аио]?\s+(ключев|основн|главн)\w*)\b", re.I)
+"""Утверждение слайда плана о ходе показателя, его роли или причине: глагол в изъявительном наклонении.
+Цели и шаги («Расширить онлайн-канал», «Обеспечить рост выручки») под него не попадают: без данных таблицы
+не проверить только утверждение о том, что уже случилось."""
 _DOWN = re.compile(r"\b(снизи|сниже|сократ|упал|упа|уменьш|паден|спад|меньше|потер)", re.I)
 _YEARLY = re.compile(r"\b(за|в)\s+(19|20)\d{2}\s*(год\w*|г\.)|\bза\s+год\b|\bгодов\w*", re.I)
 
@@ -269,12 +317,10 @@ def is_insight_slide(intent: SlideIntent) -> bool:
 def insight_slide(suggestion: Suggestion) -> SlideIntent:
     """Слайд подсказки: вывод в заголовке, под ним формулировка кода, данные таблицы как есть.
 
-    Толкование модели (why) идёт только в заметки докладчика: причин изменения в таблице нет,
-    и подгонка текста под макет не должна вписать его в заголовок как факт.
+    Толкование модели (why) на слайд и в заметки не идёт: причин изменения в таблице нет, а стоп-слова
+    не ловят «критично для LTV» и «успешную диджитализацию» (приёмка 17.10). В заметках источник и расчёт.
     """
     notes = f"{INSIGHT_NOTES} {suggestion.source}. Расчёт: {suggestion.formula}."
-    if suggestion.why:
-        notes += f" Зачем показывать: {suggestion.why}"
     statement = suggestion.statement or suggestion.headline
     if suggestion.visual == "big_number" or (suggestion.chart is None and suggestion.table is None):
         return SlideIntent(id="", kind=SlideKind.big_number, title=suggestion.headline,
@@ -332,7 +378,7 @@ def _words(text: str) -> set[str]:
     return {w.lower()[:6] for w in _WORD.findall(text)}
 
 
-def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
+def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion], brief: str = "") -> None:
     """Убирает слайды плана, которые повторяют выводы из таблицы.
 
     План просят не повторять готовые выводы, но модель всё равно делает свои слайды с теми же
@@ -341,6 +387,8 @@ def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
     """
     numbers = set().union(*(_insight_numbers(s) for s in suggestions)) if suggestions else set()
     heads = [_words(s.headline) for s in suggestions]
+    topics = set().union(*(_words(s.topic) for s in suggestions if s.topic)) if suggestions else set()
+    brief_numbers = numbers_in(brief)
 
     def repeats(slide: SlideIntent) -> bool:
         if slide.kind in _KEEP_KINDS:
@@ -348,15 +396,25 @@ def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
         if slide.kind in _DATA_KINDS and _slide_numbers(slide) & numbers:
             return True
         words = _words(slide.title)
+        # Слайд плана о показателе вывода: данные без таблицы, ход ряда или причина, которой в таблице нет.
+        # Прогоны колоды 17.10: «Выручка демонстрирует устойчивый рост» крупным числом «Данные из CSV»,
+        # «Онлайн становится ключевым драйвером», «Онлайн-канал превзошёл ожидания по всем трём метрикам».
+        text = " ".join([slide.title, slide.key_message] + [f"{item.heading} {item.body}" for item in slide.items])
+        # Слайд с данными о показателе вывода законен, только если его числа взяты из брифа («Цель 2027: доля 50 %»).
+        unbacked = slide.kind in _DATA_KINDS and not (_slide_numbers(slide) and _slide_numbers(slide) <= brief_numbers)
+        if _words(text) & topics and (unbacked or _CLAIM.search(text)):
+            return True
+        if slide.kind == SlideKind.big_number and not any(re.search(r"\d", item.number or "") for item in slide.items):
+            return True  # крупное число без числа: на слайде выходила «1»
         # Одно общее слово («рост») повтором не считается: у коротких заголовков доля совпадения обманчива.
         return any(len(words & head) >= 2 and len(words & head) / len(words | head) >= 0.5 for head in heads)
 
     plan.slides = [slide for slide in plan.slides if not repeats(slide)]
 
 
-def insert_insight_slides(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
+def insert_insight_slides(plan: DeckPlan, suggestions: list[Suggestion], brief: str = "") -> None:
     """Слайды выводов встают после титула и оглавления, в том порядке, в каком автор их отметил."""
-    drop_repeats(plan, suggestions)
+    drop_repeats(plan, suggestions, brief)
     position = 1 if plan.slides else 0
     if len(plan.slides) > 1 and plan.slides[1].kind == SlideKind.agenda:
         position = 2

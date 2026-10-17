@@ -170,7 +170,19 @@ export type InsightVisual = 'column' | 'bar' | 'line' | 'pie' | 'table' | 'big_n
 export type InsightView = {
   id: string; headline: string; number: string; visual: InsightVisual; why: string;
   source: string; formula: string; by_model: boolean;
+  /** Кандидаты кода: по ним экран узнаёт подсказку после пересчёта под новый бриф. */
+  fact_ids: string[];
+  /** Начало и конец главного числа в headline: число в строке одно, внутри вывода. */
+  number_at: [number, number] | null;
 };
+/** Разбор файла без модели: строки и столбцы на плашке и ошибка файла приходят сразу. */
+export type TablePreview = { table_name: string; sheet: string; rows: number; columns: number };
+
+export function tablePreview(file: File, signal?: AbortSignal): Promise<TablePreview> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(url('/insights/table'), { method: 'POST', body: form, signal }).then(r => uploadResponse<TablePreview>(r));
+}
 export type InsightsResponse = {
   id: string; table_name: string; sheet: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
 };

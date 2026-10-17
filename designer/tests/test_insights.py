@@ -13,7 +13,7 @@ from designer import store
 from designer.api.app import app, get_llm_client
 from designer.contracts import DeckPlan, SlideIntent, SlideKind
 from designer.insights.facts import find_facts
-from designer.insights.suggest import insert_insight_slides, numbers_in, suggest
+from designer.insights.suggest import insert_insight_slides, number_span, numbers_in, suggest
 from designer.insights.table import TableError, parse_number, read_table
 from designer.llm.client import LlmClient
 
@@ -225,8 +225,8 @@ def test_insight_slide_keeps_model_reading_out_of_slide_text():
     table = read_table(QUARTERS, "q.csv")
     facts = find_facts(table)
     share = next(f for f in facts if f.kind == "change_last" and f.statement.startswith("Доля"))
-    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна в IV квартале выросла до 40,1 %", "number": "40,1 %",
-                               "visual": "big_number", "why": "свидетельствует о росте лояльности"}]}
+    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна выросла на 3,9 п. п. в IV квартале к III",
+                               "number": "+3,9 п. п.", "visual": "big_number", "why": "свидетельствует о росте лояльности"}]}
     suggestions, _ = suggest(table, facts, "", "", _llm(answer))
     plan = DeckPlan(title="t", purpose="p", slides=[SlideIntent(id="", kind=SlideKind.title, title="t")])
     insert_insight_slides(plan, suggestions[:1])
@@ -259,3 +259,208 @@ def test_api_insights_then_deck_request_finds_them(tmp_path, monkeypatch):
             assert missing.status_code == 404
     finally:
         app.dependency_overrides.clear()
+
+
+def test_headline_without_main_number_gives_way_to_code():
+    """Ред-тим 17.10: число в строке одно, внутри вывода. Вывод модели без главного числа не показывается."""
+    table = read_table(QUARTERS, "q.csv")
+    facts = find_facts(table)
+    share = next(f for f in facts if f.kind == "change_last" and f.statement.startswith("Доля"))
+    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна в IV квартале выросла до 40,1 %",
+                               "number": "40,1 %", "visual": "big_number", "why": ""}]}
+    suggestions, _ = suggest(table, facts, "", "", _llm(answer))
+    assert not any(s.by_model for s in suggestions)
+    for s in suggestions:
+        start, end = s.number_at
+        assert numbers_in(s.headline[start:end]) & numbers_in(s.number)
+
+
+@pytest.mark.parametrize("headline,number,marked", [
+    ("Выручка выросла на 47,5 % с I по IV квартал 2026 года", "+47,5 %", "47,5 %"),
+    ("Отток: снижение на 1,3 п. п., III кв 2026 → IV кв 2026", "−1,3 п. п.", "1,3 п. п."),
+    ("Выручка: рост в 3 из 3 сравнений с прошлым периодом", "3 из 3", "3 из 3"),
+    ("Выручка: больше всего у «Центр» (95 млн ₽)", "95", "95 млн ₽"),
+    ("Отток −1,3 п. п. за квартал", "1,3", "−1,3 п. п."),
+], ids=["percent", "points", "count", "unit-after", "sign-before"])
+def test_number_span_marks_the_number_in_the_headline(headline, number, marked):
+    start, end = number_span(headline, number)
+    assert headline[start:end] == marked
+
+
+def test_model_points_and_repeated_source_are_tidied():
+    table = read_table(QUARTERS, "q.csv")
+    facts = find_facts(table)
+    last = next(f for f in facts if f.kind == "change_last" and f.statement.startswith("Доля"))
+    total = next(f for f in facts if f.kind == "change_total" and f.statement.startswith("Доля"))
+    answer = {"suggestions": [{"fact_ids": [last.id, total.id], "headline": "Доля онлайна выросла на 3,9 п.п. в IV квартале",
+                               "number": "+3,9 п.п.", "visual": "column", "why": ""}]}
+    first = suggest(table, facts, "", "", _llm(answer))[0][0]
+    assert first.by_model and "п. п." in first.headline and first.number == "+3,9 п. п."
+    assert first.source.count("столбец") == 1  # оба кандидата из одного столбца: источник один раз
+
+
+def test_unrecognized_period_order_gives_no_direction():
+    """Ред-тим 17.10: «Весна 2026» не сортируется, рост по порядку строк файла был бы догадкой."""
+    seasons = "Сезон;Выручка\nОсень 2026;150\nВесна 2026;120\nЛето 2026;135\n".encode()
+    kinds = {f.kind for f in find_facts(read_table(seasons, "s.csv"))}
+    assert not kinds & {"change_last", "change_total", "growth_count"}
+    assert "leader_gap" in kinds
+
+
+def test_long_series_uses_the_same_12_periods_everywhere():
+    months = ("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь",
+              "Ноябрь", "Декабрь")
+    rows = [f"{m} {year};{100 + i}" for i, (year, m) in enumerate((y, m) for y in (2025, 2026) for m in months)]
+    facts = find_facts(read_table(("Месяц;Выручка\n" + "\n".join(rows) + "\n").encode(), "m.csv"))
+    total = next(f for f in facts if f.kind == "change_total")
+    assert total.periods == ["Январь 2026", "Декабрь 2026"]
+    assert next(f for f in facts if f.kind == "growth_count").numbers == ["11", "11"]
+
+
+def test_xlsx_blank_rows_do_not_eat_the_row_limit():
+    from openpyxl import Workbook
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["Регион", "Выручка"])
+    for i in range(1500):
+        sheet.append([f"Регион {i}", i + 1])
+        sheet.append([None, None])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    assert len(read_table(buffer.getvalue(), "big.xlsx").rows) == 1500
+
+
+def test_api_table_preview_comes_before_the_model(tmp_path, monkeypatch):
+    monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
+    with TestClient(app) as client:
+        ok = client.post("/insights/table", files={"file": ("r.csv", REGIONS, "text/csv")})
+        assert ok.status_code == 200 and ok.json() == {"table_name": "r.csv", "sheet": "", "rows": 6, "columns": 3}
+        bad = client.post("/insights/table", files={"file": ("x.csv", b"a,b\n1,2\n", "text/csv")})
+        assert bad.status_code == 422 and "две строки" in bad.json()["detail"]
+
+
+def test_code_statements_have_verbs_agreed_with_the_metric():
+    """Ред-тим 17.10: запасные выводы без глагола («Выручка: рост на 18 %») читались справкой."""
+    statements = [f.statement.replace(" ", " ") for f in find_facts(read_table(QUARTERS, "q.csv")) if f.kind == "change_last"]
+    for start in ("Выручка выросла на 18 %", "Клиенты выросли на 22,5 %", "Доля онлайн выросла на 3,9 п. п."):
+        assert any(s.startswith(start) for s in statements), start
+    profit = "Квартал;Прибыль\nI кв 2026;10\nII кв 2026;8\n".encode()
+    assert find_facts(read_table(profit, "p.csv"))[0].statement.replace(" ", " ").startswith("Прибыль: снижение на 20 %")
+
+
+def test_wide_table_with_newest_column_first_keeps_time_order():
+    """Приёмка 17.10: столбцы «2026; 2025» давали «рост» там, где спад."""
+    newest_first = "Регион;2026;2025\nСевер;112;80\nЦентр;90;95\nЮг;50;60\nУрал;30;40\n".encode()
+    facts = {f.kind: f for f in find_facts(read_table(newest_first, "w.csv"))}
+    assert facts["rows_grew"].numbers == ["1", "4"]
+    assert facts["rows_grew"].periods == ["2025", "2026"]
+    assert facts["fastest_row"].numbers[0].replace(" ", " ") == "+40 %"
+
+
+def test_model_loading_does_not_lock_the_deck():
+    from designer.llm.client import ModelLoading
+    from designer.insights.suggest import _reason
+    assert not _reason(ModelLoading("грузится")).startswith("Модель недоступна")
+
+
+def test_xlsx_stops_after_a_long_run_of_empty_rows():
+    from openpyxl import Workbook
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["Регион", "Выручка"])
+    sheet.append(["Север", 1])
+    sheet.append(["Юг", 2])
+    sheet.cell(row=5000, column=1, value="подпись внизу листа")
+    buffer = io.BytesIO()
+    book.save(buffer)
+    assert len(read_table(buffer.getvalue(), "tail.xlsx").rows) == 2
+
+
+def test_insight_notes_carry_source_without_model_reading():
+    table = read_table(QUARTERS, "q.csv")
+    facts = find_facts(table)
+    revenue = next(f for f in facts if f.kind == "change_last" and f.topic.startswith("Выручка"))
+    answer = {"suggestions": [{"fact_ids": [revenue.id], "headline": "Выручка выросла на 18 % в IV квартале к III",
+                               "number": "+18 %", "visual": "column", "why": "показать масштаб бизнеса совету"}]}
+    suggestions, _ = suggest(table, facts, "", "", _llm(answer))
+    plan = DeckPlan(title="t", purpose="p", slides=[SlideIntent(id="", kind=SlideKind.title, title="t")])
+    insert_insight_slides(plan, suggestions[:1])
+    assert plan.slides[1].notes.startswith("Источник:") and "масштаб" not in plan.slides[1].notes
+
+
+def test_plan_slides_about_insight_metrics_are_dropped():
+    """Прогон колоды 17.10: план повторил темы выводов своими толкованиями и крупным числом без данных."""
+    from designer.contracts import Item
+    table = read_table(QUARTERS, "q.csv")
+    suggestions, _ = suggest(table, find_facts(table), "", "", None)
+    plan = DeckPlan(title="t", purpose="p", slides=[
+        SlideIntent(id="", kind=SlideKind.title, title="Итоги 2026 года"),
+        SlideIntent(id="", kind=SlideKind.bullets, title="Цель: решить, куда вкладывать в онлайн"),
+        SlideIntent(id="", kind=SlideKind.section, title="Рост выручки подтверждает эффективность"),
+        SlideIntent(id="", kind=SlideKind.big_number, title="Выручка демонстрирует устойчивый рост",
+                    items=[Item(heading="Динамика продаж", number="Данные из CSV")]),
+        SlideIntent(id="", kind=SlideKind.section, title="Клиенты расширяют базу"),
+        SlideIntent(id="", kind=SlideKind.bullets, title="Три показателя задают вектор",
+                    items=[Item(heading="Рост выручки подтверждает устойчивость модели")]),
+        SlideIntent(id="", kind=SlideKind.section, title="Как ускорим рост онлайн-продаж в 2027 году"),
+        SlideIntent(id="", kind=SlideKind.cta, title="Решение: масштабировать онлайн-канал")])
+    insert_insight_slides(plan, suggestions)
+    titles = [s.title for s in plan.slides]
+    for dropped in ("Рост выручки подтверждает эффективность", "Выручка демонстрирует устойчивый рост",
+                    "Клиенты расширяют базу", "Три показателя задают вектор"):
+        assert dropped not in titles, dropped
+    for kept in ("Цель: решить, куда вкладывать в онлайн", "Как ускорим рост онлайн-продаж в 2027 году",
+                 "Решение: масштабировать онлайн-канал"):
+        assert kept in titles, kept
+
+
+def test_goal_and_step_slides_about_insight_metrics_stay():
+    """Приёмка 17.10: фильтр убирал цели и шаги («Расширить онлайн-канал», цель из брифа крупным числом)."""
+    from designer.contracts import Item
+    table = read_table(QUARTERS, "q.csv")
+    suggestions, _ = suggest(table, find_facts(table), "", "", None)
+    kept = ["Расширить онлайн-канал в 2027 году", "Обеспечить рост выручки во II полугодии",
+            "Ожидания совета по выручке на 2027 год", "Цель на 2027 год: довести долю онлайн до 50 %"]
+    plan = DeckPlan(title="t", purpose="p", slides=[
+        SlideIntent(id="", kind=SlideKind.title, title="Итоги 2026 года"),
+        SlideIntent(id="", kind=SlideKind.section, title=kept[0]),
+        SlideIntent(id="", kind=SlideKind.section, title=kept[1]),
+        SlideIntent(id="", kind=SlideKind.section, title=kept[2]),
+        SlideIntent(id="", kind=SlideKind.big_number, title=kept[3], items=[Item(heading="цель", number="50 %")]),
+        SlideIntent(id="", kind=SlideKind.section, title="Уровень клиентов влияет на устойчивость дохода")])
+    insert_insight_slides(plan, suggestions, brief="Итоги года. Цель на 2027: доля онлайна 50 %")
+    titles = [s.title for s in plan.slides]
+    for title in kept:
+        assert title in titles, title
+    assert "Уровень клиентов влияет на устойчивость дохода" not in titles
+
+
+def test_years_inside_labels_are_periods():
+    """Приёмка 17.10: «2025 год», «2024 г.» не узнавались как периоды, выводы о ходе пропадали."""
+    wide = "Регион;2025 год;2026 год\nСевер;80;112\nЮг;60;50\n".encode()
+    assert {f.kind for f in find_facts(read_table(wide, "w.csv"))} >= {"rows_grew", "total_change"}
+    rows = "Год;Выручка\n2026 г.;177\n2024 г.;120\n2025 г.;150\n".encode()
+    change = next(f for f in find_facts(read_table(rows, "y.csv")) if f.kind == "change_last")
+    assert change.periods == ["2025 г.", "2026 г."]
+
+
+def test_stop_in_browser_closes_the_model_call():
+    """Ред-тим 17.10: после «Остановить» сервер дописывал ответ модели и держал её слот до таймаута."""
+    import asyncio
+    from designer.api.app import _wait_unless_gone
+
+    class Gone:
+        async def is_disconnected(self):
+            return True
+
+    class Client:
+        closed = False
+
+        def close(self):
+            Client.closed = True
+
+    async def run():
+        task = asyncio.get_running_loop().create_future()
+        return await _wait_unless_gone(task, Gone(), Client(), poll_s=0.01)
+
+    assert asyncio.run(run()) is False and Client.closed
