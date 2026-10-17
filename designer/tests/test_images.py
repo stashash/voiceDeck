@@ -59,6 +59,23 @@ def test_slide_with_image_gets_photo_pattern(ds):
     assert not plain.needs_images  # без картинки образцы с фото по-прежнему не берутся
 
 
+def test_chart_sample_picture_is_not_a_photo(ds):
+    """Прогон 17.10: список встал на образец диаграммы p048, у которого «фото» это картинка графика."""
+    by_id = {p.id: p for p in ds.patterns}
+    assert hero_area(by_id["p048"]) is None
+
+
+def test_long_lists_get_no_image(ds):
+    """Список из трёх пунктов рядом с фото рассыпается по маркерам образца: такой слайд картинку не получает."""
+    items = [Item(heading=f"Пункт {i}", body="пояснение") for i in range(3)]
+    plan = DeckPlan(title="t", purpose="p", slides=[
+        SlideIntent(id="s1", kind=SlideKind.title, title="Итоги"),
+        SlideIntent(id="s2", kind=SlideKind.bullets, title="Три пункта", items=items),
+        SlideIntent(id="s3", kind=SlideKind.section, title="Что делаем дальше"),
+        SlideIntent(id="s4", kind=SlideKind.thanks, title="Спасибо")])
+    assert [slide.id for slide, _ in candidates(plan, ds)] == ["s3"]
+
+
 def test_plan_schema_has_no_image_field():
     assert "image" not in plan_schema()["$defs"]["SlideIntent"]["properties"]
 
