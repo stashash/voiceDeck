@@ -1,0 +1,103 @@
+{
+  "pairs_total": 95,
+  "pairs_boundary": 42,
+  "pairs_same_topic": 53,
+  "true_word_boundaries": [
+    148,
+    287,
+    415,
+    550,
+    684,
+    812,
+    955
+  ],
+  "near_words_tolerance": 30,
+  "distributions": {
+    "boundary": {
+      "cosine": {
+        "n": 42,
+        "min": 0.3196,
+        "p25": 0.4059,
+        "median": 0.4826,
+        "p75": 0.5748,
+        "max": 0.7004,
+        "mean": 0.4841
+      },
+      "depth": {
+        "n": 42,
+        "min": -0.2201,
+        "p25": -0.0627,
+        "median": 0.0325,
+        "p75": 0.1029,
+        "max": 0.1824,
+        "mean": 0.0207
+      },
+      "ema_baseline": {
+        "n": 42,
+        "min": 0.4678,
+        "p25": 0.4914,
+        "median": 0.5023,
+        "p75": 0.5154,
+        "max": 0.5413,
+        "mean": 0.5027
+      },
+      "ema_dispersion": {
+        "n": 42,
+        "min": 0.058,
+        "p25": 0.0669,
+        "median": 0.0754,
+        "p75": 0.0795,
+        "max": 0.0915,
+        "mean": 0.0739
+      }
+    },
+    "same_topic": {
+      "cosine": {
+        "n": 53,
+        "min": 0.3866,
+        "p25": 0.4588,
+        "median": 0.5373,
+        "p75": 0.5731,
+        "max": 0.6528,
+        "mean": 0.5203
+      },
+      "depth": {
+        "n": 53,
+        "min": -0.1773,
+        "p25": -0.0751,
+        "median": -0.035,
+        "p75": 0.0322,
+        "max": 0.1283,
+        "mean": -0.0214
+      },
+      "ema_baseline": {
+        "n": 53,
+        "min": 0.4565,
+        "p25": 0.4929,
+        "median": 0.5034,
+        "p75": 0.5091,
+        "max": 0.5285,
+        "mean": 0.5011
+      },
+      "ema_dispersion": {
+        "n": 53,
+        "min": 0.05,
+        "p25": 0.0681,
+        "median": 0.0726,
+        "p75": 0.0783,
+        "max": 0.0876,
+        "mean": 0.0727
+      }
+    }
+  },
+  "decisions": {
+    "none": 86,
+    "candidate": 9
+  },
+  "proposal": {
+    "separable": false,
+    "reason": "boundary p25=-0.0627 not less than same_topic p25=-0.0751",
+    "current_default_depth_floor": "see models/config.json",
+    "recommended": "no change"
+  }
+}

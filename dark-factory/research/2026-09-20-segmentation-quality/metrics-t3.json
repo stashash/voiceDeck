@@ -1,0 +1,73 @@
+{
+  "eventCounts": {
+    "total": 182,
+    "chunk": 29,
+    "chunk_revise": 17,
+    "slide": 38,
+    "final": 97,
+    "partial": 0,
+    "warning": 0
+  },
+  "reason_distribution": {
+    "deadline": {
+      "n": 20,
+      "pct": 69
+    },
+    "marker": {
+      "n": 8,
+      "pct": 27.6
+    },
+    "flush": {
+      "n": 1,
+      "pct": 3.4
+    }
+  },
+  "revise_ops": {
+    "merge/drift": 12,
+    "confirm/confirmer": 4,
+    "offline/offline": 1
+  },
+  "final_chunks": 17,
+  "status_distribution": {
+    "confirmed": 17
+  },
+  "source_distribution": {
+    "offline": 17
+  },
+  "chunk_words": {
+    "min": 2,
+    "median": 62,
+    "max": 161
+  },
+  "latency_ms": {
+    "p50": 0,
+    "p95": 0,
+    "n": 29
+  },
+  "slides": {
+    "total": 38,
+    "titled": 38,
+    "quota_skipped": 0
+  },
+  "boundary_live": {
+    "tolerance_sentences": 2,
+    "true_boundaries_internal": 7,
+    "chunk_boundaries": 16,
+    "matched_true": 7,
+    "matched_chunk": 12,
+    "recall": 1,
+    "precision": 0.75,
+    "f1": 0.857,
+    "live_cutoff_seq": 176
+  },
+  "boundary_offline": {
+    "tolerance_sentences": 2,
+    "true_boundaries_internal": 7,
+    "chunk_boundaries": 16,
+    "matched_true": 7,
+    "matched_chunk": 12,
+    "recall": 1,
+    "precision": 0.75,
+    "f1": 0.857
+  }
+}

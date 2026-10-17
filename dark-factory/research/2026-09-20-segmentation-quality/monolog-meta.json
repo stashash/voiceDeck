@@ -1,0 +1,71 @@
+{
+  "total_words": 1098,
+  "duration_s": 401.232,
+  "boundary_samples_after_block": [
+    902400,
+    1693056,
+    2447616,
+    3235200,
+    4004736,
+    4751616,
+    5590656
+  ],
+  "blocks": [
+    {
+      "block": 1,
+      "slug": "technologies",
+      "words": 148,
+      "samples": 902400,
+      "start_sample": 0
+    },
+    {
+      "block": 2,
+      "slug": "cooking",
+      "words": 139,
+      "samples": 790656,
+      "start_sample": 902400
+    },
+    {
+      "block": 3,
+      "slug": "sport",
+      "words": 128,
+      "samples": 754560,
+      "start_sample": 1693056
+    },
+    {
+      "block": 4,
+      "slug": "finance",
+      "words": 135,
+      "samples": 787584,
+      "start_sample": 2447616
+    },
+    {
+      "block": 5,
+      "slug": "space",
+      "words": 134,
+      "samples": 769536,
+      "start_sample": 3235200
+    },
+    {
+      "block": 6,
+      "slug": "medicine",
+      "words": 128,
+      "samples": 746880,
+      "start_sample": 4004736
+    },
+    {
+      "block": 7,
+      "slug": "travel",
+      "words": 143,
+      "samples": 839040,
+      "start_sample": 4751616
+    },
+    {
+      "block": 8,
+      "slug": "music",
+      "words": 143,
+      "samples": 829056,
+      "start_sample": 5590656
+    }
+  ]
+}

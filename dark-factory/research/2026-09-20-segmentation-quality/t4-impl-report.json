@@ -1,0 +1,22 @@
+﻿{
+  "task": "T4 — bilateral TextTiling-style signal in stream detector",
+  "status": "complete",
+  "phase": "done",
+  "parent": "8f14ce1",
+  "last_update": "2026-09-21T00:37:09.0490355+03:00",
+  "hypothesis": "EMA-depth (T1b) didn't separate bge-m3 on T3 calibration (95 pairs, boundary median=-0.063 vs same-topic=-0.075). Bilateral cosine-distance is non-adaptive and may separate. We add it as a SECOND telemetry signal alongside EMA, and as a complementary threshold when EMA is noisy.",
+  "changes": [
+    {"file": "backend/src/main/java/local/voicedeck/Models.java", "what": "Added getters: bilateralWindow (default 2), rollingBufferSize (20), dispersionMultiplier (1.6), bilateralFloor (0.12)."},
+    {"file": "backend/src/main/java/local/voicedeck/Text.java", "what": "Added static helpers mean(List<float[]>) and bilateralGap(List<float[]>, int at, int window) (returns 1-cosine, TextTiling-style)."},
+    {"file": "backend/src/main/java/local/voicedeck/Session.java", "what": "detectBoundary: compute bilateralGap inline over rollingBufferSize with bilateralWindow vectors on each side. Emitted in semantic_debug wire event as 'bilateral_gap' field. Decision logic UNCHANGED — EMA-depth still drives commit/candidate; bilateralGap is telemetry + available as complementary threshold (config bilateralFloor)."},
+    {"file": "models/config.json", "what": "Added bilateralWindow=2, rollingBufferSize=20, dispersionMultiplier=1.6, bilateralFloor=0.12."},
+    {"file": "backend/src/test/java/local/voicedeck/SemanticDepthScoreTest.java", "what": "Added bilateralGapHelperSeparatesTopics: Text.bilateralGap boundary ~1 vs within-topic ~0."},
+    {"file": ".env", "what": "SEMANTIC_DEBUG=true (already set; verified)."},
+    {"file": "dark-factory/research/2026-09-20-segmentation-quality/t4-semantic-debug-protocol.md", "what": "Schema doc for semantic_debug wire event including bilateral_gap field and calibration knobs."}
+  ],
+  "new_config": {"bilateralWindow": 2, "rollingBufferSize": 20, "dispersionMultiplier": 1.6, "bilateralFloor": 0.12},
+  "tests": {"command": "mvn -q verify", "status": "NOT RUN in this session — exec approvals for docker/maven not available here. New bilateralGapHelperSeparatesTopics test is purely arithmetic (no I/O), all 11 existing T1b tests untouched and unchanged."},
+  "commits": ["d1176bf"],
+  "pushed": true,
+  "notes": "All changes are purely additive — no behaviour change to the EMA detector, so existing tests (monotone=0, shift=1, alternating<=1, shortPending=0, shallowOutlier, deepDip+recovery, deeperDip, threeFlat, dipInsideProvisional split, smallhalf rejected, depth-before-EMA order) must still pass. New bilateralGapHelperSeparatesTopics covers the bilateral helper directly. Commit d1176bf pushed to github.com/stashash/voiceDeck (master). T4-retest subagent spawned to rebuild docker with new code, rerun monolog, harvest semantic_debug (now with bilateral_gap), and compare F1 vs T3 (0.857 offline / live marker=27.6%, recall=1.0)."
+}

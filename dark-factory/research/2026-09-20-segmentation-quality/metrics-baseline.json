@@ -1,0 +1,64 @@
+{
+  "eventCounts": {
+    "total": 357,
+    "chunk": 69,
+    "chunk_revise": 68,
+    "slide": 122,
+    "final": 97,
+    "partial": 0,
+    "warning": 0
+  },
+  "reason_distribution": {
+    "deadline": {
+      "n": 69,
+      "pct": 100
+    }
+  },
+  "revise_ops": {
+    "confirm/confirmer": 47,
+    "merge/drift": 20,
+    "offline/offline": 1
+  },
+  "final_chunks": 13,
+  "status_distribution": {
+    "confirmed": 13
+  },
+  "source_distribution": {
+    "offline": 13
+  },
+  "chunk_words": {
+    "min": 19,
+    "median": 69,
+    "max": 238
+  },
+  "latency_ms": {
+    "p50": 1663,
+    "p95": 2086,
+    "n": 69
+  },
+  "slides": {
+    "total": 122,
+    "titled": 122,
+    "quota_skipped": 0
+  },
+  "boundary": {
+    "tolerance_sentences": 2,
+    "true_boundaries_internal": 7,
+    "true_boundaries_found_in_text": 7,
+    "chunk_boundaries": 12,
+    "matched_true": 5,
+    "matched_chunk": 8,
+    "recall": 0.714,
+    "precision": 0.667,
+    "f1": 0.69,
+    "true_word_boundaries": [
+      148,
+      287,
+      415,
+      550,
+      684,
+      812,
+      955
+    ]
+  }
+}

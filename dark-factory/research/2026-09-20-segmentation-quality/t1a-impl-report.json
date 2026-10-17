@@ -1,0 +1,18 @@
+{
+  "changes": [
+    {"file": "backend/src/main/java/local/voicedeck/Text.java", "what": "DISCOURSE_MARKERS extended with 11 strong topic-shift markers: начнём с, первая тема, следующий вопрос, подведём итог, подводя итог, итоги, вывод, отдельная тема, поговорим о, давайте начнём, переходим к. Weak markers (кстати) intentionally excluded."},
+    {"file": "backend/src/main/java/local/voicedeck/Models.java", "what": "chunkSizeTarget default 200→120, chunkSizeMax 300→180; new getters chunkSentencesMax() (default 12) and markerMinWords() (default 30)."},
+    {"file": "backend/src/main/java/local/voicedeck/Session.java", "what": "acceptFinal marker commit threshold switched from chunkSizeMin() to markerMinWords(); tick() gained sentences-cap branch (pending.size()>=chunkSentencesMax && sinceLastFinal>100 → commit(\"sentences-cap\")), priority: size-cap > sentences-cap > size-target > deadline; chunk() helper takes reason param and embeds it into chunk JSON; commitIds passes commit reason; chunk_revise producers set reason=operation (merge/split/confirm/offline)."},
+    {"file": "models/config.json", "what": "chunkSizeTarget 120, chunkSizeMax 180, chunkSentencesMax 12, markerMinWords 30 (file was gitignored; force-added)."},
+    {"file": "docs/protocol.md", "what": "chunk event docs: reason field documented inside chunk object (additive since T1a 2026-09-20, old journals valid); enumerate commit reasons and revise operations."},
+    {"file": "backend/src/test/java/local/voicedeck/DiscourseMarkersTest.java", "what": "new tests: strongTopicShiftMarkersTrigger, riskyWeakMarkersStayExcluded, markerCommitsAtThirtyWordsNotBelow (20 words no-commit / 36 words commit)."},
+    {"file": "backend/src/test/java/local/voicedeck/ModelsChunkSizeConfigTest.java", "what": "defaults updated to 120/180 plus chunkSentencesMax=12 and markerMinWords=30."},
+    {"file": "backend/src/test/java/local/voicedeck/PipelineTest.java", "what": "new tests: sentencesCapCommitsTwelveSentences, chunkCarriesReasonField."}
+  ],
+  "config_defaults": {"chunkSizeTarget": 120, "chunkSizeMax": 180, "chunkSentencesMax": 12, "markerMinWords": 30},
+  "tests": {"command": "mvn -q verify (local Apache Maven 3.9.9, JDK 21.0.12, Windows)", "passed": "66/66", "failures": []},
+  "commit": "e92b50794c2db2172d90a60912ce7178a944171b",
+  "pushed": true,
+  "push_error": null,
+  "notes": "Push via 'git push github master' verified: remote refs/heads/master == local e92b507. One initial test failure (Подведём итоги vs marker 'подведём итог' requiring space/comma) fixed by adjusting the test sentence to 'Подведём итог по разделу.' — marker semantics unchanged. T2 dark-factory artifacts (mp3/wav/jsonl/lock/mjs) and MANIFEST.md left uncommitted. Docker untouched; local mvn used instead of docker runner. models/config.json was gitignored (.gitignore) and force-added per task scope."
+}

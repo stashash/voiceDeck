@@ -1,0 +1,46 @@
+{
+  "task": "T2 baseline segmentation quality, dark-factory/voiceDeck",
+  "repo_head": "15c6751",
+  "stack": {
+    "image_built_at": "2026-09-20T20:57:10+03:00",
+    "lock_marker": "dark-factory/research/2026-09-20-segmentation-quality/t2-image-built.lock",
+    "health": {
+      "status": "ready",
+      "mode": "live",
+      "asr": "sherpa-onnx",
+      "embeddings": "ollama:bge-m3-embed",
+      "storage": "postgres"
+    },
+    "embedding_status": "ollama:bge-m3-embed"
+  },
+  "smoke_example_wav": "PASS partials=21 finals=3 chunks=2 sketches=2 elapsedMs=12429",
+  "audio": {
+    "source": "edge-tts (network TTS, ru-RU-SvetlanaNeural, rate=+30%); SAPI has no ru-RU voice on this machine, test_wavs contains only example.wav",
+    "path": "dark-factory/research/2026-09-20-segmentation-quality/monolog.wav",
+    "duration_s": 401.2,
+    "topics": 8,
+    "topic_boundaries_words": [148, 287, 415, 550, 684, 812, 955, 1098],
+    "marker_phrase": "Итак, переходим к следующей теме.",
+    "format": "16kHz mono PCM16"
+  },
+  "run": {
+    "session_id": "88008f52-bfa1-4043-af61-c22d0852ccac",
+    "packets": 12570,
+    "stream_s": 402.2,
+    "offline_revise": "seen (chunk_revise operation=offline, source=offline, 13 chunks)",
+    "events_dumped": 357,
+    "artifacts": ["events-baseline.jsonl", "monolog.txt", "monolog.wav", "monolog-meta.json", "metrics-baseline.json"]
+  },
+  "metrics": {
+    "reason_distribution": { "deadline": { "n": 69, "pct": 100.0 } },
+    "revise_ops": { "confirm/confirmer": 47, "merge/drift": 20, "offline/offline": 1 },
+    "final_chunks": 13,
+    "status_distribution": { "confirmed": 13 },
+    "source_distribution": { "offline": 13 },
+    "chunk_words": { "min": 19, "median": 69, "max": 238 },
+    "latency_ms": { "p50": 1663, "p95": 2086, "n": 69 },
+    "slides": { "total": 122, "titled": 122, "quota_skipped": 0 },
+    "boundary_f1": { "recall": 0.714, "precision": 0.667, "f1": 0.69, "matched_true": "5/7", "tolerance_sentences": 2 }
+  },
+  "notes": "Baseline on 401s real-tempo 8-topic Russian monolog (TTS). All 69 live chunk commits fired with reason=deadline: neither discourse markers ('Итак, переходим к следующей теме.' x7, all recognized in transcript) nor drift/size triggers ever produced a commit — topic-shift signal did not reach the committer. One 'Эмбеддинг недоступен' warning mid-run (ollama recovered). After stop, offline resegmentation replaced everything atomically: 13 confirmed chunks (median 69 words), boundary F1=0.69 (recall 5/7, precision 8/12 matched within ±2 sentences). Commit latency p50=1663ms p95=2086ms. Slides: 122 emitted, all titled, 0 quota-skipped (slide rev emitted per chunk revision)."
+}

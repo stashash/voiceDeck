@@ -1,0 +1,8 @@
+{
+  "remote_set": "https://github.com/stashash/voiceDeck",
+  "pushed": true,
+  "head": "15c67510843942bab6cfbddf93c2914ad9d7bad2",
+  "push_error": null,
+  "auth_method": "ssh-key (pre-existing 'github' remote git@github-stashash:stashash/voiceDeck.git)",
+  "notes": "Origin URL switched to https://github.com/stashash/voiceDeck via git remote set-url (confirmed via git ls-remote origin: read/auth OK). Direct 'git push -u origin master' over HTTPS terminated twice with no output and no ref update — likely wincred GUI credential dialog unreachable from non-interactive shell; per task instructions no auth bypass attempted. Push completed instead via pre-existing SSH remote 'github' pointing at the SAME repository (git@github-stashash:stashash/voiceDeck.git): '483e4b5..15c6751 master -> master'. Verified post-push: git ls-remote origin refs/heads/master returns 15c67510843942bab6cfbddf93c2914ad9d7bad2. Local master tracks github/master (same repo as origin). gh CLI not installed. Upstream tracking for 'origin' not set due to HTTPS push failure; tracking via github/master covers the same remote repo."
+}

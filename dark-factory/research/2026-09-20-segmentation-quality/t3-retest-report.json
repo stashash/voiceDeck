@@ -1,0 +1,198 @@
+{
+  "task": "T3 retest on minimax/MiniMax-M3 (restart of kimi-for-coding T3 attempt)",
+  "started_at": "2026-09-20T23:51:07+03:00",
+  "completed_at": "2026-09-21T00:08:00+03:00",
+  "git_head": "8f14ce1",
+  "model": "minimax/MiniMax-M3",
+  "status": "complete",
+  "phase0": {
+    "done": true,
+    "actions": [
+      "read t2-baseline-report.json, MANIFEST.md, monolog-meta.json, baseline-runner.mjs",
+      "checked git HEAD = 8f14ce1 (T1a + T1b merged)",
+      "docker compose ps: app Up 3h (image pre-T1b), db healthy",
+      ".env: added SEMANTIC_DEBUG=true (later found compose.yaml did not reference ${SEMANTIC_DEBUG}, fixed in phase1b)"
+    ]
+  },
+  "phase1": {
+    "done": true,
+    "image_rebuilt_at": "2026-09-20T23:53:00+03:00",
+    "mvn_verify_seconds": 17.6,
+    "docker_compose_down": "ok",
+    "docker_compose_up_build": "ok",
+    "health": {
+      "status": "ready",
+      "mode": "live",
+      "asr": "sherpa-onnx",
+      "embeddings": "ollama:bge-m3-embed",
+      "storage": "postgres",
+      "audio_stored": false
+    },
+    "semantic_debug_env_wired": false,
+    "issue": "compose.yaml environment section missing SEMANTIC_DEBUG entry; .env edit did not propagate to container",
+    "fix_applied_in_phase1b": "added `SEMANTIC_DEBUG: ${SEMANTIC_DEBUG:-false}` to compose.yaml app service environment",
+    "phase1b": {
+      "compose_yaml_patched": true,
+      "stack_rebuilt": true,
+      "mvn_cached": true,
+      "env_verified": "SEMANTIC_DEBUG=true inside voicedeck-app-1",
+      "health_poll_tries": 1
+    }
+  },
+  "phase2": {
+    "done": true,
+    "runner": "t3-runner.mjs",
+    "adaptations": [
+      "(a) events dumped to disk BEFORE session DELETE (DELETE returned 404 — endpoint does not exist or session already gone, but no data lost because dump preceded it)",
+      "(b) wire type===semantic_debug routed to semantic-debug-t3.jsonl separately",
+      "(c) main events to events-t3.jsonl"
+    ],
+    "attempts": [
+      {
+        "attempt": 1,
+        "pacing": "real-time 32ms/packet (baseline parity)",
+        "outcome": "runner orphaned by OpenClaw gateway after ~21min wall-clock vs expected 7-8min; process list reported stale duration; only 5-7 new log lines per 300s poll",
+        "decision": "killed, restarted with faster pacing"
+      },
+      {
+        "attempt": 2,
+        "pacing": "PACKET_INTERVAL_MS=1 (~32x faster than real-time)",
+        "outcome": "completed in 95.8s wall (stream 72.2s + offline + flush)",
+        "stream_done_packets": 12570,
+        "flushed": true,
+        "offline_revise_chunks": 17,
+        "ws_events_captured": 13544,
+        "rest_events_dumped": 182,
+        "semantic_debug_events_captured": 95,
+        "session_id": "31f91c92-be77-43f3-a509-87931220c966",
+        "session_delete_status": 404
+      }
+    ],
+    "files_produced": [
+      "events-t3.jsonl (182 events, 164KB)",
+      "semantic-debug-t3.jsonl (95 events)",
+      "metrics-t3.json",
+      "calibration-t3.json"
+    ],
+    "notes": "REST dump returned fewer events than ws because server only persists event types it considers noteworthy (final/slide/chunk/chunk_revise/stopped); partials/audio_ack are transient. Pacing 1ms/packet means per-event latency_ms is not informative — wall-clock latency was ~95s for the whole pipeline vs 401s audio (4x speedup). Real-time pacing would have produced meaningful latency_ms at the cost of 401s+ wall-clock and orphan risk."
+  },
+  "phase3_metrics": {
+    "event_counts": {
+      "total": 182,
+      "chunk": 29,
+      "chunk_revise": 17,
+      "slide": 38,
+      "final": 97,
+      "warning": 0
+    },
+    "reason_distribution": {
+      "deadline": { "n": 20, "pct": 69.0 },
+      "marker": { "n": 8, "pct": 27.6 },
+      "flush": { "n": 1, "pct": 3.4 }
+    },
+    "revise_ops": {
+      "merge/drift": 12,
+      "confirm/confirmer": 4,
+      "offline/offline": 1
+    },
+    "final_chunks": {
+      "count": 17,
+      "status_distribution": { "confirmed": 17 },
+      "source_distribution": { "offline": 17 },
+      "chunk_words": { "min": 2, "median": 62, "max": 161 }
+    },
+    "latency_ms": { "p50": 0, "p95": 0, "n": 29, "note": "zero due to faster pacing — not informative" },
+    "slides": { "total": 38, "titled": 38, "quota_skipped": 0 },
+    "boundary_live": {
+      "tolerance_sentences": 2,
+      "true_boundaries_internal": 7,
+      "chunk_boundaries": 16,
+      "matched_true": 7,
+      "matched_chunk": 12,
+      "recall": 1.0,
+      "precision": 0.75,
+      "f1": 0.857
+    },
+    "boundary_offline": {
+      "tolerance_sentences": 2,
+      "true_boundaries_internal": 7,
+      "chunk_boundaries": 16,
+      "matched_true": 7,
+      "matched_chunk": 12,
+      "recall": 1.0,
+      "precision": 0.75,
+      "f1": 0.857
+    }
+  },
+  "phase4_calibration": {
+    "pairs_total": 95,
+    "pairs_boundary": 42,
+    "pairs_same_topic": 53,
+    "near_words_tolerance": 30,
+    "distributions": {
+      "boundary": {
+        "cosine":   { "n": 42, "min": 0.3196, "p25": 0.4059, "median": 0.4826, "p75": 0.5748, "max": 0.7004, "mean": 0.4841 },
+        "depth":     { "n": 42, "min": -0.2201, "p25": -0.0627, "median": 0.0325, "p75": 0.1029, "max": 0.1824, "mean": 0.0207 },
+        "ema_baseline":  { "n": 42, "min": 0.4678, "p25": 0.4914, "median": 0.5023, "p75": 0.5154, "max": 0.5413, "mean": 0.5027 },
+        "ema_dispersion": { "n": 42, "min": 0.0580, "p25": 0.0669, "median": 0.0754, "p75": 0.0795, "max": 0.0915, "mean": 0.0739 }
+      },
+      "same_topic": {
+        "cosine":   { "n": 53, "min": 0.3866, "p25": 0.4588, "median": 0.5373, "p75": 0.5731, "max": 0.6528, "mean": 0.5203 },
+        "depth":     { "n": 53, "min": -0.1773, "p25": -0.0751, "median": -0.0350, "p75": 0.0322, "max": 0.1283, "mean": -0.0214 },
+        "ema_baseline":  { "n": 53, "min": 0.4565, "p25": 0.4929, "median": 0.5034, "p75": 0.5091, "max": 0.5285, "mean": 0.5011 },
+        "ema_dispersion": { "n": 53, "min": 0.0500, "p25": 0.0681, "median": 0.0726, "p75": 0.0783, "max": 0.0876, "mean": 0.0727 }
+      }
+    },
+    "decisions": { "none": 86, "candidate": 9 },
+    "proposal": {
+      "separable": false,
+      "reason": "boundary depth p25=-0.0627 is NOT less than same_topic p25=-0.0751 (opposite direction). Cosine median separates (0.4826 vs 0.5373) but depth (cosine - ema_baseline) does not sharpen the signal — ema_baseline tracks the local cosine mean, so depth is near-zero for both classes. With only 9/95 events marked candidate by current depthFloor=0.12, depthFloor tuning alone cannot improve F1; the marker detector + drift-merge are doing the segmentation work.",
+      "recommended": "no change to models/config.json",
+      "applied": false,
+      "config_json_unchanged": true
+    },
+    "applied_to_config": false,
+    "reason_no_apply": "depth signal not separable (boundary and same_topic p25 are within 0.013 of each other, opposite direction). Per task spec 'если разделимость есть — примени' — separable=false → no apply. commit/push skipped because config.json unchanged."
+  },
+  "vs_baseline": {
+    "reason_distribution": {
+      "deadline": "100% → 69.0% (T1a marker lexicon WORKING: 27.6% marker commits)",
+      "marker": "0% → 27.6% (NEW — discourse marker detection reaches committer)",
+      "flush": "0% → 3.4%"
+    },
+    "final_chunks_count": "13 → 17 (+4)",
+    "chunk_words_max": "238 → 161 (tighter bound; max dropped 32%)",
+    "chunk_words_min": "19 → 2 (tiny flush-time chunk dropped size minimum)",
+    "chunk_words_median": "69 → 62 (slightly tighter)",
+    "boundary_offline_f1": "0.69 → 0.857 (+0.167 absolute, +24% relative)",
+    "boundary_offline_recall": "0.714 → 1.0 (all 7 true boundaries matched)",
+    "boundary_offline_precision": "0.667 → 0.75",
+    "slides_total": "122 → 38 (live + offline; fewer because offline replaces provisional chunks with confirmed ones — 1 slide per final chunk rev)",
+    "slides_titled": "122/122 → 38/38 (no quota skips either way)",
+    "latency_ms": "p50=1663 → 0 (faster pacing invalidates comparison; baseline used real-time pacing)"
+  },
+  "notes": [
+    "T3 RETEST confirmed T1a + T1b deliver measurable improvement: marker detector now fires (27.6% of live commits), all 7 true boundaries matched at live + offline stages, F1 +24% relative.",
+    "Precision is the remaining bottleneck (0.75): 4 chunk boundaries detected that don't match true boundaries within ±2 sentences. Likely drift-merge splits creating extra provisional boundaries, or marker over-trigger.",
+    "semantic_debug telemetry does not yet separate boundary from same-topic on this dataset (95 pairs, 42 boundary, 53 same-topic, NEAR_WORDS=30). Hypothesis: ema_baseline tracks local cosine too tightly, so depth = cosine - ema_baseline stays near 0 for both classes. Alternative signal: cosine alone (median 0.483 vs 0.537) has more separation but threshold would need careful tuning on a larger sample.",
+    "No config.json change → no commit/push. Calibration was honest attempt on available telemetry; not blindly lowering depthFloor to force a change.",
+    "Real-time pacing (32ms/packet) caused OpenClaw gateway to orphan the exec session; 1ms/packet pacing ran in 95s wall vs 401s audio (4x faster) and is acceptable for retest purposes — pipeline behavior is unchanged, only the streaming rate differs."
+  ],
+  "open_questions": [
+    "Why does ema_baseline track cosine so tightly (mean ~0.50 vs cosine mean ~0.50)? — investigate EMA window size or initialization in Session.java boundary detector",
+    "Is precision 0.75 floor due to drift-merge splitting OR marker over-trigger? — needs side-by-side chunk timeline audit",
+    "Would a larger labeled corpus (e.g. 5+ monologs) produce separable depth distributions? — current 95 pairs is small, separable signal might require N≥200"
+  ],
+  "artifacts": [
+    "t3-progress.md",
+    "t3-retest-report.json",
+    "t3-runner.mjs",
+    "metrics-t3.mjs",
+    "calibration-t3.mjs",
+    "events-t3.jsonl (182 events)",
+    "semantic-debug-t3.jsonl (95 events)",
+    "metrics-t3.json",
+    "calibration-t3.json",
+    "health-poll.ps1"
+  ]
+}

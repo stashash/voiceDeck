@@ -1,0 +1,22 @@
+{
+  "voicedeck": {
+    "branch": "master",
+    "head_before": "483e4b52e1563fbbe9ce53fe260fca5ddfc3470e",
+    "head_after": "15c67510843942bab6cfbddf93c2914ad9d7bad2",
+    "committed_files": [
+      "dark-factory/research/2026-09-20-live-to-slides.md",
+      "dark-factory/research/2026-09-20-segmentation-quality/MANIFEST.md"
+    ],
+    "commit_message": "wip: checkpoint before segmentation quality iteration 2026-09-20",
+    "pushed": true,
+    "remote_url": "https://github.com/stashash/voiceDeck.git",
+    "push_error": null
+  },
+  "m3": {
+    "branch": "master",
+    "head": "1482b341936fefc4920a58a92427adcef73304c4",
+    "clean": false,
+    "matches_voicedeck_head_before": false
+  },
+  "notes": "origin remote re-pointed from gitverse.ru to https://github.com/stashash/voiceDeck.git per owner instruction. Push of master SUCCEEDED: github/master and origin now hold 15c67510843942bab6cfbddf93c2914ad9d7bad2 (verified via git rev-parse github/master == HEAD). The push exec sessions reported termination with no captured output, but the server side accepted the ref before termination — state verified locally, no retry needed. gh CLI absent (not needed: repo already existed on GitHub); SSH remote 'github' (git@github-stashash) has no usable key, but HTTPS push path worked. NOTE: stale remote-tracking ref origin/master still shows old gitverse commit 1482b34 in the local repo — harmless, will refresh on next fetch. New untracked files appeared during the iteration (block_01..03.mp3, synth-monolog.py, t0b-push-report.json, t2-image-built.lock) — written by parallel factory steps, outside T0 scope. voiceDeck_m3 remains dirty (12 modified + 13 untracked) and its HEAD (1482b34) does NOT match voicedeck head_before (483e4b5) — m3 lacks commit 483e4b5 'chore: import in-progress changes from local'."
+}
