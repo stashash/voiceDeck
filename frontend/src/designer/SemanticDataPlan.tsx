@@ -31,7 +31,7 @@ function roleLabel(column: DatasetTablePlan['profile']['columns'][number]) {
   return roles.length ? roles.join(', ') : column.type === 'empty' ? 'пусто' : column.type;
 }
 
-export function SemanticDataPlan() {
+export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset: DatasetTablePlan, candidate: VisualizationCandidate, goal: string) => Promise<void> }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [goal, setGoal] = useState('');
@@ -170,7 +170,11 @@ export function SemanticDataPlan() {
           {selectedCandidate.excluded_row_lines.length > 0 && <p>Строки с пропусками: {selectedCandidate.excluded_row_lines.join(', ')}</p>}
           {selectedCandidate.warnings.map(warning => <p key={warning} className="semantic-plan-warning">{warning}</p>)}
         </div>}
-        <p className="semantic-plan-footnote">Пока это анализ и выбор смысла. Перенос выбранного варианта в редактируемый слайд подключается отдельным следующим шагом.</p>
+        {selectedCandidate?.renderable && onCreate && <button type="button" className="button primary"
+          disabled={busy || !files[dataset.file_index]} onClick={() => void onCreate(files[dataset.file_index], dataset, selectedCandidate, goal)}>
+          Создать презентацию с этим смыслом
+        </button>}
+        <p className="semantic-plan-footnote">Выбранный допустимый вариант попадёт в существующий генератор; неподдерживаемые типы пока доступны только как аналитические рекомендации.</p>
       </>}
     </div>}
   </section>;

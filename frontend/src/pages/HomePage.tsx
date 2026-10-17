@@ -3,8 +3,8 @@ import { plural } from '../designer/labels';
 import { hashParam } from '../router';
 import { ChevronDown, ArrowUp, Upload, Settings, Boxes, Check, X } from 'lucide-react';
 import {
-  AgentInfo, DeckListItem, DesignSystemListItem,
-  absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments, errorText
+  AgentInfo, DeckListItem, DesignSystemListItem, DatasetTablePlan, VisualizationCandidate,
+  absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, materializePlanCandidate, setAgentAssignments, errorText
 } from '../designer/api';
 import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
 import { AttachTableButton, InsightsList, TableChip, useTableInsights } from '../designer/TableInsights';
@@ -118,6 +118,22 @@ export default function HomePage() {
     finally { setBusy(false); }
   }
 
+  async function createFromMeaning(file: File, dataset: DatasetTablePlan, candidate: VisualizationCandidate, goal: string) {
+    if (!ready || !dsId || !agentId || busy) return;
+    setBusy(true); setError('');
+    try {
+      await syncAgent(agentId);
+      const materialized = await materializePlanCandidate(file, goal, dataset.table_index, candidate);
+      const presentationBrief = brief.trim() || `Покажите смысл данных «${dataset.table_name}»: ${candidate.reason}`;
+      const { deck_id } = await createDeck({
+        design_system_id: dsId, brief: presentationBrief, variants: ['a'],
+        insights_id: materialized.id, insight_ids: materialized.suggestions.map(item => item.id),
+      });
+      window.location.hash = `#/decks/${deck_id}`;
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(false); }
+  }
+
   return <main className="home-main">
     <h1 className="home-title">О чём будет презентация?</h1>
     <div className="brief-box" ref={boxRef}>
@@ -129,7 +145,7 @@ export default function HomePage() {
           <X size={18} strokeWidth={1.5}/></button></div>}
       <TableChip state={table} onRetry={() => void retryTable()}/>
       <InsightsList state={table} brief={brief} onRetry={() => void retryTable()}/>
-      <SemanticDataPlan/>
+      <SemanticDataPlan onCreate={ready ? createFromMeaning : undefined}/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
           <AttachTableButton onPick={file => void attachTable(file)}/>

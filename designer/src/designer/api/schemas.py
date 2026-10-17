@@ -48,6 +48,8 @@ class TablePreview(BaseModel):
 
 class DatasetTablePlan(BaseModel):
     """Предварительный анализ одной таблицы/листа: профиль и объяснимые варианты визуализации."""
+    file_index: int
+    table_index: int
     file_name: str
     table_name: str
     sheet: str = ""

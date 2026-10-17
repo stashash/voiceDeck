@@ -212,7 +212,7 @@ export type DatasetPlanView = {
   selected_fields: string[]; candidates: VisualizationCandidate[]; selected_candidate: VisualizationCandidate; warnings: string[];
 };
 export type DatasetTablePlan = {
-  file_name: string; table_name: string; sheet: string; rows: number; columns: number; headers: string[];
+  file_index: number; table_index: number; file_name: string; table_name: string; sheet: string; rows: number; columns: number; headers: string[];
   preview_rows: string[][]; profile: ProfileView; plan: DatasetPlanView;
 };
 export type DatasetBundlePlanResponse = { file_count: number; table_count: number; goal: string; datasets: DatasetTablePlan[] };
@@ -224,6 +224,18 @@ export function analyzeDatasetBundle(files: File[], goal: string, signal?: Abort
   form.append('goal', goal);
   return fetch(url('/insights/plan'), { method: 'POST', body: form, signal }, 90_000)
     .then(r => uploadResponse<DatasetBundlePlanResponse>(r));
+}
+
+/** Передаёт выбранный допустимый вывод в тот же сохранённый контракт, который использует генератор колоды. */
+export function materializePlanCandidate(file: File, goal: string, tableIndex: number, candidate: VisualizationCandidate): Promise<InsightsResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('goal', goal);
+  form.append('table_index', String(tableIndex));
+  form.append('candidate_kind', candidate.kind);
+  form.append('required_fields', JSON.stringify(candidate.required_fields));
+  return fetch(url('/insights/plan/materialize'), { method: 'POST', body: form }, 90_000)
+    .then(r => uploadResponse<InsightsResponse>(r));
 }
 
 const INSIGHTS_TIMEOUT_MS = 6 * 60_000;

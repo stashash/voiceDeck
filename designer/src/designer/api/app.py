@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
 import os
 import threading
 import time
@@ -60,7 +61,7 @@ from designer.api.schemas import (
     ElementActionRequest,
     TablePreview,
 )
-from designer.contracts import DesignSystem, RunManifest
+from designer.contracts import ChartSpec, DesignSystem, RunManifest, Series, TableSpec
 from designer.export import convert
 from designer.insights import source as insights_source
 from designer.insights.plan import plan_table
@@ -287,17 +288,18 @@ def _json_safe(value):
 
 def _bundle_plan(inputs: list[tuple[str, bytes]], goal: str) -> list[DatasetTablePlan]:
     datasets = []
-    for filename, data in inputs:
+    for file_index, (filename, data) in enumerate(inputs):
         try:
             tables = insights_table.read_tables(data, filename)
         except insights_table.TableError as exc:
             raise HTTPException(422, f"«{insights_table.file_name(filename)}»: {exc}") from exc
-        for table in tables:
+        for table_index, table in enumerate(tables):
             if len(datasets) >= _MAX_PLAN_TABLES:
                 raise HTTPException(422, f"Найдено больше {_MAX_PLAN_TABLES} таблиц: разделите файлы на несколько запросов.")
             profile = profile_table(table)
             plan = plan_table(table, goal)
             datasets.append(DatasetTablePlan(
+                file_index=file_index, table_index=table_index,
                 file_name=insights_table.file_name(filename), table_name=table.name, sheet=table.sheet,
                 rows=len(table.rows), columns=len(table.headers), headers=table.headers,
                 preview_rows=[row[:10] for row in table.rows[:5]],
@@ -334,6 +336,84 @@ async def dataset_bundle_plan(files: list[UploadFile] = File(...), goal: str = F
     if not datasets:
         raise HTTPException(422, "В файлах не найдено табличных данных.")
     return DatasetBundlePlanResponse(file_count=len(files), table_count=len(datasets), goal=goal, datasets=datasets)
+
+
+@app.post("/insights/plan/materialize", response_model=InsightsResponse)
+async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = Form("", max_length=2000),
+                                     table_index: int = Form(0), candidate_kind: str = Form(...),
+                                     required_fields: str = Form("[]")) -> InsightsResponse:
+    """Convert one verified option to the existing insight contract consumed by /decks."""
+    data = await file.read(insights_table.MAX_BYTES + 1)
+    await file.close()
+    if len(data) > insights_table.MAX_BYTES:
+        raise HTTPException(413, "Файл больше 1 МБ.")
+    try:
+        tables = insights_table.read_tables(data, file.filename or "")
+        fields = json.loads(required_fields)
+        if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
+            raise ValueError("Список полей должен быть массивом строк.")
+        table = tables[table_index]
+        plan = plan_table(table, goal)
+        candidate = next(c for c in plan.candidates if c.kind == candidate_kind and list(c.required_fields) == fields)
+    except (insights_table.TableError, ValueError, IndexError, StopIteration, json.JSONDecodeError) as exc:
+        raise HTTPException(422, f"Выбранный вариант больше не доступен: {exc}") from exc
+    if not candidate.renderable or candidate.kind not in {"line", "bar", "column", "pie", "table", "kpi"}:
+        raise HTTPException(422, "Этот тип пока нельзя передать в рендерер слайда.")
+
+    row_map = dict(zip(table.lines, table.rows))
+    source_rows = [row_map[line] for line in candidate.row_lines if line in row_map]
+    positions = {header: index for index, header in enumerate(table.headers)}
+    visual, chart, table_spec = "big_number", None, None
+    warnings = " ".join(candidate.warnings)
+    if candidate.kind in {"line", "bar", "column", "pie"}:
+        dimension, measure = candidate.dimension_fields[0], candidate.measure_fields[0]
+        categories = [row[positions[dimension]] for row in source_rows]
+        exact_values = [insights_table.parse_number(row[positions[measure]]) for row in source_rows]
+        if not categories or any(value is None for value in exact_values):
+            raise HTTPException(422, "В выбранных исходных строках есть пропуски или нечисловые значения.")
+        values = [float(value) for value in exact_values]
+        if any(not math.isfinite(value) for value in values):
+            raise HTTPException(422, "Значения слишком велики для диаграммы; используйте таблицу.")
+        visual = candidate.kind
+        chart = ChartSpec(type=visual, title=f"{measure} · {dimension}", categories=categories,
+                          series=[Series(name=measure, values=values)])
+        statement = f"{measure} по полю «{dimension}»; показаны исходные значения без группировки."
+        number = format(candidate.denominator, "f") if candidate.denominator is not None else str(len(categories))
+        formula = (f"Сумма показанных долей: {candidate.denominator}; охват — {len(categories)} наблюдений."
+                   if candidate.denominator is not None else f"{len(categories)} исходных наблюдений; агрегация не выполнялась.")
+    elif candidate.kind == "table":
+        preview = source_rows[:20]
+        table_spec = TableSpec(columns=table.headers, rows=preview)
+        visual = "table"
+        statement = f"Справочные данные: {len(table.rows)} строк; на слайде показаны первые {len(preview)}."
+        number, formula = str(len(table.rows)), "Количество строк источника; значения не агрегировались."
+        if len(table.rows) > len(preview):
+            warnings = (warnings + " " if warnings else "") + f"Остальные {len(table.rows) - len(preview)} строк не помещены на слайд."
+    else:
+        number = format(candidate.value or Decimal(0), "f")
+        statement = f"Количество исходных записей: {number}."
+        formula = "Число строк источника, включая записи с пропусками; суммы мер не вычислялись."
+
+    source = insights_table.file_name(file.filename or "таблица")
+    if table.sheet:
+        source += f" · лист «{table.sheet}»"
+    source += f" · {len(candidate.row_lines)} исходных строк"
+    headline = (f"{candidate.measure_fields[0]} по {candidate.dimension_fields[0]}"
+                if candidate.measure_fields and candidate.dimension_fields else statement)
+    suggestion = insights_suggest.Suggestion(
+        id="s1", headline=headline, number=number, visual=visual, why=candidate.reason,
+        fact_ids=[f"{plan.content_hash[:16]}:{candidate.kind}:{','.join(candidate.required_fields)}"],
+        statement=statement, topic=candidate.measure_fields[0] if candidate.measure_fields else table.name,
+        source=source, formula=formula, chart=chart, table=table_spec,
+        data_lines=[" | ".join([*table.headers, *row]) for row in source_rows], by_model=False,
+    )
+    suggestion.number_at = insights_suggest.number_span(suggestion.headline, suggestion.number)
+    stored = {"table_name": table.name, "rows": len(table.rows), "columns": len(table.headers),
+              "suggestions": [suggestion.model_dump(mode="json")], "note": warnings, "from_image": False}
+    insights_id = store.save_insights(stored)
+    return InsightsResponse(id=insights_id, table_name=table.name, sheet=table.sheet, rows=len(table.rows),
+                            columns=len(table.headers), suggestions=[InsightView(**suggestion.model_dump())],
+                            note=warnings, from_image=False)
 
 
 async def _wait_unless_gone(task: asyncio.Future, request: Request, client: object, poll_s: float = 0.5) -> bool:
