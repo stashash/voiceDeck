@@ -212,7 +212,7 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         candidates.append(VisualizationCandidate(
             kind, base + (50 if goal.kind in preferred else 0), reason, fields, dims, metrics,
             tuple(table.lines[i] for i in indices), excluded, limits,
-            kind not in {"histogram", "scatter", "grouped_column"}, denominator, denominator_field, aggregation, value))
+            kind not in {"scatter", "grouped_column"}, denominator, denominator_field, aggregation, value))
 
     if axis and metric:
         indices = complete((axis, metric))
@@ -277,7 +277,7 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         if len(indices) >= 5 and len(set(numbers(metric, indices))) >= 2:
             add("histogram", 60 if category or axis else 90, ("distribution",),
                 f"'{metric}' has {len(indices)} numeric observations with variation; bin their frequencies, not category totals.",
-                metrics=(metric,), indices=indices, limits=("Histogram renderer/binning is not implemented; outliers must remain included.",))
+                metrics=(metric,), indices=indices, limits=("All complete observations, including IQR outliers, are retained in the frequency bins.",))
         elif goal.kind == "distribution":
             warnings.append(f"Histogram needs at least five numeric observations and two distinct values in '{metric}'.")
     if len(measures) >= 2:

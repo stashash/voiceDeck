@@ -177,7 +177,7 @@ def test_distribution_retains_outlier_and_is_not_available_renderer():
     table = fixture("distribution.csv")
     plan = plan_table(table, "distribution")
     histogram = plan.selected_candidate
-    assert histogram.kind == "histogram" and not histogram.renderable
+    assert histogram.kind == "histogram" and histogram.renderable
     assert histogram.row_lines == tuple(table.lines)
     assert "IQR outlier" in histogram.reason
     assert histogram.aggregation == "none"  # No invented bins/counts at plan stage.

@@ -36,7 +36,7 @@ def test_bundle_plan_profiles_all_seven_sources_and_returns_explainable_candidat
     pie = next(c for c in data["category_shares.json"]["plan"]["candidates"] if c["kind"] == "pie")
     assert pie["denominator"] == "1000"
     distribution = next(c for c in data["distribution.csv"]["plan"]["candidates"] if c["kind"] == "histogram")
-    assert distribution["renderable"] is False
+    assert distribution["renderable"] is True
     trend = next(c for c in data["time_series.csv"]["plan"]["candidates"] if c["kind"] == "line")
     assert "period" in trend["required_fields"]
     assert len(data["time_series.csv"]["preview_rows"]) == 5
@@ -98,10 +98,18 @@ def test_selected_line_plan_materializes_into_existing_insight_contract(monkeypa
     assert captured["insights"][0].chart.series[0].values[-1] == 156000
 
 
-def test_selected_distribution_plan_cannot_be_materialized_until_renderer_exists():
+def test_selected_distribution_plan_builds_frequency_bins_and_retains_all_outliers():
     response = CLIENT.post("/insights/plan/materialize", files={"file": upload("distribution.csv")[1]}, data={
         "goal": "show distribution", "table_index": "0", "candidate_kind": "histogram",
         "required_fields": json.dumps(["value"]),
     })
-    assert response.status_code == 422
-    assert "нельзя передать в рендерер" in response.text
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["suggestions"][0]["visual"] == "column"
+    assert "распределение" in body["suggestions"][0]["headline"].lower()
+    saved = store.load_insights(body["id"])["suggestions"][0]
+    chart = saved["chart"]
+    assert len(chart["categories"]) <= 20
+    assert sum(chart["series"][0]["values"]) == 25
+    assert any("95" in label for label in chart["categories"])
+    assert "25" in saved["formula"]

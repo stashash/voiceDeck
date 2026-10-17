@@ -357,7 +357,7 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
         candidate = next(c for c in plan.candidates if c.kind == candidate_kind and list(c.required_fields) == fields)
     except (insights_table.TableError, ValueError, IndexError, StopIteration, json.JSONDecodeError) as exc:
         raise HTTPException(422, f"Выбранный вариант больше не доступен: {exc}") from exc
-    if not candidate.renderable or candidate.kind not in {"line", "bar", "column", "pie", "table", "kpi"}:
+    if not candidate.renderable or candidate.kind not in {"line", "bar", "column", "pie", "histogram", "table", "kpi"}:
         raise HTTPException(422, "Этот тип пока нельзя передать в рендерер слайда.")
 
     row_map = dict(zip(table.lines, table.rows))
@@ -365,7 +365,55 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
     positions = {header: index for index, header in enumerate(table.headers)}
     visual, chart, table_spec = "big_number", None, None
     warnings = " ".join(candidate.warnings)
-    if candidate.kind in {"line", "bar", "column", "pie"}:
+    if candidate.kind == "histogram":
+        metric = candidate.measure_fields[0]
+        exact_values = [insights_table.parse_number(row[positions[metric]]) for row in source_rows]
+        if not exact_values or any(value is None for value in exact_values):
+            raise HTTPException(422, "Для распределения нужны полные числовые наблюдения.")
+        values = sorted(exact_values)
+        assert all(value is not None for value in values)
+        numeric_values = [value for value in values if value is not None]
+        if any(not math.isfinite(float(value)) or Decimal(str(float(value))) != value for value in numeric_values):
+            raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
+        count = len(numeric_values)
+
+        def quantile(fraction: Decimal) -> Decimal:
+            position = Decimal(count - 1) * fraction
+            lower = int(position)
+            upper = min(lower + 1, count - 1)
+            part = position - lower
+            return numeric_values[lower] + (numeric_values[upper] - numeric_values[lower]) * part
+
+        minimum, maximum = numeric_values[0], numeric_values[-1]
+        span = maximum - minimum
+        span_float = float(span)
+        if not math.isfinite(span_float):
+            raise HTTPException(422, "Диапазон данных слишком велик для шкалы диаграммы; выберите таблицу.")
+        iqr = quantile(Decimal("0.75")) - quantile(Decimal("0.25"))
+        iqr_float = float(iqr)
+        if not math.isfinite(iqr_float):
+            raise HTTPException(422, "Разброс данных слишком велик для шкалы диаграммы; выберите таблицу.")
+        width = 2.0 * iqr_float / math.pow(count, 1 / 3) if iqr > 0 else 0
+        bins = math.ceil(span_float / width) if width > 0 else math.ceil(math.log2(count) + 1)
+        bins = min(20, max(1, bins))
+        counts = [0] * bins
+        for value in numeric_values:
+            index = min(bins - 1, int((value - minimum) * bins / span))
+            counts[index] += 1
+        categories = []
+        for index in range(bins):
+            low = minimum + span * index / bins
+            high = minimum + span * (index + 1) / bins
+            low_text, high_text = format(low.normalize(), "f"), format(high.normalize(), "f")
+            categories.append(f"{low_text}–{high_text}" + ("]" if index == bins - 1 else ")"))
+        visual = "column"
+        chart = ChartSpec(type="column", title=f"Распределение · {metric}", categories=categories,
+                          series=[Series(name="Число наблюдений", values=[float(value) for value in counts])])
+        statement = f"Распределение {metric}: частота по {bins} интервалам; учтены все {count} значений."
+        number = str(count)
+        rule = "Freedman–Diaconis" if iqr > 0 else "Sturges (IQR = 0)"
+        formula = f"{rule}; {bins} равных интервалов; сумма частот = {sum(counts)}; n = {count}."
+    elif candidate.kind in {"line", "bar", "column", "pie"}:
         dimension, measure = candidate.dimension_fields[0], candidate.measure_fields[0]
         categories = [row[positions[dimension]] for row in source_rows]
         exact_values = [insights_table.parse_number(row[positions[measure]]) for row in source_rows]
@@ -398,7 +446,8 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
     if table.sheet:
         source += f" · лист «{table.sheet}»"
     source += f" · {len(candidate.row_lines)} исходных строк"
-    headline = (f"{candidate.measure_fields[0]} по {candidate.dimension_fields[0]}"
+    headline = (f"Распределение {candidate.measure_fields[0]}" if candidate.kind == "histogram" else
+                f"{candidate.measure_fields[0]} по {candidate.dimension_fields[0]}"
                 if candidate.measure_fields and candidate.dimension_fields else statement)
     suggestion = insights_suggest.Suggestion(
         id="s1", headline=headline, number=number, visual=visual, why=candidate.reason,
