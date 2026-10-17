@@ -23,6 +23,7 @@ export function useTableInsights() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const request = useRef<AbortController | null>(null);
+  const briefRef = useRef('');
 
   function clear() {
     request.current?.abort();
@@ -30,15 +31,13 @@ export function useTableInsights() {
     setFile(null); setResult(null); setSelected(new Set()); setError(''); setLoading(false);
   }
 
-  async function attach(next: File, brief: string) {
-    clear();
-    if (!ACCEPT.test(next.name)) { setError('Нужен файл xlsx или csv'); return; }
-    if (next.size > MAX_BYTES) { setError('Файл больше 1 МиБ: оставьте в таблице только нужный лист и строки'); return; }
+  async function load(next: File, useModel: boolean) {
+    request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setFile(next); setLoading(true);
+    setLoading(true); setError('');
     try {
-      const found = await tableInsights(next, brief, controller.signal);
+      const found = await tableInsights(next, briefRef.current, controller.signal, useModel);
       if (request.current !== controller) return;
       setResult(found);
       setSelected(new Set(found.suggestions.map(s => s.id)));
@@ -51,12 +50,26 @@ export function useTableInsights() {
     }
   }
 
+  async function attach(next: File, brief: string) {
+    clear();
+    if (!ACCEPT.test(next.name)) { setError(`«${next.name}»: нужен файл xlsx или csv`); return; }
+    if (next.size > MAX_BYTES) { setError(`«${next.name}» больше 1 МБ: оставьте в таблице только нужный лист и строки`); return; }
+    briefRef.current = brief;
+    setFile(next);
+    await load(next, true);
+  }
+
+  /** Долгий ответ модели: таблица остаётся, выводы сразу формулирует код. */
+  function stop() {
+    if (file) void load(file, false);
+  }
+
   function toggle(id: string) {
     setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
 
   const chosen = result ? result.suggestions.filter(s => selected.has(s.id)).map(s => s.id) : [];
-  return { file, result, selected, loading, error, chosen, attach, clear, toggle, dismissError: () => setError('') };
+  return { file, result, selected, loading, error, chosen, attach, clear, stop, toggle, dismissError: () => setError('') };
 }
 
 export type TableInsightsState = ReturnType<typeof useTableInsights>;
@@ -65,7 +78,7 @@ export function AttachTableButton({ onPick }: { onPick: (file: File) => void }) 
   const input = useRef<HTMLInputElement>(null);
   return <>
     <button type="button" className="picker-btn" aria-label="Прикрепить таблицу"
-      title="Прикрепить таблицу: xlsx или csv до 1 МиБ, до 2000 строк и 50 столбцов. Сервис подскажет, что из неё показать"
+      title="Прикрепить таблицу: xlsx (первый лист) или csv до 1 МБ, до 2000 строк и 50 столбцов. Сервис подскажет, что из неё показать"
       onClick={() => input.current?.click()}>
       <Paperclip size={18} strokeWidth={1.5}/>
     </button>
@@ -81,7 +94,7 @@ export function TableChip({ state }: { state: TableInsightsState }) {
     <Sheet size={16} strokeWidth={1.5} className="icon-muted"/>
     <span className="table-chip-name">{state.file.name}</span>
     {r && <span className="table-chip-meta">
-      {plural(r.rows, 'строка', 'строки', 'строк')}, {plural(r.columns, 'столбец', 'столбца', 'столбцов')}
+      {r.sheet ? `лист «${r.sheet}», ` : ''}{plural(r.rows, 'строка', 'строки', 'строк')}, {plural(r.columns, 'столбец', 'столбца', 'столбцов')}
     </span>}
     <button type="button" className="button-icon table-chip-remove" aria-label="Убрать таблицу" title="Убрать таблицу"
       onClick={state.clear}><X size={16} strokeWidth={1.5}/></button>
@@ -97,20 +110,27 @@ export function InsightsList({ state }: { state: TableInsightsState }) {
       <button onClick={state.dismissError} aria-label="Закрыть сообщение">×</button></div>}
     {state.loading && <div className="insights-status" role="status">
       <span className="insights-spinner" aria-hidden="true"/>Ищу выводы в таблице
-      <button type="button" className="button" onClick={state.clear}>Остановить</button>
+      <button type="button" className="button" onClick={state.stop}>Остановить</button>
     </div>}
-    {r && r.note && <p className="insights-note">{r.note}</p>}
-    {r && <ul className="insights-list">
+    {r && !state.loading && r.note && <p className="insights-note">{r.note}
+      {r.note.startsWith('Модель недоступна') && <> <a href="#/settings">Настроить агента</a></>}</p>}
+    {r && !state.loading && <ul className="insights-list">
       {r.suggestions.map(s => {
         const Icon = VISUAL_ICON[s.visual] ?? Hash;
+        const on = state.selected.has(s.id);
+        const tip = `insight-source-${s.id}`;
         return <li key={s.id}>
-          <label className="insight-row" title={s.why || undefined}>
-            <input type="checkbox" checked={state.selected.has(s.id)} onChange={() => state.toggle(s.id)}/>
+          <label className={`insight-row${on ? '' : ' off'}`}>
+            <input type="checkbox" checked={on} onChange={() => state.toggle(s.id)}/>
             <span className="insight-visual" title={VISUAL_NAME[s.visual]} aria-label={VISUAL_NAME[s.visual]}>
               <Icon size={18} strokeWidth={1.5}/>
             </span>
             <span className="insight-headline">{s.headline}</span>
-            <span className="insight-number" tabIndex={0} title={`Откуда: ${s.source}. Расчёт: ${s.formula}`}>{s.number}</span>
+            {/* Щелчок по числу открывает источник, а не снимает галочку строки. */}
+            <span className="insight-number" tabIndex={0} aria-describedby={tip} onClick={e => e.preventDefault()}>
+              {s.number}
+              <span role="tooltip" id={tip} className="insight-source">Откуда: {s.source}. Расчёт: {s.formula}</span>
+            </span>
           </label>
         </li>;
       })}

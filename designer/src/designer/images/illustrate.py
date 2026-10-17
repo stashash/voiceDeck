@@ -21,6 +21,8 @@ from designer.llm.skills import load_skill
 
 SKILL = "illustrate"
 IMAGE_LIMIT = 3
+MAX_ITEMS = 2
+_LIGHT_KINDS = (SlideKind.image_text, SlideKind.section, SlideKind.quote)
 _SKIP_KINDS = (SlideKind.title, SlideKind.agenda, SlideKind.thanks, SlideKind.cta,
                SlideKind.chart, SlideKind.table, SlideKind.big_number)
 
@@ -35,6 +37,10 @@ def candidates(plan: DeckPlan, ds: DesignSystem) -> list[tuple[SlideIntent, Area
     found: list[tuple[SlideIntent, Area]] = []
     for slide in plan.slides[1:-1]:
         if slide.kind in _SKIP_KINDS or slide.chart is not None or slide.table is not None:
+            continue
+        # Образец «картинка и текст» держит мысль и короткий текст: список из трёх пунктов рядом с фото
+        # рассыпается по маркерам образца (прогон 17.10, шаблон VK Tech).
+        if slide.kind not in _LIGHT_KINDS and len(slide.items) > MAX_ITEMS:
             continue
         probe = slide.model_copy(update={"image": SlideImage(prompt="", path="probe.png")})
         pattern = choose_pattern(probe, ds)

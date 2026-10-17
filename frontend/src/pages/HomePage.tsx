@@ -51,6 +51,18 @@ export default function HomePage() {
 
   const ready = designSystems.length > 0 && agents.length > 0;
 
+  /** Выводы по таблице пишет тот агент, что выбран в списке, а не тот, что сохранён на сервере. */
+  async function attachTable(file: File) {
+    try {
+      if (assignments && agentId && assignments.deck !== agentId) {
+        const next = { ...assignments, deck: agentId };
+        await setAgentAssignments(next);
+        setAssignments(next);
+      }
+    } catch (e) { setError(errorText(e)); }
+    await table.attach(file, brief);
+  }
+
   const fromTable = !!table.result && table.chosen.length > 0;
   const canSubmit = ready && (!!brief.trim() || fromTable) && !table.loading;
 
@@ -83,7 +95,7 @@ export default function HomePage() {
       <TableChip state={table}/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
-          <AttachTableButton onPick={file => void table.attach(file, brief)}/>
+          <AttachTableButton onPick={file => void attachTable(file)}/>
           <button type="button" className={`picker-btn ${open === 'ds' ? 'open' : ''}`} aria-haspopup="listbox"
             aria-expanded={open === 'ds'} aria-label={`Дизайн-система: ${selectedDs?.name ?? ''}`}
             onClick={() => setOpen(v => v === 'ds' ? null : 'ds')}>

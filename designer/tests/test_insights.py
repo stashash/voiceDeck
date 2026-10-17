@@ -64,7 +64,7 @@ def test_xlsx_first_sheet_with_cached_formula_values():
     (b"a,b\n1,2\n", "x.csv", "две строки"),
     (b",b\n1,2\n3,4\n", "x.csv", "Шапка"),
     (b"a,b\n1,2\n3,4\n", "x.pdf", "xlsx или csv"),
-    (b"x" * (1024 * 1024 + 1), "x.csv", "1 МиБ"),
+    (b"x" * (1024 * 1024 + 1), "x.csv", "1 МБ"),
 ], ids=["one-row", "empty-header", "pdf", "too-big"])
 def test_bad_tables_say_what_to_fix(data, name, message):
     with pytest.raises(TableError, match=message):
@@ -92,14 +92,14 @@ def test_model_number_not_from_facts_is_dropped():
     facts = find_facts(table)
     grew = next(f for f in facts if f.kind == "rows_grew")
     answer = {"suggestions": [
-        {"fact_ids": [grew.id], "headline": "Выросли 3 из 5 регионов", "number": "3 из 5", "visual": "column",
+        {"fact_ids": [grew.id], "headline": "В Q4 выросли 3 из 5 регионов", "number": "3 из 5", "visual": "column",
          "why": "видно, где рост"},
         {"fact_ids": [grew.id], "headline": "Выручка выросла на 25 %", "number": "+25 %", "visual": "big_number",
          "why": "придуманное число"},
     ]}
     suggestions, note = suggest(table, facts, "итоги", "директора", _llm(answer))
     assert note == ""
-    assert suggestions[0].headline == "Выросли 3 из 5 регионов" and suggestions[0].by_model
+    assert suggestions[0].headline == "В Q4 выросли 3 из 5 регионов" and suggestions[0].by_model
     assert all("25" not in numbers_in(s.headline + " " + s.number) for s in suggestions)
     assert len(suggestions) >= 3  # добрано кандидатами кода
     assert not suggestions[-1].by_model
@@ -111,6 +111,63 @@ def test_model_failure_falls_back_to_code_facts():
     table = read_table(QUARTERS, "q.csv")
     suggestions, note = suggest(table, find_facts(table), "", "", LlmClient("http://test/v1", "m", transport=httpx.MockTransport(handler)))
     assert note and len(suggestions) == 3 and not any(s.by_model for s in suggestions)
+
+
+def test_model_headline_must_keep_period_sign_and_metric():
+    """Ред-тим 17.10: «за 2026 год» при сравнении кварталов, спад при росте, чужая метрика не проходят."""
+    table = read_table(QUARTERS, "q.csv")
+    facts = find_facts(table)
+    total = next(f for f in facts if f.kind == "change_total" and f.topic == "Выручка")
+    last = next(f for f in facts if f.kind == "change_last" and f.topic == "Клиенты")
+    answer = {"suggestions": [
+        {"fact_ids": [total.id], "headline": "Выручка выросла на 47,5 % за 2026 год", "number": "+47,5 %",
+         "visual": "line", "why": "рост на 99 % нужен совету"},
+        {"fact_ids": [last.id], "headline": "Клиентов в IV квартале на 22,5 % меньше", "number": "−22,5 %",
+         "visual": "column", "why": ""},
+        {"fact_ids": [last.id], "headline": "Выручка в IV квартале выросла на 22,5 %", "number": "+22,5 %",
+         "visual": "column", "why": ""},
+    ]}
+    suggestions, _ = suggest(table, facts, "", "", _llm(answer))
+    by_model = [s for s in suggestions if s.by_model]
+    # «За 2026 год» у сравнения кварталов чинится точным периодом, спад при росте и чужая метрика отбрасываются.
+    assert [s.headline for s in by_model] == ["Выручка выросла на 47,5 % с I кв 2026 по IV кв 2026"]
+    assert by_model[0].why == ""  # число в «зачем показывать» не из таблицы
+
+
+def test_newest_first_table_keeps_time_order():
+    reversed_quarters = ("Квартал;Выручка\nIV кв 2026;177\nIII кв 2026;150\nII кв 2026;135\nI кв 2026;120\n").encode()
+    facts = find_facts(read_table(reversed_quarters, "r.csv"))
+    change = next(f for f in facts if f.kind == "change_last")
+    assert change.numbers == ["+18 %", "150", "177"]
+    assert next(f for f in facts if f.kind == "growth_count").numbers == ["3", "3"]
+
+
+def test_year_column_is_a_label_not_a_metric():
+    years = "Год;Выручка\n2023;90\n2024;120\n2025;177\n".encode()
+    facts = find_facts(read_table(years, "y.csv"))
+    assert all(f.topic == "Выручка" for f in facts)
+    assert any("2024 → 2025" in f.statement for f in facts)
+
+
+def test_rows_keep_file_line_numbers_with_blank_lines():
+    table = read_table("Квартал;Выручка\n\nI кв 2026;120\n\nII кв 2026;135\n".encode(), "b.csv")
+    assert table.lines == [3, 5]
+
+
+def test_xlsx_errors_name_the_sheet():
+    from openpyxl import Workbook
+    book = Workbook()
+    book.active.title = "Обложка"
+    book.active.append(["Отчёт за год"])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    with pytest.raises(TableError, match="Лист «Обложка»"):
+        read_table(buffer.getvalue(), "book.xlsx")
+
+
+def test_broken_csv_quote_is_explained_in_russian():
+    with pytest.raises(TableError, match=r"Строка \d+: кавычка"):
+        read_table(b'a;b\n"1;2\n3;4\n', "q.csv")
 
 
 def test_rejected_key_falls_back_with_reason():
@@ -168,7 +225,7 @@ def test_insight_slide_keeps_model_reading_out_of_slide_text():
     table = read_table(QUARTERS, "q.csv")
     facts = find_facts(table)
     share = next(f for f in facts if f.kind == "change_last" and f.statement.startswith("Доля"))
-    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна выросла до 40,1 %", "number": "40,1 %",
+    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна в IV квартале выросла до 40,1 %", "number": "40,1 %",
                                "visual": "big_number", "why": "свидетельствует о росте лояльности"}]}
     suggestions, _ = suggest(table, facts, "", "", _llm(answer))
     plan = DeckPlan(title="t", purpose="p", slides=[SlideIntent(id="", kind=SlideKind.title, title="t")])

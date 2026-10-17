@@ -368,7 +368,12 @@ p{margin:0}
 .insights-note{margin:0;font-size:13px;color:var(--text-muted)}
 .insights-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .insight-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;background:var(--surface);border:1px solid var(--border);cursor:pointer}
-.insight-row input{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0}
+.insight-row input{width:18px;height:18px;accent-color:var(--accent);color-scheme:dark;flex-shrink:0}
 .insight-visual{display:flex;color:var(--text-muted);flex-shrink:0}
 .insight-headline{flex:1;font-size:14px;line-height:1.4}
-.insight-number{font-size:16px;font-weight:600;color:var(--accent);white-space:nowrap;cursor:help}
+.insight-number{position:relative;font-size:16px;font-weight:600;color:var(--text);white-space:nowrap;cursor:help}
+.insight-source{display:none;position:absolute;right:0;top:calc(100% + 8px);width:360px;padding:10px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.45);font-size:12px;font-weight:400;line-height:1.45;color:var(--text);white-space:normal;text-align:left;z-index:30}
+.insight-number:hover .insight-source,.insight-number:focus .insight-source{display:block}
+.insight-row.off .insight-headline,.insight-row.off .insight-number,.insight-row.off .insight-visual{opacity:.5}
+.insight-row:focus-within{outline:none}
+.insight-row:has(:focus-visible){outline:2px solid var(--accent);outline-offset:2px}

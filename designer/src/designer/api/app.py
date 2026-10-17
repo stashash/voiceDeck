@@ -244,23 +244,30 @@ def list_decks() -> DeckListResponse:
 
 @app.post("/insights", response_model=InsightsResponse)
 async def table_insights(file: UploadFile = File(...), brief: str = Form(""), audience: str = Form(""),
+                         use_model: bool = Form(True),
                          client: LlmClient = Depends(get_llm_client)) -> InsightsResponse:
-    """Таблица автора -> подсказки, что из неё показать. Числа считает код, модель выбирает и формулирует."""
+    """Таблица автора -> подсказки, что из неё показать. Числа считает код, модель выбирает и формулирует.
+
+    use_model=false: автор остановил долгий ответ модели, подсказки сразу формулирует код.
+    """
     data = await file.read(insights_table.MAX_BYTES + 1)
     try:
         table = insights_table.read_table(data, file.filename or "")
         facts = insights_facts.find_facts(table)
         if not facts:
-            raise insights_table.TableError("В таблице не нашлось числовых столбцов, по которым можно сделать вывод")
-        suggestions, note = await run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience, client)
+            raise insights_table.TableError("В таблице нет столбца с числами: нужен столбец, где числа стоят хотя бы в двух строках.")
+        suggestions, note = await run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience,
+                                                    client if use_model else None)
+        if not use_model:
+            note = "Модель остановлена, выводы сформулировал код"
     except insights_table.TableError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:
         _close(client)
-    result = {"table_name": table.name, "rows": len(table.rows), "columns": len(table.headers),
+    result = {"table_name": table.name, "sheet": table.sheet, "rows": len(table.rows), "columns": len(table.headers),
               "suggestions": [s.model_dump(mode="json") for s in suggestions], "note": note}
     insights_id = store.save_insights(result)
-    return InsightsResponse(id=insights_id, table_name=table.name, rows=len(table.rows), columns=len(table.headers),
+    return InsightsResponse(id=insights_id, table_name=table.name, sheet=table.sheet, rows=len(table.rows), columns=len(table.headers),
                             suggestions=[InsightView(**s.model_dump(include=set(InsightView.model_fields)))
                                          for s in suggestions], note=note)
 

@@ -172,13 +172,14 @@ export type InsightView = {
   source: string; formula: string; by_model: boolean;
 };
 export type InsightsResponse = {
-  id: string; table_name: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
+  id: string; table_name: string; sheet: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
 };
 
-export function tableInsights(file: File, brief: string, signal?: AbortSignal): Promise<InsightsResponse> {
+export function tableInsights(file: File, brief: string, signal?: AbortSignal, useModel = true): Promise<InsightsResponse> {
   const form = new FormData();
   form.append('file', file);
   form.append('brief', brief);
+  form.append('use_model', String(useModel));
   return fetch(url('/insights'), { method: 'POST', body: form, signal }).then(r => uploadResponse<InsightsResponse>(r));
 }
 

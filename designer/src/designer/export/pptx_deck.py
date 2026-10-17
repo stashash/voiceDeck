@@ -473,6 +473,10 @@ def _replace_picture(slide, item: _Placed, name: str) -> None:
             ext.getparent().remove(ext)
 
 
+TOP_CROP_SHARE = 0.3
+"""Доля вертикальной обрезки картинки слайда, которая приходится на верх кадра."""
+
+
 def _cover_crop(data: bytes, box: Box, slide_size: tuple[int, int]) -> tuple[int, int, int, int]:
     """Обрезка srcRect (l, t, r, b в стотысячных), с которой картинка заполняет рамку без искажения."""
     with Image.open(io.BytesIO(data)) as image:
@@ -482,8 +486,9 @@ def _cover_crop(data: bytes, box: Box, slide_size: tuple[int, int]) -> tuple[int
     if picture > frame:
         side = int(round((1 - frame / picture) / 2 * 100000))
         return side, 0, side, 0
-    side = int(round((1 - picture / frame) / 2 * 100000))
-    return 0, side, 0, side
+    # По высоте режется больше снизу: у людей в кадре голова сверху, центр срезал бы макушки.
+    cut = (1 - picture / frame) * 100000
+    return 0, int(round(cut * TOP_CROP_SHARE)), 0, int(round(cut * (1 - TOP_CROP_SHARE)))
 
 
 def _fill_image(slide, placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:

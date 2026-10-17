@@ -50,7 +50,7 @@ from designer.images.engine import ComfyEngine, ImageEngineError
 from designer.images.illustrate import SKILL as _ILLUSTRATE_SKILL
 from designer.images.illustrate import illustrate
 from designer.insights.suggest import SKILL as _SUGGEST_SKILL
-from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides
+from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides, is_insight_slide, numbers_in
 from designer.llm.client import LlmClient
 from designer.llm.run import RunRecorder
 from designer.llm.skills import load_skill
@@ -671,6 +671,9 @@ def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_ev
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
             # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.
             filled.items = list(intent.items)
+        if is_insight_slide(intent) and numbers_in(filled.title) != numbers_in(intent.title):
+            # Заголовок вывода из таблицы сверен с расчётом: подгонка не вправе менять в нём числа.
+            filled.title = intent.title
         return filled
     except Exception:
         _emit(on_event, "slide-fallback", index, variant)

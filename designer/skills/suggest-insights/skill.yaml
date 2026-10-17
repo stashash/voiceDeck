@@ -1,5 +1,5 @@
 name: suggest-insights
-version: "2"
+version: "3"
 temperature: 0.2
 max_tokens: 2500
 reasoning_effort: none

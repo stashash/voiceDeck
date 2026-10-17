@@ -38,6 +38,7 @@ class InsightView(BaseModel):
 class InsightsResponse(BaseModel):
     id: str
     table_name: str
+    sheet: str = Field(default="", description="лист xlsx, с которого прочитана таблица")
     rows: int
     columns: int
     suggestions: list[InsightView]

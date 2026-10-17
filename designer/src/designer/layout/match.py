@@ -364,6 +364,13 @@ def score_pattern(
 HERO_MIN = 0.12
 """Доля слайда, с которой фото образца это главная картинка слайда, а не значок или логотип."""
 
+HERO_TEXT_OVERLAP = 0.05
+"""Доля текстового места (меньшей из двух рамок), которую может закрыть фото образца."""
+
+_PHOTO_KINDS = (SlideKind.image_text, SlideKind.section, SlideKind.title, SlideKind.quote, SlideKind.cta)
+"""Образцы, где крупная картинка это фото. У диаграммы и таблицы в шаблоне картинка-образец графика,
+и фото на её месте читалось бы как подмена данных (прогон 17.10: список встал на образец диаграммы)."""
+
 
 def hero_area(pattern: Pattern) -> Area | None:
     """Главное фото образца, которое можно заменить картинкой слайда.
@@ -371,7 +378,7 @@ def hero_area(pattern: Pattern) -> Area | None:
     Годится образец ровно с одним крупным фото и без фото в блоках: второе крупное фото
     (экран телефона в рамке, вторая колонка скриншотов) осталось бы на слайде чужим.
     """
-    if any(a.kind == "image" for g in pattern.groups for a in g.unit_areas):
+    if pattern.kind not in _PHOTO_KINDS or any(a.kind == "image" for g in pattern.groups for a in g.unit_areas):
         return None
     big = [a for a in pattern.areas if a.kind == "image" and geo.area(a.box) >= HERO_MIN]
     return big[0] if len(big) == 1 else None
@@ -381,6 +388,9 @@ def _fits_with_image(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) ->
     """Годится ли образец под слайд со своей картинкой: фото образца заменяется, остальное как у fits."""
     hero = hero_area(pattern)
     if hero is None or ds.pattern_overrides.get(pattern.id) is False:
+        return False
+    # Текстовое место, которое заходит на фото, уходит под картинку (прогон 17.10: заголовок под фото WorkSpace).
+    if any(geo.overlap(slot.box, hero.box) > HERO_TEXT_OVERLAP for slot in pattern.slots):
         return False
     # Образец «держится на фото» ровно потому, что у него есть фото: картинка слайда его заменит.
     bare = pattern.model_copy(update={"needs_images": False, "areas": [a for a in pattern.areas if a.id != hero.id]})

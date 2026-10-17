@@ -26,7 +26,7 @@ Visual = Literal["column", "bar", "line", "pie", "table", "big_number"]
 _PERIOD_KINDS = ("change_last", "change_total", "growth_count")
 _FALLBACK_ORDER = ("change_last", "rows_grew", "share_top", "total_change", "leader_gap",
                    "change_total", "fastest_row", "growth_count")
-_NUM = re.compile(r"\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?")
+_NUM = re.compile(r"(?<![\d.,])\d{1,3}(?:[ \u00a0\u202f]\d{3}(?!\d))+(?:[.,]\d+)?|\d+(?:[.,]\d+)?")
 
 
 class _Pick(BaseModel):
@@ -85,27 +85,42 @@ def suggest(table: Table, facts: list[Fact], brief: str, audience: str,
                                         schema=_Answer.model_json_schema(), params=skill.params)
             picked = _checked(_Answer.model_validate(data), by_id)
         except (LlmResponseError, ModelLoading, ValueError, httpx.HTTPError) as exc:
-            note = f"Модель не ответила: {_reason(exc)}. Выводы сформулировал код"
-    used = {fact_id for suggestion in picked for fact_id in suggestion.fact_ids}
-    for kind in _FALLBACK_ORDER:
-        if len(picked) >= MIN_SUGGESTIONS:
-            break
-        for fact in facts:
-            if fact.kind == kind and fact.id not in used:
-                picked.append(_from_fact(fact))
-                used.add(fact.id)
-                break
+            note = f"{_reason(exc)} Выводы посчитал и сформулировал код."
+    picked += _fallback(facts, picked)
     for index, suggestion in enumerate(picked[:MAX_SUGGESTIONS], start=1):
         suggestion.id = f"s{index}"
     return picked[:MAX_SUGGESTIONS], note
 
 
+def _fallback(facts: list[Fact], picked: list[Suggestion]) -> list[Suggestion]:
+    """Добор до трёх подсказок кандидатами кода: сначала по разным темам таблицы, потом любые.
+
+    Без этого все три подсказки запасного пути были про первую метрику («Выручка»), а остальные
+    столбцы таблицы человек не видел (ред-тим 17.10, первый пользователь).
+    """
+    used = {fact_id for suggestion in picked for fact_id in suggestion.fact_ids}
+    topics = {fact.topic for fact in facts if fact.id in used}
+    extra: list[Suggestion] = []
+    order = {kind: index for index, kind in enumerate(_FALLBACK_ORDER)}
+    ranked = sorted((f for f in facts if f.kind in order), key=lambda f: order[f.kind])
+    for fresh_topic_only in (True, False):
+        for fact in ranked:
+            if len(picked) + len(extra) >= MIN_SUGGESTIONS:
+                return extra
+            if fact.id in used or (fresh_topic_only and fact.topic in topics):
+                continue
+            extra.append(_from_fact(fact))
+            used.add(fact.id)
+            topics.add(fact.topic)
+    return extra
+
+
 def _reason(exc: Exception) -> str:
-    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
-        return "сервер модели не принял ключ или Project-ID"
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403, 404):
+        return "Модель недоступна: сервер модели не принял ключ."
     if isinstance(exc, (httpx.HTTPError, ModelLoading)):
-        return "нет связи с сервером модели"
-    return "ответ не по схеме"
+        return "Модель недоступна: нет связи с сервером модели."
+    return "Модель ответила не по формату."
 
 
 def _material(table: Table, facts: list[Fact]) -> str:
@@ -134,15 +149,88 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
             continue
         if not pick.headline.strip() or not pick.number.strip():
             continue
-        seen.add(key)
         main = facts[0]
+        headline = _exact_period(pick.headline.strip(), main)
+        if not (_names_topic(headline, main) and _names_period(headline, main)
+                and _same_direction(headline + " " + pick.number, main)):
+            continue
+        seen.add(key)
+        # «Зачем показывать» идёт в тултип и заметки: число в нём проходит ту же сверку, иначе поле пустое.
+        why = pick.why.strip() if not numbers_in(pick.why) - allowed else ""
+        # Справа в строке и крупно на слайде стоит главное число расчёта (изменение со знаком), а не уровень:
+        # у вывода «отток снизился на 1,3 п. п.» модель ставила «5,1 %» (ред-тим 17.10).
+        number = pick.number.strip()
+        if main.big_number and not numbers_in(number) & numbers_in(main.big_number):
+            number = main.big_number
         result.append(Suggestion(
-            id="", headline=pick.headline.strip(), number=pick.number.strip(), visual=_visual(pick.visual, main),
-            why=pick.why.strip(), fact_ids=[fact.id for fact in facts], statement=main.statement, topic=main.topic,
+            id="", headline=headline, number=number, visual=_visual(pick.visual, main),
+            why=why, fact_ids=[fact.id for fact in facts], statement=main.statement, topic=main.topic,
             source="; ".join(f.source for f in facts),
             formula="; ".join(f.formula for f in facts), chart=main.chart, table=main.table,
             data_lines=[line for fact in facts for line in fact.data_lines], by_model=True))
     return result
+
+
+_STEM = 4
+_UP = re.compile(r"\b(вырос|выросл|рост|увелич|прибав|подня|ускор|больше)", re.I)
+_DOWN = re.compile(r"\b(снизи|сниже|сократ|упал|упа|уменьш|паден|спад|меньше|потер)", re.I)
+_YEARLY = re.compile(r"\b(за|в)\s+(19|20)\d{2}\s*(год\w*|г\.)|\bза\s+год\b|\bгодов\w*", re.I)
+
+
+def _stems(text: str) -> set[str]:
+    return {word.lower()[:_STEM] for word in re.findall(r"[а-яёa-z]{4,}", text, re.I)}
+
+
+def _names_topic(headline: str, fact: Fact) -> bool:
+    """Вывод называет показатель кандидата: «Новых клиентов…» для столбца «Новые клиенты» проходит."""
+    topic = _stems(fact.topic)
+    return not topic or bool(topic & _stems(headline))
+
+
+def _period_marks(label: str) -> set[str]:
+    """Отличительные слова подписи периода: «IV кв 2026» -> {«iv»}, «Октябрь 2026» -> {«октя»}."""
+    marks = {word.lower() for word in re.findall(r"\b(?:I{1,3}V?|IV|Q[1-4]|H[12]|[1-4])\b", label)}
+    marks |= {word.lower()[:_STEM] for word in re.findall(r"[а-яё]{3,}", label, re.I)} - {"квар", "кв", "полу"}
+    return marks
+
+
+def _names_period(headline: str, fact: Fact) -> bool:
+    """Сравнение кварталов не называется годовым: вывод упоминает последний период кандидата.
+
+    Ред-тим 17.10: «Выручка выросла на 47,5 % за 2026 год» при сравнении I и IV кварталов совет
+    директоров прочтёт как годовой рост. Подписи из одних годов («2025 → 2026») годовые сами.
+    """
+    if not fact.periods:
+        return True
+    last = _period_marks(fact.periods[-1])
+    if not last:
+        return True
+    words = {w.lower() for w in re.findall(r"\b(?:I{1,3}V?|IV|Q[1-4]|H[12]|[1-4])\b", headline)}
+    words |= {w.lower()[:_STEM] for w in re.findall(r"[а-яё]{3,}", headline, re.I)}
+    return bool(last & words) and not _YEARLY.search(headline)
+
+
+def _exact_period(headline: str, fact: Fact) -> str:
+    """«…за 2026 год» у сравнения кварталов меняется на точный период кандидата, остальная фраза модели остаётся.
+
+    Прогон 17.10 на Qwen3.8-27B: модель писала «за 2026 год» у сравнения I и IV кварталов и после правила
+    в скилле. Отказ отбрасывал хорошую формулировку, правка оборота сохраняет её и делает точной.
+    """
+    if not fact.periods or _names_period(headline, fact) or not _YEARLY.search(headline):
+        return headline
+    first, last = fact.periods[0], fact.periods[-1]
+    exact = f"с {first} по {last}" if fact.kind == "change_total" else f"{first} → {last}"
+    return _YEARLY.sub(exact, headline, count=1)
+
+
+def _same_direction(text: str, fact: Fact) -> bool:
+    """Знак изменения в выводе совпадает с расчётом: «снизилась на 18 %» при «+18 %» не проходит."""
+    if not fact.numbers or fact.numbers[0][:1] not in "+−":
+        return True
+    up = fact.numbers[0].startswith("+")
+    if up and (_DOWN.search(text) or "−" in text or re.search(r"(?<!\d)-\s?\d", text)):
+        return False
+    return not (not up and (_UP.search(text) or "+" in text))
 
 
 def _visual(wanted: str, fact: Fact) -> str:
@@ -168,13 +256,21 @@ def _from_fact(fact: Fact) -> Suggestion:
                       chart=fact.chart, table=fact.table, data_lines=fact.data_lines, by_model=False)
 
 
+INSIGHT_NOTES = "Источник:"
+"""Начало заметок слайда вывода из таблицы: по нему конвейер узнаёт такой слайд после плана."""
+
+
+def is_insight_slide(intent: SlideIntent) -> bool:
+    return intent.notes.startswith(INSIGHT_NOTES)
+
+
 def insight_slide(suggestion: Suggestion) -> SlideIntent:
     """Слайд подсказки: вывод в заголовке, под ним формулировка кода, данные таблицы как есть.
 
     Толкование модели (why) идёт только в заметки докладчика: причин изменения в таблице нет,
     и подгонка текста под макет не должна вписать его в заголовок как факт.
     """
-    notes = f"Источник: {suggestion.source}. Расчёт: {suggestion.formula}."
+    notes = f"{INSIGHT_NOTES} {suggestion.source}. Расчёт: {suggestion.formula}."
     if suggestion.why:
         notes += f" Зачем показывать: {suggestion.why}"
     statement = suggestion.statement or suggestion.headline
