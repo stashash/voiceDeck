@@ -20,3 +20,26 @@
 .full-editor .component-editor{grid-template-columns:minmax(0,1fr) 240px;align-items:start;gap:12px}.full-editor .canvas-component.selected{z-index:auto;outline-color:#146b62}.full-editor .voice-number{min-width:22px;height:22px;padding:0 3px;border-radius:4px;font-size:12px;transform:translateY(-100%)}.full-editor .voice-number[aria-pressed=true],.full-editor .resize-handle{background:#146b62}
 @media(max-width:1050px){.full-editor .component-editor{grid-template-columns:minmax(0,1fr)}.full-editor .component-properties{border-left:0;border-top:1px solid var(--border,#ccc)}.editor-document-bar>select{max-width:180px}}
 @media(max-width:600px){.full-editor .voice-number{min-width:14px;height:14px;border-width:1px;font-size:9px}.full-editor .component-toolbar{gap:5px}}
+.meaning-panel { margin: 16px 0; padding: 16px; border: 1px solid #827e90; border-radius: 12px; }
+.meaning-panel label { display: block; margin: 10px 0; }
+.meaning-panel textarea { display: block; width: 100%; min-height: 70px; box-sizing: border-box; font: inherit; color: inherit; background: transparent; }
+.meaning-panel fieldset { margin: 12px 0; border: 1px solid #827e90; }
+.deck-meaning{padding:18px;margin:0;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:12px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface))}
+.deck-meaning-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.deck-meaning-head h3{margin:4px 0 0;font-size:18px;line-height:1.25}
+.deck-meaning-kicker{font-size:10px;font-weight:700;letter-spacing:.13em;color:var(--accent)}
+.deck-meaning-toggle{border:0;background:transparent;color:var(--text-muted);font:inherit;font-size:12px;text-decoration:underline;cursor:pointer}
+.deck-meaning-steps{display:grid;gap:7px;margin:14px 0;padding:0;list-style:none;counter-reset:meaning-step}
+.deck-meaning-steps li{counter-increment:meaning-step;display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.4;color:var(--text)}
+.deck-meaning-steps li:before{content:counter(meaning-step);display:grid;place-items:center;flex:0 0 22px;width:22px;height:22px;border-radius:50%;background:color-mix(in srgb,var(--accent) 17%,var(--surface));color:var(--accent);font-weight:700}
+.deck-meaning-context,.deck-meaning-target{font-size:12px;line-height:1.5;color:var(--text-muted)}
+.deck-meaning-target{padding:10px 12px;border-left:3px solid var(--accent);border-radius:0 7px 7px 0;background:color-mix(in srgb,var(--accent) 9%,var(--surface));color:var(--text)}
+.deck-meaning textarea,.deck-meaning input{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface-2);color:var(--text);font:inherit;line-height:1.45}
+.deck-meaning textarea{min-height:82px;resize:vertical}
+.deck-meaning form label,.deck-meaning>div>div>label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}
+.deck-meaning .chip-row{margin-top:8px}
+.deck-meaning fieldset{min-width:0;margin:12px 0;padding:10px;border:1px solid var(--border);border-radius:8px}
+.deck-meaning legend{padding:0 5px;font-size:12px;font-weight:700}
+.deck-meaning [aria-label="Предпросмотр смыслового черновика"]{display:grid;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.deck-meaning [role="alert"]{overflow-wrap:anywhere;color:var(--danger)}
+@media(max-width:600px){.deck-meaning{padding:14px}.deck-meaning-head h3{font-size:16px}.deck-meaning-steps{gap:6px}}

@@ -12,6 +12,15 @@ import java.util.concurrent.*;
 
 public final class Main {
     static String env(String key,String fallback){String value=System.getenv(key);return value==null||value.isBlank()?fallback:value;}
+    static boolean allowedOrigin(String origin,Set<String> allowed,String requestScheme,String requestHost){
+        if(origin==null||allowed.contains(origin))return true;
+        try{
+            var candidate=java.net.URI.create(origin);var request=java.net.URI.create(requestScheme+"://"+requestHost);
+            if(candidate.getHost()==null||candidate.getUserInfo()!=null||candidate.getRawPath()!=null&&!candidate.getRawPath().isEmpty()||candidate.getQuery()!=null||candidate.getFragment()!=null)return false;
+            return candidate.getScheme().equalsIgnoreCase(request.getScheme())&&candidate.getHost().equalsIgnoreCase(request.getHost())&&effectivePort(candidate)==effectivePort(request);
+        }catch(IllegalArgumentException e){return false;}
+    }
+    private static int effectivePort(java.net.URI uri){if(uri.getPort()!=-1)return uri.getPort();return "https".equalsIgnoreCase(uri.getScheme())?443:80;}
     private static String hash(String token){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
     /** Live без весов распознавания речи не падает: сервис поднимается без микрофона и пишет, что скачать. */
     static Models loadModels(boolean live)throws Exception {
@@ -30,10 +39,11 @@ public final class Main {
         Set<String> origins=new HashSet<>(List.of(allowedOrigin,allowedOrigin.replace("localhost","127.0.0.1")));
         // Страницы «Колода», «Шаблон» и «Сцена» ходят из браузера в сервис designer: его адрес разрешён для запросов и картинок слайдов.
         String designerPublic=env("DESIGNER_PUBLIC_URL","http://localhost:8090");
+        String designerLocal="http://localhost:8090 http://127.0.0.1:8090";
         router.route().handler(ctx->{
-            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerPublic+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org "+designerPublic+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
+            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerPublic+" "+designerLocal+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org "+designerPublic+" "+designerLocal+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
             String origin=ctx.request().getHeader("Origin");
-            if(origin!=null&&!origins.contains(origin)){ctx.response().setStatusCode(403).end("Origin not allowed");return;}ctx.next();
+            if(!allowedOrigin(origin,origins,ctx.request().scheme(),ctx.request().host())){ctx.response().setStatusCode(403).end("Origin not allowed");return;}ctx.next();
         });
         router.get("/health").handler(ctx->ctx.json(new JsonObject().put("status","ready").put("mode",live?"live":"demo").put("asr",live?"sherpa-onnx":"not-loaded").put("embeddings",models.embeddingStatus()).put("storage",store.durable()?"postgres":"memory-volatile").put("audio_stored",false)));
         router.get("/metrics").handler(ctx->ctx.response().putHeader("Content-Type","text/plain; version=0.0.4").end(Metrics.prometheus()));

@@ -1,0 +1,20 @@
+# Refresh browser assets while keeping the deployed Java backend unchanged.
+# docker tag <running-app-image> voicedeck-app:ui-base
+# docker build -f Dockerfile.ui -t voicedeck-app .
+ARG APP_BASE=voicedeck-app:ui-base
+FROM node:22-bookworm-slim AS frontend
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+ARG VITE_DESIGNER_URL=/designer
+ENV VITE_DESIGNER_URL=${VITE_DESIGNER_URL}
+RUN npm run build
+FROM ${APP_BASE} AS deployed
+FROM maven:3.9.9-eclipse-temurin-21 AS assets
+WORKDIR /work
+COPY --from=deployed /app/app.jar ./app.jar
+COPY --from=frontend /app/dist ./webroot
+RUN jar uf app.jar -C /work webroot
+FROM deployed
+COPY --from=assets /work/app.jar /app/app.jar

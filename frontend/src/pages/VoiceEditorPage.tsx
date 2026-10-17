@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {VoiceEditor} from '../stage/voiceEditor';
 import {EditorCanvas} from '../stage/EditorCanvas';
+import {MeaningPanel} from '../stage/MeaningPanel';
 import {downloadDeck} from '../stage/editorExport';
 import {Microphone,Transport} from '../transport';
 import {channelName} from '../stage/useSession';
@@ -29,6 +30,7 @@ export default function VoiceEditorPage(){
  <div className="component-toolbar">{editor.document.pages.map((p,i)=><button key={p.id} className="button" aria-pressed={i===editor.document.index} onClick={()=>edit(()=>{editor.document.index=i;editor.document.selected=null;})}>Слайд {i+1}</button>)}<button className="button" onClick={()=>edit(()=>editor.command('новый слайд'))}>+ Слайд</button></div>
  <div className="component-toolbar"><button className="button" onClick={()=>{editor.publish();refresh();window.open(`#/audience/${audienceId}`,'_blank');}}>Открыть экран зала</button><button className="button" aria-pressed={showing.current} onClick={()=>{showing.current=!showing.current;editor.cancel();refresh();}}>{showing.current?'Показываю: голосовые правки отключены':'Перейти к показу'}</button></div>
  <EditorCanvas editor={editor} edit={edit}/>
+ <MeaningPanel editor={editor} refresh={refresh}/>
  <form onSubmit={e=>{e.preventDefault();if(text.trim()){execute(text);setText('');}}} style={{display:'flex',gap:12,marginTop:16}}><input aria-label="Голосовая команда текстом" style={{flex:1}} value={text} onChange={e=>setText(e.target.value)} placeholder="Добавь заголовок План запуска"/><button className="button" type="submit">Выполнить</button></form>
  <p aria-live="polite">{partial||editor.notice}{editor.thinking?' · Обрабатываю запрос…':''}</p>
  <div className="component-toolbar">{editor.imageResults.map((item,i)=><button className="button" key={item.url} onClick={()=>edit(()=>editor.pickImage(i+1))}><img src={item.url} alt={item.title} style={{width:140,height:90,objectFit:'cover'}}/>{i+1}. {item.title}</button>)}</div>

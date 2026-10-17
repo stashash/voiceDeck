@@ -15,6 +15,12 @@ from designer.editor_model import editor_model
 
 router = APIRouter(prefix='/editor')
 
+from designer.meaning import MeaningRequest, expand_meaning
+
+@router.post('/meaning/expand')
+async def meaning_expand(payload: MeaningRequest):
+    return await expand_meaning(payload)
+
 class IntentRequest(BaseModel):
     request_id: str = Field(default_factory=lambda: str(uuid4()), pattern=r'^[A-Za-z0-9_-]{1,80}$')
     instruction: str = Field(min_length=1, max_length=3000)

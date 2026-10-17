@@ -7,6 +7,7 @@ import {editorRequest,EditorServiceError} from './editorRequest';
 import {prepareEditorModel} from './editorModel';
 import {contextPages} from './editorContext';
 import {parseTextVoice} from './textVoice';
+import {MeaningExpansion,meaningCommand} from './meaningExpansion';
 
 export type Component={voiceNumber?:number;id:string;kind:'title'|'text'|'image'|'card'|'shape'|'table'|'chart';text:string;size:number;color:string;side:'left'|'right';url?:string;x:number;y:number;width:number;height:number;fill:string;font?:string;attribution?:string;bold?:boolean;italic?:boolean;locked?:boolean;align?:'left'|'center'|'right';rotation?:number;opacity?:number;radius?:number;borderColor?:string;borderWidth?:number;fit?:'contain'|'cover';rows?:string[][];labels?:string[];values?:number[];group?:string;sourceShapeId?:number};
 export type Page={nextVoiceNumber?:number;id:string;components:Component[];background:string;notes?:string;backgroundUrl?:string};
@@ -17,6 +18,7 @@ const colors:Record<string,string>={'красный':'#dc2626','синий':'#25
 
 /** Deterministic commands operate only on final utterances; every edit is reversible. */
 export class VoiceEditor{
+ meaning=new MeaningExpansion(this);
  showNumbers=true;
  lastMove?:{ids:string[];dx:number;dy:number;snapshot:string};
  mode:'control'|'dictation'='control';
@@ -43,6 +45,7 @@ export class VoiceEditor{
   this.notice='Текст заменён';
  }
  cancel(){
+  this.meaning.cancel();
   this.pendingText=undefined;
   this.requestVersion++;this.active?.abort();this.active=undefined;this.thinking=false;
   if(this.activeRequest)void editorRequest('intent/'+this.activeRequest+'/cancel',{}, {timeout:2000}).catch(()=>{});
@@ -66,6 +69,8 @@ export class VoiceEditor{
   if(/^диктуй|^диктую|^режим диктовки/i.test(c)){this.mode='dictation';this.notice='Диктовка в выбранный компонент';changed();return;}
   if(/^запиши в заголовок\s+/i.test(c)){this.command(c.replace(/^запиши в заголовок/i,'заголовок'));this.save();changed();return;}
   if(this.mode==='dictation'&&!/^команда/i.test(raw)){if(this.selected?.locked){this.notice='Объект заблокирован';changed();return;}this.checkpoint();if(this.selected&&['text','title','card'].includes(this.selected.kind))this.selected.text+=(this.selected.text?' ':'')+raw;else this.add('text',raw);this.notice='Текст записан';this.save();changed();return;}
+  const expansion=meaningCommand(raw);
+  if(expansion!==undefined){await this.meaning.request(expansion||'Объясни главную мысль и её значение',changed);return;}
   this.ensureNumbers();
   const textAction=parseTextVoice(raw);
   if(textAction){

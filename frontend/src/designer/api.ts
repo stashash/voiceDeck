@@ -1,10 +1,9 @@
 import {request as fetch} from './request';
+import {DESIGNER_BASE_URL} from './baseUrl';
 // Клиент сервиса designer. Пути и схеммы сверены с api/app.py и api/schemas.py, contracts.py.
 // import.meta.env типизирован через vite/client, которого в проекте нет: берём мягкой приведением типа.
-const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
-// Пустая строка — осознанный выбор (адрес того же источника, что и приложение; см. vite.config.ts proxy
-// для /design-systems, /decks, /agents, /settings/agents), поэтому проверяем undefined, а не пустоту.
-export const BASE_URL = env.VITE_DESIGNER_URL !== undefined ? env.VITE_DESIGNER_URL : 'http://localhost:8090';
+// Адрес сервиса адаптируется к локальному запуску и публичному reverse proxy.
+export const BASE_URL = DESIGNER_BASE_URL;
 
 export type Box = [number, number, number, number];
 

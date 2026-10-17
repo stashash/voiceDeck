@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Mic,MicOff,Square,Undo2,Redo2,Download,Save,Plus,Monitor,RefreshCw,Upload,Copy} from 'lucide-react';
 import {VoiceEditor,Document} from '../stage/voiceEditor';
 import {EditorCanvas} from '../stage/EditorCanvas';
+import {MeaningPanel} from '../stage/MeaningPanel';
 import {downloadDeck} from '../stage/editorExport';
 import {useVoiceInput} from '../stage/useVoiceInput';
 import {EditorPersistence,openDocument,Draft} from '../stage/editorPersistence';
@@ -126,6 +127,7 @@ export default function FullEditorPage({source}:{source?:{deckId:string;variant:
    <p aria-live="polite">{voice.partial||editor.notice}</p>
    {editor.waitingForText&&<button className="button" aria-label="Отменить ввод текста" onClick={()=>edit(()=>editor.cancelText())}><Square size={16}/>Отменить ввод текста</button>}
    <EditorCanvas editor={editor} edit={edit}/>
+   <MeaningPanel editor={editor} refresh={refresh}/>
    <form className="editor-command" onSubmit={e=>{e.preventDefault();if(text.trim()){execute(text);setText('');}}}><input aria-label="Голосовая команда текстом" value={text} onChange={e=>setText(e.target.value)} placeholder="Команда"/><button className="button" type="submit">Выполнить</button></form>
    {model&&<p role="status">{model.state==='ready'?`Модель готова: ${model.model}`:model.state==='error'?model.message:`Загрузка модели: ${model.model}`}</p>}
    <div className="component-toolbar">{editor.imageResults.map((item,i)=><button className="button editor-image-choice" key={item.url} onClick={()=>edit(()=>editor.pickImage(i+1))}><img src={mediaUrl(item.url)} alt={item.title}/>{i+1}. {item.title}</button>)}</div>

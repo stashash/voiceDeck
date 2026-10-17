@@ -19,6 +19,8 @@ import {
   getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation, commitVoiceBatch,
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
+import {DeckMeaningPanel,type DeckMeaningPanelHandle} from '../stage/DeckMeaningPanel';
+import {routeDeckMeaningCommand,meaningInstructionHint} from '../stage/deckMeaning';
 
 const selectable=deckSelectable;
 
@@ -72,6 +74,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   const [confirmDelete,setConfirmDelete]=useState<DeleteConfirmation|null>(null);
   const [thinking,setThinking]=useState(false);
   const modelJob=useRef<{id:string;controller:AbortController}|null>(null);
+  const meaningPanel=useRef<DeckMeaningPanelHandle>(null);
   function cancelModel(){const job=modelJob.current;if(!job)return;modelJob.current=null;job.controller.abort();setThinking(false);void editorRequest(`intent/${job.id}/cancel`,{}, {timeout:2000}).catch(()=>{});}
 
   useEffect(() => {let cancelled=false;setState(null);getDeckState(deckId).then(next=>{if(!cancelled)setState(next);}).catch(e=>{if(!cancelled)setError(String(e));});return()=>{cancelled=true;};}, [deckId]);
@@ -225,6 +228,11 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       }
       if(/^(нет|отмена|стоп)[.!]?$/i.test(raw.trim()))return;
     }
+    if(routeDeckMeaningCommand(raw,instruction=>{
+      if(busy||operation.current||thinking||recovering||needsRecovery||editingEl!==null||notesDraft!==planNotes||selectedIds.length>1){setVoiceNotice('Завершите текущую правку или команду перед раскрытием смысла.');return;}
+      meaningPanel.current?.preview(instruction);
+      setVoiceNotice(instruction?'Готовлю смысловой черновик. Применение — только кнопкой в панели.':meaningInstructionHint);
+    }))return;
     const selection=resolveVoiceSelection(raw,scene,selectedIds);
     if(selection){
       cancelModel();lastMove.current=null;
@@ -413,6 +421,12 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
               onClick={() => {manualChange();applyVoiceResult({confirmDelete:index+1});}}><Trash2 size={20} strokeWidth={1.5}/></button>
           </div>
         </div>
+        {active&&<DeckMeaningPanel
+          ref={meaningPanel}
+          context={{deckId,variant,active,index,selectedId:activeEl,unsaved:JSON.stringify({notesDraft,editingEl,draftText,selectedIds})}}
+          disabled={busy||pending>0||thinking||needsRecovery||recovering||waitingText||editingEl!==null||notesDraft!==planNotes||selectedIds.length>1}
+          onApply={prepare=>guard(()=>commitDeckDictation(deckId,variant,index+1,prepare()))}
+        />}
         <div>
           <div className="panel-section-head"><h3>Образец</h3></div>
           <div className="pattern-grid">
