@@ -56,6 +56,8 @@ services:
       VK_PROJECT_ID: ${VK_PROJECT_ID:-}
       VK_INFERENCE_URL: ${VK_INFERENCE_URL:-}
       DESIGNER_LLM_PARALLEL: ${DESIGNER_LLM_PARALLEL:-4}
+      # Сервер картинок ComfyUI на хосте (scripts/start-images.ps1); пусто: колода без картинок
+      DESIGNER_IMAGE_URL: ${DESIGNER_IMAGE_URL:-}
       DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
       DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}
       DESIGNER_EDITOR_LLM_URL: ${DESIGNER_EDITOR_LLM_URL:-}
