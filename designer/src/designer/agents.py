@@ -73,7 +73,12 @@ def list_agents() -> dict:
         bridge_error = f"мост агентов недоступен на {bridge_url()}: {error}"
 
     settings = load_settings()
-    for model in _local_models(settings.llm_url):
+    models = _local_models(settings.llm_url)
+    if settings.llm_model and settings.llm_model not in models:
+        # Сервер модели может не отдавать список (роутер VK без ключа отвечает 401):
+        # модель из настроек всё равно та, которой работает конвейер, её можно выбрать.
+        models.append(settings.llm_model)
+    for model in models:
         items.append({
             "id": f"local:{model}",
             "kind": "local",

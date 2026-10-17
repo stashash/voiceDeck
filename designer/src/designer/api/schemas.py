@@ -15,10 +15,33 @@ class DeckCreateRequest(BaseModel):
     audience: str = ""
     slide_count: int | None = None
     variants: list[str] = Field(default_factory=lambda: ["a", "b", "c"], description="a, b, c — любое подмножество")
+    insights_id: str | None = Field(default=None, description="ответ POST /insights: подсказки лежат на сервере")
+    insight_ids: list[str] = Field(default_factory=list, description="отмеченные автором подсказки, s1..s7")
 
 
 class DeckCreateResponse(BaseModel):
     deck_id: str
+
+
+class InsightView(BaseModel):
+    """Подсказка, как её видит автор: вывод, число, вид показа и источник числа для тултипа."""
+    id: str
+    headline: str
+    number: str
+    visual: str
+    why: str
+    source: str
+    formula: str
+    by_model: bool
+
+
+class InsightsResponse(BaseModel):
+    id: str
+    table_name: str
+    rows: int
+    columns: int
+    suggestions: list[InsightView]
+    note: str = Field(default="", description="почему выводы сформулировал код, а не модель")
 
 
 class DeckVariantState(BaseModel):

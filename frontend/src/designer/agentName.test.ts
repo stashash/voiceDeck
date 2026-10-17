@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { agentDisplayName, agentOptionSub } from './agentName';
+import { agentDisplayName, agentOptionSub, modelDisplayName } from './agentName';
 
 describe('agentDisplayName', () => {
   it('CLI-агент отдаёт имя сервиса как есть', () => {
@@ -28,5 +28,19 @@ describe('agentOptionSub', () => {
   });
   it('у ненайденной локальной модели без «загружена»', () => {
     expect(agentOptionSub({ kind: 'local', detail: 'http://host.docker.internal:1234/v1', found: false })).toBe('LM Studio');
+  });
+});
+
+describe('модель инференса VK', () => {
+  const vk = 'https://ai-demo.platformpreview.ru/api/inference-providers-router/00000000-0000-0000-0000-000000000001/v1';
+  it('qwen38-27b-fp8 на роутере VK становится «Qwen3.8 27B в инференсе VK»', () => {
+    expect(agentDisplayName({ kind: 'local', name: 'qwen38-27b-fp8', model: 'qwen38-27b-fp8', id: 'local:qwen38-27b-fp8', detail: vk }))
+      .toBe('Qwen3.8 27B в инференсе VK');
+  });
+  it('подпись в списке называет инференс VK, а не LM Studio', () => {
+    expect(agentOptionSub({ kind: 'local', detail: vk, found: true })).toBe('Инференс VK');
+  });
+  it('модель из run.json без адреса узнаётся по имени', () => {
+    expect(modelDisplayName('qwen38-27b-fp8')).toBe('Qwen3.8 27B в инференсе VK');
   });
 });

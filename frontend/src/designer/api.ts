@@ -165,9 +165,26 @@ export function patternPreviewUrl(dsId: string, patternId: string): string {
   return url(`/design-systems/${dsId}/previews/${patternId}.png`);
 }
 
+// ---------- подсказки по таблице ----------
+export type InsightVisual = 'column' | 'bar' | 'line' | 'pie' | 'table' | 'big_number';
+export type InsightView = {
+  id: string; headline: string; number: string; visual: InsightVisual; why: string;
+  source: string; formula: string; by_model: boolean;
+};
+export type InsightsResponse = {
+  id: string; table_name: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
+};
+
+export function tableInsights(file: File, brief: string, signal?: AbortSignal): Promise<InsightsResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('brief', brief);
+  return fetch(url('/insights'), { method: 'POST', body: form, signal }).then(r => uploadResponse<InsightsResponse>(r));
+}
+
 export function createDeck(payload: {
   design_system_id: string; brief: string; purpose?: string; audience?: string;
-  slide_count?: number | null; variants?: string[];
+  slide_count?: number | null; variants?: string[]; insights_id?: string | null; insight_ids?: string[];
 }): Promise<{ deck_id: string }> {
   return fetch(url('/decks'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),

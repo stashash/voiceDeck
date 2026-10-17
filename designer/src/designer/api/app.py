@@ -10,7 +10,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import httpx
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from designer.edit_runtime import ensure_export, lock
@@ -36,6 +37,8 @@ from designer.api.schemas import (
     DesignSystemListResponse,
     DesignSystemPatchRequest,
     HealthResponse,
+    InsightView,
+    InsightsResponse,
     LiveBoundaryRequest,
     LiveWarmRequest,
     ModelSettingsRequest,
@@ -53,6 +56,9 @@ from designer.api.schemas import (
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
+from designer.insights import facts as insights_facts
+from designer.insights import suggest as insights_suggest
+from designer.insights import table as insights_table
 from designer.llm.client import LlmClient, ModelLoading, auth_headers
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
@@ -236,11 +242,47 @@ def list_decks() -> DeckListResponse:
     return DeckListResponse(items=[d for d in pipeline.list_decks() if not (store.deck_dir(d['id']) / '.deleted').exists()])
 
 
+@app.post("/insights", response_model=InsightsResponse)
+async def table_insights(file: UploadFile = File(...), brief: str = Form(""), audience: str = Form(""),
+                         client: LlmClient = Depends(get_llm_client)) -> InsightsResponse:
+    """Таблица автора -> подсказки, что из неё показать. Числа считает код, модель выбирает и формулирует."""
+    data = await file.read(insights_table.MAX_BYTES + 1)
+    try:
+        table = insights_table.read_table(data, file.filename or "")
+        facts = insights_facts.find_facts(table)
+        if not facts:
+            raise insights_table.TableError("В таблице не нашлось числовых столбцов, по которым можно сделать вывод")
+        suggestions, note = await run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience, client)
+    except insights_table.TableError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        _close(client)
+    result = {"table_name": table.name, "rows": len(table.rows), "columns": len(table.headers),
+              "suggestions": [s.model_dump(mode="json") for s in suggestions], "note": note}
+    insights_id = store.save_insights(result)
+    return InsightsResponse(id=insights_id, table_name=table.name, rows=len(table.rows), columns=len(table.headers),
+                            suggestions=[InsightView(**s.model_dump(include=set(InsightView.model_fields)))
+                                         for s in suggestions], note=note)
+
+
 @app.post("/decks", response_model=DeckCreateResponse)
 def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
                  client: LlmClient = Depends(get_llm_client)) -> DeckCreateResponse:
     deck_id = store.new_deck_id()
     variant_codes = payload.variants or ["a"]
+    insights: list[insights_suggest.Suggestion] = []
+    table_name = ""
+    if payload.insights_id and payload.insight_ids:
+        try:
+            saved = store.load_insights(payload.insights_id)
+        except store.InvalidId:
+            saved = None
+        if saved is None:
+            _close(client)
+            raise HTTPException(404, "Подсказки по таблице не найдены: загрузите таблицу заново")
+        chosen = {item["id"]: item for item in saved["suggestions"]}
+        insights = [insights_suggest.Suggestion(**chosen[i]) for i in payload.insight_ids if i in chosen]
+        table_name = saved.get("table_name", "")
 
     def _on_event(event: pipeline.PipelineEvent) -> None:
         store.append_event(deck_id, {"step": event.step, "slide_index": event.slide_index,
@@ -251,7 +293,7 @@ def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
             pipeline.generate_deck(
                 payload.design_system_id, payload.brief, payload.purpose, payload.audience,
                 payload.slide_count, _on_event, deck_id=deck_id, client=client,
-                variants=variant_codes,
+                variants=variant_codes, insights=insights, table_name=table_name,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed

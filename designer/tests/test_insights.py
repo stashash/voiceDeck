@@ -1,0 +1,164 @@
+"""Подсказки по таблице: разбор csv и xlsx, кандидаты точной арифметикой, сверка чисел модели, API и план."""
+from __future__ import annotations
+
+import io
+import json
+from decimal import Decimal
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from designer import store
+from designer.api.app import app, get_llm_client
+from designer.contracts import DeckPlan, SlideIntent, SlideKind
+from designer.insights.facts import find_facts
+from designer.insights.suggest import insert_insight_slides, numbers_in, suggest
+from designer.insights.table import TableError, parse_number, read_table
+from designer.llm.client import LlmClient
+
+QUARTERS = ("Квартал;Выручка, млн руб.;Клиенты;Доля онлайн, %\n"
+            "I кв 2026;120;1 250;31,5\nII кв 2026;135;1 410;33\n"
+            "III кв 2026;150;1 380;36,2\nIV кв 2026;177;1 690;40,1\n").encode("cp1251")
+REGIONS = ("Регион,Q3 2026,Q4 2026\nСеверо-Запад,48,61\nЦентр,90,95\nУрал,30,28\n"
+           "Сибирь,22,31\nЮг,40,40\nИтого,230,255\n").encode()
+
+
+def _llm(payload: dict) -> LlmClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]})
+    return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.parametrize("text,value", [("1 234,5", "1234.5"), ("-12.3", "-12.3"), ("18 %", "18"),
+                                        ("−5", "-5"), ("120 ₽", "120"), ("1 250", "1250")])
+def test_numbers_in_russian_formats(text, value):
+    assert parse_number(text) == Decimal(value)
+
+
+@pytest.mark.parametrize("text", ["=SUM(A1:A3)", "IV кв", "12.05.2026", "", "1,2,3"])
+def test_not_numbers(text):
+    assert parse_number(text) is None
+
+
+def test_cp1251_semicolon_csv_reads():
+    table = read_table(QUARTERS, "итоги.csv")
+    assert table.headers[1] == "Выручка, млн руб."
+    assert table.numbers[0][2] == Decimal(1250)
+
+
+def test_xlsx_first_sheet_with_cached_formula_values():
+    from openpyxl import Workbook
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["Квартал", "Выручка"])
+    sheet.append(["Q1 2026", 100])
+    sheet.append(["Q2 2026", 125.5])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    table = read_table(buffer.getvalue(), "q.xlsx")
+    assert table.rows == [["Q1 2026", "100"], ["Q2 2026", "125.5"]]
+
+
+@pytest.mark.parametrize("data,name,message", [
+    (b"a,b\n1,2\n", "x.csv", "две строки"),
+    (b",b\n1,2\n3,4\n", "x.csv", "Шапка"),
+    (b"a,b\n1,2\n3,4\n", "x.pdf", "xlsx или csv"),
+    (b"x" * (1024 * 1024 + 1), "x.csv", "1 МиБ"),
+], ids=["one-row", "empty-header", "pdf", "too-big"])
+def test_bad_tables_say_what_to_fix(data, name, message):
+    with pytest.raises(TableError, match=message):
+        read_table(data, name)
+
+
+def test_quarter_facts_are_exact():
+    facts = {f.kind + f.statement[:6]: f for f in find_facts(read_table(QUARTERS, "q.csv"))}
+    revenue = next(f for f in facts.values() if f.kind == "change_last" and f.statement.startswith("Выручка"))
+    assert revenue.numbers == ["+18 %", "150", "177"]
+    share = next(f for f in facts.values() if f.kind == "change_last" and f.statement.startswith("Доля"))
+    assert share.numbers[0] == "+3,9 п. п."  # доля меняется в процентных пунктах
+
+
+def test_total_row_is_not_a_region():
+    facts = find_facts(read_table(REGIONS, "r.csv"))
+    grew = next(f for f in facts if f.kind == "rows_grew")
+    assert grew.numbers == ["3", "5"]
+    total = next(f for f in facts if f.kind == "total_change")
+    assert total.numbers == ["+10,9 %", "230", "255"]
+
+
+def test_model_number_not_from_facts_is_dropped():
+    table = read_table(REGIONS, "r.csv")
+    facts = find_facts(table)
+    grew = next(f for f in facts if f.kind == "rows_grew")
+    answer = {"suggestions": [
+        {"fact_ids": [grew.id], "headline": "Выросли 3 из 5 регионов", "number": "3 из 5", "visual": "column",
+         "why": "видно, где рост"},
+        {"fact_ids": [grew.id], "headline": "Выручка выросла на 25 %", "number": "+25 %", "visual": "big_number",
+         "why": "придуманное число"},
+    ]}
+    suggestions, note = suggest(table, facts, "итоги", "директора", _llm(answer))
+    assert note == ""
+    assert suggestions[0].headline == "Выросли 3 из 5 регионов" and suggestions[0].by_model
+    assert all("25" not in numbers_in(s.headline + " " + s.number) for s in suggestions)
+    assert len(suggestions) >= 3  # добрано кандидатами кода
+    assert not suggestions[-1].by_model
+
+
+def test_model_failure_falls_back_to_code_facts():
+    def handler(request):
+        return httpx.Response(200, json={"choices": [{"message": {"content": "не json"}}]})
+    table = read_table(QUARTERS, "q.csv")
+    suggestions, note = suggest(table, find_facts(table), "", "", LlmClient("http://test/v1", "m", transport=httpx.MockTransport(handler)))
+    assert note and len(suggestions) == 3 and not any(s.by_model for s in suggestions)
+
+
+def test_rejected_key_falls_back_with_reason():
+    def handler(request):
+        return httpx.Response(401, json={"Code": "UNAUTHORIZED"})
+    table = read_table(REGIONS, "r.csv")
+    suggestions, note = suggest(table, find_facts(table), "", "", LlmClient("http://test/v1", "m", transport=httpx.MockTransport(handler)))
+    assert "ключ" in note and len(suggestions) == 3
+
+
+def test_numbers_in_ignores_sign_and_groups():
+    assert numbers_in("+18,0 % (1 380 → 1690)") == {"18", "1380", "1690"}
+
+
+def test_insight_slides_go_after_title_and_agenda():
+    table = read_table(QUARTERS, "q.csv")
+    suggestions, _ = suggest(table, find_facts(table), "", "", None)
+    plan = DeckPlan(title="t", purpose="p", slides=[
+        SlideIntent(id="", kind=SlideKind.title, title="Итоги"),
+        SlideIntent(id="", kind=SlideKind.agenda, title="План"),
+        SlideIntent(id="", kind=SlideKind.thanks, title="Спасибо")])
+    insert_insight_slides(plan, suggestions)
+    assert [s.kind for s in plan.slides[2:2 + len(suggestions)]] != []
+    assert plan.slides[2].title == suggestions[0].headline
+    assert plan.slides[2].chart is not None and plan.slides[2].chart.categories[-1] == "IV кв 2026"
+    assert [s.id for s in plan.slides] == [f"s{i}" for i in range(1, len(plan.slides) + 1)]
+    assert "Источник: столбец" in plan.slides[2].notes
+
+
+def test_api_insights_then_deck_request_finds_them(tmp_path, monkeypatch):
+    monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
+    app.dependency_overrides[get_llm_client] = lambda: _llm({"suggestions": []})
+    try:
+        with TestClient(app) as client:
+            response = client.post("/insights", files={"file": ("r.csv", REGIONS, "text/csv")},
+                                   data={"brief": "итоги", "audience": "директора"})
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["rows"] == 6 and body["columns"] == 3 and len(body["suggestions"]) == 3
+            assert body["suggestions"][0]["source"].startswith("столб")
+            saved = store.load_insights(body["id"])
+            assert saved["suggestions"][0]["chart"]["categories"]
+
+            bad = client.post("/insights", files={"file": ("x.csv", b"a,b\n1,2\n", "text/csv")})
+            assert bad.status_code == 422 and "две строки" in bad.json()["detail"]
+
+            missing = client.post("/decks", json={"design_system_id": "x", "brief": "b",
+                                                  "insights_id": "nope", "insight_ids": ["s1"]})
+            assert missing.status_code == 404
+    finally:
+        app.dependency_overrides.clear()

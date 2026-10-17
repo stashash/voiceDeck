@@ -7,6 +7,7 @@ import {
   absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments, errorText
 } from '../designer/api';
 import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
+import { AttachTableButton, InsightsList, TableChip, useTableInsights } from '../designer/TableInsights';
 
 type Popover = 'ds' | 'agent' | null;
 // Холст: одна строка на четыре карточки, показаны две строки (Home.dc.html + правка координатора).
@@ -24,6 +25,7 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const boxRef = useRef<HTMLDivElement>(null);
+  const table = useTableInsights();
 
   useEffect(() => {
     listDesignSystemItems().then(items => { setDesignSystems(items); setDsId(prev => { const asked = hashParam('ds'); return prev || (asked && items.some(i => i.id === asked) ? asked : items[0]?.id) || ''; }); }).catch(() => {});
@@ -49,8 +51,11 @@ export default function HomePage() {
 
   const ready = designSystems.length > 0 && agents.length > 0;
 
+  const fromTable = !!table.result && table.chosen.length > 0;
+  const canSubmit = ready && (!!brief.trim() || fromTable) && !table.loading;
+
   async function submit() {
-    if (!ready || !dsId || !agentId || !brief.trim() || busy) return;
+    if (!canSubmit || !dsId || !agentId || busy) return;
     setBusy(true); setError('');
     try {
       if (assignments && assignments.deck !== agentId) {
@@ -58,7 +63,11 @@ export default function HomePage() {
         await setAgentAssignments(next);
         setAssignments(next);
       }
-      const { deck_id } = await createDeck({ design_system_id: dsId, brief, variants: ['a', 'b', 'c'] });
+      const text = brief.trim() || `Итоги по таблице «${table.result!.table_name}»`;
+      const { deck_id } = await createDeck({
+        design_system_id: dsId, brief: text, variants: ['a', 'b', 'c'],
+        insights_id: fromTable ? table.result!.id : null, insight_ids: fromTable ? table.chosen : [],
+      });
       window.location.hash = `#/decks/${deck_id}`;
     } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
@@ -71,8 +80,10 @@ export default function HomePage() {
       <textarea id="brief" className="field" rows={6} value={brief} onChange={e => setBrief(e.target.value)}
         placeholder="Бриф, текст или одна идея. Например: итоги пилота потоковой загрузки для директоров направлений"/>
       {error && <div className="notice" role="alert" style={{ margin: 0 }}>{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+      <TableChip state={table}/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
+          <AttachTableButton onPick={file => void table.attach(file, brief)}/>
           <button type="button" className={`picker-btn ${open === 'ds' ? 'open' : ''}`} aria-haspopup="listbox"
             aria-expanded={open === 'ds'} aria-label={`Дизайн-система: ${selectedDs?.name ?? ''}`}
             onClick={() => setOpen(v => v === 'ds' ? null : 'ds')}>
@@ -140,13 +151,14 @@ export default function HomePage() {
             <Settings size={18} strokeWidth={1.5}/>Подключить агента
           </a>
         </div>}
-        <button type="button" className="fab" disabled={!ready || !brief.trim() || busy}
+        <button type="button" className="fab" disabled={!canSubmit || busy}
           aria-label="Создать презентацию" title={ready ? 'Создать презентацию' : 'Сначала нужны дизайн-система и агент'}
           onClick={submit}>
           <ArrowUp size={20} strokeWidth={1.5} color="var(--accent-ink)"/>
         </button>
       </div>
     </div>
+    <InsightsList state={table}/>
     {recent.length > 0 && <section className="recent-section">
       <div className="recent-head"><h2>Недавние презентации</h2></div>
       <div className="recent-grid">
