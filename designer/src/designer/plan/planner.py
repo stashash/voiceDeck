@@ -12,7 +12,9 @@ _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _SKILL_NAME = "plan-deck"
 
 
-def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, client: LlmClient) -> DeckPlan:
+def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, client: LlmClient,
+              visuals_ready: bool = False) -> DeckPlan:
+    """visuals_ready: слайды с диаграммами уже собраны из таблицы, план их не обязан делать."""
     skill = load_skill(_SKILL_NAME)
     schema = DeckPlan.model_json_schema()
     system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count),
@@ -25,7 +27,8 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     _drop_numbers_missing_from_brief(plan, brief)
 
     violations = _structural_violations(plan, slide_count)
-    violations += _visualization_violations(plan, brief)
+    if not visuals_ready:
+        violations += _visualization_violations(plan, brief)
     violations += _content_violations(plan)
     if violations:
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."

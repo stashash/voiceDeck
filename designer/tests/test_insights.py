@@ -140,6 +140,45 @@ def test_insight_slides_go_after_title_and_agenda():
     assert "Источник: столбец" in plan.slides[2].notes
 
 
+def test_plan_repeats_of_insights_are_dropped():
+    """Прогон 17.10: план повторил четыре вывода своими слайдами и подписал столбцы «До конца 2025»."""
+    from designer.contracts import ChartSpec, Item, Series
+    table = read_table(QUARTERS, "q.csv")
+    suggestions, _ = suggest(table, find_facts(table), "", "", None)
+    revenue = next(s for s in suggestions if s.headline.startswith("Выручка"))
+    plan = DeckPlan(title="t", purpose="p", slides=[
+        SlideIntent(id="", kind=SlideKind.title, title="Итоги 2026 года"),
+        SlideIntent(id="", kind=SlideKind.chart, title="Выручка выросла за год",
+                    chart=ChartSpec(type="column", categories=["До конца 2025", "Конец 2026"],
+                                    series=[Series(name="Выручка", values=[120, 177])])),
+        SlideIntent(id="", kind=SlideKind.section, title=revenue.headline),
+        SlideIntent(id="", kind=SlideKind.big_number, title="Рост за 2026 год",
+                    items=[Item(heading="рост", number="2026")]),
+        SlideIntent(id="", kind=SlideKind.cards, title="Куда вкладываться в 2027 году"),
+        SlideIntent(id="", kind=SlideKind.thanks, title="Спасибо")])
+    insert_insight_slides(plan, suggestions)
+    titles = [s.title for s in plan.slides]
+    assert "Выручка выросла за год" not in titles  # числа вывода на чужой диаграмме
+    assert titles.count(revenue.headline) == 1  # раздел с тем же заголовком убран
+    assert "Рост за 2026 год" in titles  # год не число вывода
+    assert "Куда вкладываться в 2027 году" in titles
+
+
+def test_insight_slide_keeps_model_reading_out_of_slide_text():
+    table = read_table(QUARTERS, "q.csv")
+    facts = find_facts(table)
+    share = next(f for f in facts if f.kind == "change_last" and f.statement.startswith("Доля"))
+    answer = {"suggestions": [{"fact_ids": [share.id], "headline": "Доля онлайна выросла до 40,1 %", "number": "40,1 %",
+                               "visual": "big_number", "why": "свидетельствует о росте лояльности"}]}
+    suggestions, _ = suggest(table, facts, "", "", _llm(answer))
+    plan = DeckPlan(title="t", purpose="p", slides=[SlideIntent(id="", kind=SlideKind.title, title="t")])
+    insert_insight_slides(plan, suggestions[:1])
+    made = plan.slides[1]
+    text = made.title + made.key_message + " ".join(i.heading for i in made.items)
+    assert "свидетельствует" not in text and "свидетельствует" in made.notes
+    assert made.items[0].heading == share.statement
+
+
 def test_api_insights_then_deck_request_finds_them(tmp_path, monkeypatch):
     monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / "data"))
     app.dependency_overrides[get_llm_client] = lambda: _llm({"suggestions": []})

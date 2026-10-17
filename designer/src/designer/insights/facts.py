@@ -36,6 +36,8 @@ class Fact:
     big_number: str | None = None
     data_lines: list[str] = field(default_factory=list)
     """Строки «подпись: значение» для брифа: по ним аудит сверяет числа диаграммы с исходником."""
+    topic: str = ""
+    """Тема без чисел («Выручка»): по ней план узнаёт, о чём слайд уже есть."""
 
 
 def fmt(value: Decimal) -> str:
@@ -91,11 +93,14 @@ def find_facts(table: Table) -> list[Fact]:
 
     facts: list[Fact] = []
     for metric in metrics[:MAX_METRICS]:
-        if periods:
-            facts += _period_facts(metric)
-        else:
-            facts += _category_facts(metric, label_header)
-    facts += _wide_facts(table, metrics, label_header)
+        found = _period_facts(metric) if periods else _category_facts(metric, label_header)
+        for fact in found:
+            fact.topic = metric.name
+        facts += found
+    wide = _wide_facts(table, metrics, label_header)
+    for fact in wide:
+        fact.topic = f"{metrics[-1].name} по строкам «{label_header}»"
+    facts += wide
     for index, fact in enumerate(facts[:MAX_FACTS], start=1):
         fact.id = f"f{index}"
     return facts[:MAX_FACTS]

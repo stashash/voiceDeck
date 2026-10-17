@@ -439,7 +439,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
             if insights:
                 plan_brief = brief_with_insights(brief, table_name, insights, with_data=False)
                 rest = max(4, (slide_count or _INSIGHTS_DECK_SIZE) - len(insights))
-                plan = make_plan(plan_brief, purpose, audience, rest, client)
+                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True)
                 insert_insight_slides(plan, insights)
             else:
                 plan = make_plan(brief, purpose, audience, slide_count, client)

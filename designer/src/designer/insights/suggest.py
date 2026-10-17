@@ -23,6 +23,7 @@ SKILL = "suggest-insights"
 MIN_SUGGESTIONS, MAX_SUGGESTIONS = 3, 7
 PREVIEW_ROWS = 30
 Visual = Literal["column", "bar", "line", "pie", "table", "big_number"]
+_PERIOD_KINDS = ("change_last", "change_total", "growth_count")
 _FALLBACK_ORDER = ("change_last", "rows_grew", "share_top", "total_change", "leader_gap",
                    "change_total", "fastest_row", "growth_count")
 _NUM = re.compile(r"\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?")
@@ -47,6 +48,9 @@ class Suggestion(BaseModel):
     visual: Visual
     why: str
     fact_ids: list[str]
+    statement: str = ""
+    """Формулировка кода главного кандидата: на слайде под заголовком, без толкований модели."""
+    topic: str = ""
     source: str
     formula: str
     chart: ChartSpec | None = None
@@ -134,7 +138,8 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
         main = facts[0]
         result.append(Suggestion(
             id="", headline=pick.headline.strip(), number=pick.number.strip(), visual=_visual(pick.visual, main),
-            why=pick.why.strip(), fact_ids=[fact.id for fact in facts], source="; ".join(f.source for f in facts),
+            why=pick.why.strip(), fact_ids=[fact.id for fact in facts], statement=main.statement, topic=main.topic,
+            source="; ".join(f.source for f in facts),
             formula="; ".join(f.formula for f in facts), chart=main.chart, table=main.table,
             data_lines=[line for fact in facts for line in fact.data_lines], by_model=True))
     return result
@@ -142,6 +147,8 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
 
 def _visual(wanted: str, fact: Fact) -> str:
     """Вид показа, который у кандидата есть данными: таблица без таблицы становится диаграммой."""
+    if wanted == "bar" and fact.kind in _PERIOD_KINDS:
+        wanted = "column"  # периоды идут слева направо, горизонтальные полосы ставят их снизу вверх
     if wanted == "pie" and fact.kind != "share_top":
         wanted = fact.chart.type if fact.chart else "big_number"
     if wanted == "table" and fact.table is None:
@@ -156,41 +163,101 @@ def _visual(wanted: str, fact: Fact) -> str:
 def _from_fact(fact: Fact) -> Suggestion:
     visual = fact.chart.type if fact.chart else ("table" if fact.table else "big_number")
     return Suggestion(id="", headline=fact.statement, number=fact.big_number or (fact.numbers[0] if fact.numbers else ""),
-                      visual=visual, why="", fact_ids=[fact.id], source=fact.source, formula=fact.formula,
+                      visual=visual, why="", fact_ids=[fact.id], statement=fact.statement, topic=fact.topic,
+                      source=fact.source, formula=fact.formula,
                       chart=fact.chart, table=fact.table, data_lines=fact.data_lines, by_model=False)
 
 
 def insight_slide(suggestion: Suggestion) -> SlideIntent:
-    """Слайд подсказки: вывод в заголовке, данные таблицы как есть, источник в заметках докладчика."""
+    """Слайд подсказки: вывод в заголовке, под ним формулировка кода, данные таблицы как есть.
+
+    Толкование модели (why) идёт только в заметки докладчика: причин изменения в таблице нет,
+    и подгонка текста под макет не должна вписать его в заголовок как факт.
+    """
     notes = f"Источник: {suggestion.source}. Расчёт: {suggestion.formula}."
+    if suggestion.why:
+        notes += f" Зачем показывать: {suggestion.why}"
+    statement = suggestion.statement or suggestion.headline
     if suggestion.visual == "big_number" or (suggestion.chart is None and suggestion.table is None):
-        return SlideIntent(id="", kind=SlideKind.big_number, title=suggestion.headline, key_message=suggestion.why,
-                           items=[Item(heading=suggestion.headline, number=suggestion.number)], notes=notes)
+        return SlideIntent(id="", kind=SlideKind.big_number, title=suggestion.headline,
+                           items=[Item(heading=statement, number=suggestion.number)], notes=notes)
     if suggestion.visual == "table" and suggestion.table is not None:
-        return SlideIntent(id="", kind=SlideKind.table, title=suggestion.headline, key_message=suggestion.why,
+        return SlideIntent(id="", kind=SlideKind.table, title=suggestion.headline, key_message=statement,
                            table=suggestion.table, notes=notes)
     chart = suggestion.chart.model_copy(update={"type": suggestion.visual}) if suggestion.chart else None
-    return SlideIntent(id="", kind=SlideKind.chart, title=suggestion.headline, key_message=suggestion.why,
+    return SlideIntent(id="", kind=SlideKind.chart, title=suggestion.headline, key_message=statement,
                        chart=chart, notes=notes)
 
 
 def brief_with_insights(brief: str, table_name: str, suggestions: list[Suggestion], with_data: bool) -> str:
     """Бриф с выводами из таблицы.
 
-    План получает только выводы: с данными таблицы он строил бы свои диаграммы поверх готовых слайдов.
-    Аудит получает и данные: числа на диаграммах выводов должно быть с чем сверить.
+    План получает только темы готовых слайдов, без чисел: увидев числа, он строит по ним свои
+    диаграммы и сам подписывает столбцы. Аудит получает выводы и данные таблицы: числа на
+    диаграммах выводов должно быть с чем сверить.
     """
-    lines = [brief.strip(), "", f"Выводы из таблицы «{table_name}». Слайды с этими выводами и диаграммами "
-             "уже собраны, отдельных слайдов про них не делай; построй вокруг них рассказ:"]
-    for suggestion in suggestions:
-        lines.append(f"- {suggestion.headline} ({suggestion.number})")
-    if with_data:
-        lines += ["", "Данные таблицы для этих выводов:"] + sorted({line for s in suggestions for line in s.data_lines})
+    if not with_data:
+        topics = list(dict.fromkeys(s.topic or s.headline for s in suggestions))
+        return "\n".join([brief.strip(), "", f"Слайды с выводами из таблицы «{table_name}» уже готовы, по одному "
+                          f"на тему: {'; '.join(topics)}. Слайдов про эти темы и их цифры не делай. Сделай остальные "
+                          "слайды рассказа вокруг них: зачем собрались, что эти итоги значат для решения аудитории, "
+                          "какие решения нужны и следующие шаги. Фактов, причин и рисков, которых нет в брифе, "
+                          "не добавляй."])
+    lines = [brief.strip(), "", f"Выводы из таблицы «{table_name}»:"]
+    lines += [f"- {s.headline} ({s.number})" for s in suggestions]
+    lines += ["", "Данные таблицы для этих выводов:"] + sorted({line for s in suggestions for line in s.data_lines})
     return "\n".join(lines)
+
+
+_KEEP_KINDS = (SlideKind.title, SlideKind.agenda, SlideKind.thanks, SlideKind.cta)
+_DATA_KINDS = (SlideKind.chart, SlideKind.big_number, SlideKind.table)
+_YEAR = re.compile(r"^(19|20)\d{2}$")
+_WORD = re.compile(r"[а-яёa-z]{4,}", re.I)
+
+
+def _insight_numbers(suggestion: Suggestion) -> set[str]:
+    found = numbers_in(suggestion.headline + " " + suggestion.number)
+    if suggestion.chart:
+        found |= {format(Decimal(repr(v)).normalize(), "f") for s in suggestion.chart.series for v in s.values}
+    return {n for n in found if not _YEAR.match(n)}
+
+
+def _slide_numbers(slide: SlideIntent) -> set[str]:
+    text = " ".join([slide.title, slide.key_message] + [f"{i.heading} {i.body} {i.number or ''}" for i in slide.items])
+    found = numbers_in(text)
+    if slide.chart:
+        found |= {format(Decimal(repr(v)).normalize(), "f") for s in slide.chart.series for v in s.values}
+    return {n for n in found if not _YEAR.match(n)}
+
+
+def _words(text: str) -> set[str]:
+    return {w.lower()[:6] for w in _WORD.findall(text)}
+
+
+def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
+    """Убирает слайды плана, которые повторяют выводы из таблицы.
+
+    План просят не повторять готовые выводы, но модель всё равно делает свои слайды с теми же
+    числами и сама подписывает столбцы. Повтор: слайд с данными, где есть число вывода, или
+    слайд, у которого заголовок больше чем наполовину из тех же слов, что и вывод.
+    """
+    numbers = set().union(*(_insight_numbers(s) for s in suggestions)) if suggestions else set()
+    heads = [_words(s.headline) for s in suggestions]
+
+    def repeats(slide: SlideIntent) -> bool:
+        if slide.kind in _KEEP_KINDS:
+            return False
+        if slide.kind in _DATA_KINDS and _slide_numbers(slide) & numbers:
+            return True
+        words = _words(slide.title)
+        return any(words and head and len(words & head) / len(words | head) >= 0.5 for head in heads)
+
+    plan.slides = [slide for slide in plan.slides if not repeats(slide)]
 
 
 def insert_insight_slides(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
     """Слайды выводов встают после титула и оглавления, в том порядке, в каком автор их отметил."""
+    drop_repeats(plan, suggestions)
     position = 1 if plan.slides else 0
     if len(plan.slides) > 1 and plan.slides[1].kind == SlideKind.agenda:
         position = 2
