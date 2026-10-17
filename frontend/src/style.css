@@ -392,4 +392,4 @@ input[type=checkbox]{accent-color:var(--accent);color-scheme:dark}
 .insight-number:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
 .insight-row.off .insight-headline,.insight-row.off .insight-visual{opacity:.5}
 .insight-row:focus-within{outline:none}
-.insight-row:has(:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.insight-row:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
