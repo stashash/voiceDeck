@@ -26,6 +26,10 @@ services:
       LLM_URL: ${LLM_URL:-http://host.docker.internal:8000/v1}
       LLM_MODEL: ${LLM_MODEL:-deckgen}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-deckgen-small}
+      # Ключ и проект инференса VK живут только в .env; код шлёт их только на VK_INFERENCE_URL
+      VK_API_KEY: ${VK_API_KEY:-}
+      VK_PROJECT_ID: ${VK_PROJECT_ID:-}
+      VK_INFERENCE_URL: ${VK_INFERENCE_URL:-}
       EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-ollama}
       EMBEDDING_URL: ${EMBEDDING_URL:-http://host.docker.internal:1234/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-bge-m3}
@@ -48,6 +52,9 @@ services:
       DESIGNER_LLM_URL: ${DESIGNER_LLM_URL:-http://host.docker.internal:1234/v1}
       DESIGNER_LLM_MODEL: ${DESIGNER_LLM_MODEL:-qwen/qwen3.8-27b}
       DESIGNER_LLM_API_KEY: ${DESIGNER_LLM_API_KEY:-}
+      VK_API_KEY: ${VK_API_KEY:-}
+      VK_PROJECT_ID: ${VK_PROJECT_ID:-}
+      VK_INFERENCE_URL: ${VK_INFERENCE_URL:-}
       DESIGNER_LLM_PARALLEL: ${DESIGNER_LLM_PARALLEL:-4}
       DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
       DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}

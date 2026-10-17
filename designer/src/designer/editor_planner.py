@@ -66,7 +66,7 @@ async def complete_plan(instruction: str, context: str) -> dict:
     messages = [{'role': 'system', 'content': SYSTEM},
                 {'role': 'user', 'content': json.dumps({'instruction': instruction, 'context': document}, ensure_ascii=False)}]
     # The outer task owns the total deadline, including connection, body and repair.
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=2), headers=auth_headers()) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=2), headers=auth_headers(base)) as client:
         for attempt in range(2):
             if native:
                 url = base + '/api/chat'

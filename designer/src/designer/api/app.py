@@ -658,7 +658,7 @@ def health(client: LlmClient = Depends(get_llm_client)) -> HealthResponse:
 
 def _model_available(base_url: str) -> bool:
     try:
-        with httpx.Client(timeout=3.0, headers=auth_headers()) as probe:
+        with httpx.Client(timeout=3.0, headers=auth_headers(base_url)) as probe:
             response = probe.get(f"{base_url}/models")
         return response.status_code < 500
     except httpx.HTTPError:

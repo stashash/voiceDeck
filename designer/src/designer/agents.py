@@ -44,7 +44,7 @@ def _bridge_error_message(response: httpx.Response) -> str:
 
 def _local_models(llm_url: str) -> list[str]:
     try:
-        response = httpx.Client(timeout=5.0, headers=auth_headers()).get(f"{llm_url.rstrip('/')}/models")
+        response = httpx.Client(timeout=5.0, headers=auth_headers(llm_url)).get(f"{llm_url.rstrip('/')}/models")
         response.raise_for_status()
     except httpx.HTTPError:
         return []

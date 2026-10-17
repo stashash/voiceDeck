@@ -16,22 +16,47 @@ public final class Llm {
       "bullets":{"type":"array","maxItems":5,"items":{"type":"string","maxLength":240}},
       "notes":{"type":"string","maxLength":2000}}}
       """);
+    /** Роутер инференса VK из инструкции организаторов (docs/requirements/inference_quickstart.md). */
+    static final String VK_INFERENCE_URL="https://ai-demo.platformpreview.ru/api/inference-providers-router/00000000-0000-0000-0000-000000000001/v1";
+    private final Map<String,String> auth;
     public Llm() {
-        this(Main.env("LLM_URL","http://127.0.0.1:8000/v1"));
+        this(Main.env("LLM_URL","http://127.0.0.1:8000/v1"),System.getenv());
     }
-    Llm(String url) {
+    Llm(String url) {this(url,Map.of());}
+    Llm(String url,Map<String,String> env) {
         this.url=url;
         URI uri=URI.create(url);
         if(!"http".equals(uri.getScheme())&&!"https".equals(uri.getScheme()))throw new IllegalArgumentException("LLM_URL must use HTTP(S)");
-        try {for(InetAddress ip:InetAddress.getAllByName(uri.getHost()))if(!EmbeddingClient.isLocalAddress(ip))throw new IllegalArgumentException("LLM_URL must resolve inside the local network");}
+        auth=vkHeaders(url,env);
+        if(!auth.isEmpty())return;
+        try {for(InetAddress ip:InetAddress.getAllByName(uri.getHost()))if(!EmbeddingClient.isLocalAddress(ip))throw new IllegalArgumentException("LLM_URL must resolve inside the local network or be VK_INFERENCE_URL with VK_API_KEY");}
         catch(UnknownHostException e){throw new IllegalArgumentException("Cannot resolve local LLM host",e);}
     }
+    /** Ключ VK и Project-ID уходят только на роутер VK; любой другой адрес модели обязан быть в локальной сети. */
+    static Map<String,String> vkHeaders(String url,Map<String,String> env) {
+        String key=env.getOrDefault("VK_API_KEY","").strip(),base=env.getOrDefault("VK_INFERENCE_URL","").strip();
+        if(key.isEmpty()||!sameEndpoint(url,base.isEmpty()?VK_INFERENCE_URL:base))return Map.of();
+        var headers=new LinkedHashMap<String,String>();headers.put("Authorization","Bearer "+key);
+        String project=env.getOrDefault("VK_PROJECT_ID","").strip();if(!project.isEmpty())headers.put("Project-ID",project);
+        return headers;
+    }
+    /** url лежит под base: та же схема, хост и порт, путь начинается с пути base без хвоста /v1. */
+    static boolean sameEndpoint(String url,String base) {
+        URI a=URI.create(url.strip()),b=URI.create(base.strip());
+        if(a.getHost()==null||a.getScheme()==null||!a.getScheme().equalsIgnoreCase(b.getScheme())||!a.getHost().equalsIgnoreCase(b.getHost())||port(a)!=port(b))return false;
+        String pa=path(a),pb=path(b);
+        return pa.equals(pb)||pa.startsWith(pb+"/");
+    }
+    private static int port(URI u){return u.getPort()!=-1?u.getPort():"https".equalsIgnoreCase(u.getScheme())?443:80;}
+    private static String path(URI u){String p=u.getPath()==null?"":u.getPath().replaceAll("/+$","");return p.endsWith("/v1")?p.substring(0,p.length()-3):p;}
     private String ask(String system,String input,JsonObject schema)throws Exception {
         var body=new JsonObject().put("model",Main.env(fallback?"LLM_FALLBACK_MODEL":"LLM_MODEL",fallback?"deckgen-small":"deckgen"))
             .put("temperature",0).put("max_tokens",1200)
             .put("messages",new JsonArray().add(new JsonObject().put("role","system").put("content",system)).add(new JsonObject().put("role","user").put("content",input)))
             .put("response_format",new JsonObject().put("type","json_schema").put("json_schema",new JsonObject().put("name","result").put("strict",true).put("schema",schema)));
-        var req=HttpRequest.newBuilder(URI.create(url+"/chat/completions")).timeout(Duration.ofSeconds(25)).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
+        var builder=HttpRequest.newBuilder(URI.create(url+"/chat/completions")).timeout(Duration.ofSeconds(25)).header("Content-Type","application/json");
+        auth.forEach(builder::header);
+        var req=builder.POST(HttpRequest.BodyPublishers.ofString(body.encode())).build();
         var res=http.send(req,HttpResponse.BodyHandlers.ofString());
         if(res.statusCode()!=200){fallback=res.statusCode()==429||res.statusCode()==503;throw new IllegalStateException("Local LLM HTTP "+res.statusCode());}
         fallback=false;
