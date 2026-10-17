@@ -403,3 +403,19 @@ def _write_json(path: Path, data: dict) -> None:
 
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+# ---------- подсказки по таблице ----------
+
+def save_insights(result: dict) -> str:
+    """Подсказки по таблице лежат на сервере: колода берёт числа отсюда, а не из запроса браузера."""
+    insights_id = uuid.uuid4().hex
+    path = data_dir() / "insights" / f"{insights_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, {**result, "id": insights_id})
+    return insights_id
+
+
+def load_insights(insights_id: str) -> dict | None:
+    path = data_dir() / "insights" / f"{_check_id(insights_id)}.json"
+    return _read_json(path) if path.is_file() else None

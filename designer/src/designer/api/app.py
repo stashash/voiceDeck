@@ -1,6 +1,7 @@
 """FastAPI-сервис: пакеты дизайн-систем, генерация колоды, живой режим. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -10,7 +11,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import httpx
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from designer.edit_runtime import ensure_export, lock
@@ -36,6 +38,8 @@ from designer.api.schemas import (
     DesignSystemListResponse,
     DesignSystemPatchRequest,
     HealthResponse,
+    InsightView,
+    InsightsResponse,
     LiveBoundaryRequest,
     LiveWarmRequest,
     ModelSettingsRequest,
@@ -50,10 +54,14 @@ from designer.api.schemas import (
     SlideTextRequest,
     SlideMoveElementRequest,
     ElementActionRequest,
+    TablePreview,
 )
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
-from designer.llm.client import LlmClient, ModelLoading, auth_headers
+from designer.insights import source as insights_source
+from designer.insights import suggest as insights_suggest
+from designer.insights import table as insights_table
+from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
 from designer.llm.skills import SkillError, load_skill
 from designer.parse.package import load_package
 from designer.plan.writer import speech_boundary
@@ -236,11 +244,97 @@ def list_decks() -> DeckListResponse:
     return DeckListResponse(items=[d for d in pipeline.list_decks() if not (store.deck_dir(d['id']) / '.deleted').exists()])
 
 
+@app.post("/insights/table", response_model=TablePreview)
+async def table_preview(file: UploadFile = File(...)) -> TablePreview:
+    """Разбор файла без модели: строки и столбцы на плашке и ошибка файла приходят сразу, до подсказок.
+
+    Таблицу на картинке (png, jpg, картинка в xlsx) прочитает модель: здесь только пометка from_image.
+    """
+    data = await file.read(insights_table.MAX_IMAGE_BYTES + 1)
+    name = insights_table.file_name(file.filename or "")
+    try:
+        table, from_image = await run_in_threadpool(insights_source.preview, data, file.filename or "")
+    except insights_table.TableError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if table is None:
+        return TablePreview(table_name=name, from_image=from_image)
+    return TablePreview(table_name=table.name, sheet=table.sheet, rows=len(table.rows), columns=len(table.headers))
+
+
+async def _wait_unless_gone(task: asyncio.Future, request: Request, client: object, poll_s: float = 0.5) -> bool:
+    """Ждёт подсказки. Браузер оборвал запрос («Остановить», пересчёт под новый бриф): рвёт вызов модели.
+
+    Иначе модель дописывала ответ, который никто не прочтёт, и слот локальной модели был занят
+    до таймаута (ред-тим 17.10, инженер ядра). False, если клиент ушёл.
+    """
+    while True:
+        done, _ = await asyncio.wait({task}, timeout=poll_s)
+        if done:
+            return True
+        if await request.is_disconnected():
+            _close(client)
+            task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            return False
+
+
+def _insights_work(data: bytes, filename: str, brief: str, audience: str, client: LlmClient | None):
+    table, facts = insights_source.load(data, filename, client)
+    suggestions, note = insights_suggest.suggest(table, facts, brief, audience, client)
+    return table, suggestions, note
+
+
+@app.post("/insights", response_model=InsightsResponse)
+async def table_insights(request: Request, file: UploadFile = File(...), brief: str = Form(""), audience: str = Form(""),
+                         use_model: bool = Form(True),
+                         client: LlmClient = Depends(get_llm_client)) -> InsightsResponse | Response:
+    """Таблица автора -> подсказки, что из неё показать. Числа считает код, модель выбирает и формулирует.
+
+    use_model=false: автор остановил долгий ответ модели, подсказки сразу формулирует код. Таблицу на
+    картинке без модели можно взять только из кэша прочитанных картинок.
+    """
+    data = await file.read(insights_table.MAX_IMAGE_BYTES + 1)
+    try:
+        task = asyncio.ensure_future(run_in_threadpool(_insights_work, data, file.filename or "", brief, audience,
+                                                       client if use_model else None))
+        if not await _wait_unless_gone(task, request, client):
+            return Response(status_code=499)
+        table, suggestions, note = task.result()
+        if not use_model:
+            note = "Модель остановлена: выводы посчитаны и записаны без неё."
+    except insights_table.TableError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except (LlmResponseError, ModelLoading, httpx.HTTPError) as exc:
+        # Таблицу с картинки читает модель: без неё подсказок нет, файл при этом годный.
+        raise HTTPException(503, f"Таблица на картинке: прочитать её может только модель, а она не ответила ({exc}).") from exc
+    finally:
+        _close(client)
+    result = {"table_name": table.name, "sheet": table.sheet, "rows": len(table.rows), "columns": len(table.headers),
+              "suggestions": [s.model_dump(mode="json") for s in suggestions], "note": note,
+              "from_image": table.from_image}
+    insights_id = store.save_insights(result)
+    return InsightsResponse(id=insights_id, table_name=table.name, sheet=table.sheet, rows=len(table.rows), columns=len(table.headers),
+                            suggestions=[InsightView(**s.model_dump(include=set(InsightView.model_fields)))
+                                         for s in suggestions], note=note, from_image=table.from_image)
+
+
 @app.post("/decks", response_model=DeckCreateResponse)
 def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
                  client: LlmClient = Depends(get_llm_client)) -> DeckCreateResponse:
     deck_id = store.new_deck_id()
     variant_codes = payload.variants or ["a"]
+    insights: list[insights_suggest.Suggestion] = []
+    table_name = ""
+    if payload.insights_id and payload.insight_ids:
+        try:
+            saved = store.load_insights(payload.insights_id)
+        except store.InvalidId:
+            saved = None
+        if saved is None:
+            _close(client)
+            raise HTTPException(404, "Подсказки по таблице не найдены: загрузите таблицу заново")
+        chosen = {item["id"]: item for item in saved["suggestions"]}
+        insights = [insights_suggest.Suggestion(**chosen[i]) for i in payload.insight_ids if i in chosen]
+        table_name = saved.get("table_name", "")
 
     def _on_event(event: pipeline.PipelineEvent) -> None:
         store.append_event(deck_id, {"step": event.step, "slide_index": event.slide_index,
@@ -251,7 +345,7 @@ def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
             pipeline.generate_deck(
                 payload.design_system_id, payload.brief, payload.purpose, payload.audience,
                 payload.slide_count, _on_event, deck_id=deck_id, client=client,
-                variants=variant_codes,
+                variants=variant_codes, insights=insights, table_name=table_name,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed
@@ -302,6 +396,11 @@ def _variant_state(deck_id: str, variant: str) -> DeckVariantState:
 
     state.slide_images = [f"/decks/{deck_id}/{variant}/slides/{number}.png?v={_stamp(number)}"
                            for number in store.deck_variant_slide_numbers(deck_id, variant)]
+    marker = store.deck_variant_files_dir(deck_id, variant) / "export-revision.json"
+    if marker.is_file():
+        exported = store.read_json_file(marker)
+        if exported.get("images", True):
+            state.images_revision = exported.get("revision")
     return state
 
 
@@ -653,7 +752,7 @@ def health(client: LlmClient = Depends(get_llm_client)) -> HealthResponse:
 
 def _model_available(base_url: str) -> bool:
     try:
-        with httpx.Client(timeout=3.0, headers=auth_headers()) as probe:
+        with httpx.Client(timeout=3.0, headers=auth_headers(base_url)) as probe:
             response = probe.get(f"{base_url}/models")
         return response.status_code < 500
     except httpx.HTTPError:

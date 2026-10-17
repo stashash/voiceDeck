@@ -5,7 +5,7 @@ import base64
 import html
 from pathlib import Path
 
-from designer import icons
+from designer import icons, store
 from designer.contracts import Asset, Box, Deck, DesignSystem, Element, Scene, Tokens
 from designer.export.svg_chart import chart_colors, render_chart
 
@@ -127,6 +127,12 @@ def _render_shape(el: Element) -> str:
 
 def _render_image(el: Element, ds: DesignSystem, package_dir: Path) -> str:
     style = _box_style(el.box, el.z)
+    if el.image:
+        # Картинка слайда от модели: заполняет рамку фото образца с обрезкой краёв, как в pptx.
+        path = store.data_dir() / el.image
+        if path.is_file():
+            src = _data_uri(path, _IMAGE_MIME.get(path.suffix.lower(), "image/png"))
+            return f'<img class="el image" style="{style}object-fit:cover;object-position:50% 30%;" src="{src}" alt="">'
     asset = _asset_by_id(ds, el.asset)
     if el.icon:
         # Значок пункта из набора, в цвете значка образца: так же, как в pptx.

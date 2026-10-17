@@ -1,0 +1,5 @@
+name: advise-deck
+version: "1"
+temperature: 0.2
+max_tokens: 2000
+reasoning_effort: none

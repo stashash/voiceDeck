@@ -15,7 +15,9 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
-from designer import icons
+from PIL import Image
+
+from designer import icons, store
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
@@ -471,6 +473,54 @@ def _replace_picture(slide, item: _Placed, name: str) -> None:
             ext.getparent().remove(ext)
 
 
+TOP_CROP_SHARE = 0.3
+"""Доля вертикальной обрезки картинки слайда, которая приходится на верх кадра."""
+
+
+def _cover_crop(data: bytes, box: Box, slide_size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Обрезка srcRect (l, t, r, b в стотысячных), с которой картинка заполняет рамку без искажения."""
+    with Image.open(io.BytesIO(data)) as image:
+        width, height = image.size
+    frame = (box[2] * slide_size[0]) / max(box[3] * slide_size[1], 1)
+    picture = width / max(height, 1)
+    if picture > frame:
+        side = int(round((1 - frame / picture) / 2 * 100000))
+        return side, 0, side, 0
+    # По высоте режется больше снизу: у людей в кадре голова сверху, центр срезал бы макушки.
+    cut = (1 - picture / frame) * 100000
+    return 0, int(round(cut * TOP_CROP_SHARE)), 0, int(round(cut * (1 - TOP_CROP_SHARE)))
+
+
+def _fill_image(slide, placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
+    """Фото образца меняется на картинку слайда: рамка, маска формы и порядок слоёв остаются образца."""
+    if not spec.image_area_id or not spec.image_path:
+        return
+    area = next((a for a in pattern.areas if a.id == spec.image_area_id), None)
+    item = _live(placed, area.shape_id) if area is not None and area.shape_id is not None else None
+    path = store.data_dir() / spec.image_path
+    if item is None or not path.is_file():
+        return
+    blip = item.element.find(".//" + qn("a:blip"))
+    if blip is None:
+        return
+    data = path.read_bytes()
+    _, rid = slide.part.get_or_add_image_part(io.BytesIO(data))
+    blip.set(qn("r:embed"), rid)
+    for ext in blip.findall(qn("a:extLst") + "/" + qn("a:ext")):
+        if ext.get("uri") == _SVG_BLIP_URI:
+            ext.getparent().remove(ext)
+    fill = blip.getparent()
+    src = fill.find(qn("a:srcRect"))
+    if src is None:
+        src = fill.makeelement(qn("a:srcRect"), {})
+        blip.addnext(src)
+    for name, value in zip(("l", "t", "r", "b"), _cover_crop(data, item.box, ds.slide_size_emu)):
+        if value:
+            src.set(name, str(value))
+        elif name in src.attrib:
+            del src.attrib[name]
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
@@ -480,6 +530,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     _fill_group(placed, spec, pattern, ds, issue)
     _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
+    _fill_image(slide, placed, spec, pattern, ds)
     if spec.element_positions:
         final_shapes = _walk(slide.shapes, ds.slide_size_emu)
         source_slots = {slot.shape_id: slot for slot in pattern.slots}
@@ -560,17 +611,62 @@ def _drop_samples(prs, count: int) -> None:
         prs.part.drop_rel(rel_id)
 
 
+_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+_P14 = "http://schemas.microsoft.com/office/powerpoint/2010/main"
+_P159 = "http://schemas.microsoft.com/office/powerpoint/2015/09/main"
+FADE_MS = 900
+MORPH_MS = 1000
+
+
+def _transition_xml(morph: bool) -> str:
+    """Переход слайда по правилам кинодек: между темами растворение 0,9 с, не через чёрный; внутри
+    одной сцены (тот же образец и тот же заголовок) морф 1 с. Старый PowerPoint видит растворение."""
+    p = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    fade = f'<p:transition xmlns:p="{p}" spd="slow"><p:fade/></p:transition>'
+    if morph:
+        choice = (f'<mc:Choice xmlns:p159="{_P159}" xmlns:p14="{_P14}" Requires="p159">'
+                  f'<p:transition xmlns:p="{p}" spd="slow" p14:dur="{MORPH_MS}"><p159:morph option="byObject"/></p:transition>'
+                  '</mc:Choice>')
+    else:
+        choice = (f'<mc:Choice xmlns:p14="{_P14}" Requires="p14">'
+                  f'<p:transition xmlns:p="{p}" spd="slow" p14:dur="{FADE_MS}"><p:fade/></p:transition></mc:Choice>')
+    return f'<mc:AlternateContent xmlns:mc="{_MC}">{choice}<mc:Fallback>{fade}</mc:Fallback></mc:AlternateContent>'
+
+
+def _set_transition(slide, morph: bool) -> None:
+    from lxml import etree
+
+    root = slide._element
+    for old in list(root):
+        if old.tag == qn("p:transition") or (old.tag == f"{{{_MC}}}AlternateContent"
+                                              and old.find(".//" + qn("p:transition")) is not None):
+            root.remove(old)
+    node = etree.fromstring(_transition_xml(morph))
+    anchor = root.find(qn("p:clrMapOvr"))
+    if anchor is None:
+        anchor = root.find(qn("p:cSld"))
+    anchor.addnext(node)
+
+
+def _title_text(spec: SlideSpec, pattern: Pattern) -> str:
+    return " ".join(spec.slot_text.get(slot.id, "") for slot in pattern.slots if slot.role == "title").strip()
+
+
 def export_pptx(specs: list[SlideSpec], ds: DesignSystem, package_dir: Path, out_path: Path) -> Path:
     """Собирает pptx по инструкциям вёрстки и возвращает путь к сохранённому файлу."""
     prs = Presentation(str(Path(package_dir) / SOURCE_NAME))
     patterns = {pattern.id: pattern for pattern in ds.patterns}
     samples = len(prs.slides)
+    previous: tuple[str, str] | None = None
     for spec in specs:
         pattern = patterns.get(spec.pattern_id)
         if pattern is None:
             raise KeyError(f"в дизайн-системе нет паттерна {spec.pattern_id}")
         slide = clone_slide(prs, pattern.source_slide - 1)
         _fill_slide(slide, spec, pattern, ds)
+        scene_key = (spec.pattern_id, _title_text(spec, pattern))
+        _set_transition(slide, morph=bool(scene_key[1]) and scene_key == previous)
+        previous = scene_key
     _drop_samples(prs, samples)
 
     out_path = Path(out_path)

@@ -40,10 +40,12 @@
 | `integrity.empty` | слайд пуст или на нём только заголовок | целостность | нет | `designer/tests/audit/test_integrity.py` |
 | `integrity.chart_labels` | у диаграммы нет категорий, имён рядов или единиц | целостность | нет | `designer/tests/audit/test_integrity.py` |
 | `integrity.duplicate` | текст слайда после нормализации совпадает с другим слайдом | целостность | нет | `designer/tests/audit/test_integrity.py` |
+| `advice.three_seconds` | больше 40 слов кроме заголовка: слайд не читается за три секунды | совет | нет, «Применить» отдаёт слайд агенту | `designer/tests/test_advice.py` |
+| `advice.same_view` | третий слайд подряд на одном образце | совет | нет, «Применить» отдаёт слайд агенту | `designer/tests/test_advice.py` |
 
 `designer/tests/audit/test_registry.py` проверяет сам реестр, а не отдельную проверку:
 идентификаторы уникальны, два прогона `run_checks` на одной сцене дают одинаковый
-результат, чистая колода из пяти слайдов даёт пустой список находок.
+результат, чистая колода из пяти слайдов на двух чередующихся образцах даёт пустой список находок.
 `designer/tests/audit/test_fixes.py` дополнительно проверяет каждую из восьми
 автопочинок и то, что находка контекстной проверки получает `status="skipped"`, а не
 исключение.
@@ -68,12 +70,30 @@
 | `context.table_rows_work` | все строки таблицы и элементы легенды работают на мысль слайда? | слайд | `designer/tests/audit/test_contextual.py` |
 | `context.one_language` | вся колода на одном языке? | колода | `designer/tests/audit/test_contextual.py` |
 | `context.neighbors_linked` | соседние слайды связаны между собой по логике? | колода | `designer/tests/audit/test_contextual.py` |
+| `advice.lonely_number` | число без базы и сравнения: зал не поймёт, много это или мало (скилл `advise-deck`) | слайд | `designer/tests/test_advice.py` |
+| `advice.not_distinct` | слайд мог бы стоять в чужой презентации без изменений | слайд | `designer/tests/test_advice.py` |
+| `advice.no_function` | слайд не утверждает, не доказывает, не поворачивает рассказ и не даёт передышку | слайд | `designer/tests/test_advice.py` |
 
 Сбой сервера модели (сеть, битый JSON после трёх попыток) не роняет аудит: слайд или
 колода получает находку `context.unavailable` — она не входит в реестр `CONTEXT_CHECKS`,
 потому что это не вопрос о смысле, а признак того, что ответа не было. Покрыто
 `test_server_failure_gives_unavailable_finding_not_exception`
 (`designer/tests/audit/test_contextual.py`).
+
+Советы `advice.*` взяты из правил, которыми команда собирала выступления со сцены, и идут сверх
+приложения 1. Модель даёт не больше одного совета на слайд; совет по чужому id слайда или
+по правилу вне списка код отбрасывает, сбой модели даёт пустой список, а не находку.
+
+## Другие тесты доработки к финалу
+
+| Что проверяет | Тестовый файл |
+|---|---|
+| ключ VK и `Project-ID` уходят только на роутер VK, чужой адрес их не получает | `designer/tests/llm/test_client_auth.py`, `backend/src/test/java/local/voicedeck/LlmAuthTest.java` |
+| разбор xlsx и csv, русские числа, точные кандидаты в выводы, строка «Итого», процентные пункты | `designer/tests/test_insights.py` |
+| число модели не из кандидатов выбрасывается, отказ модели добирается выводами кода | `designer/tests/test_insights.py` |
+| слайды выводов встают после титула, повторы плана убираются, толкование модели не попадает на слайд | `designer/tests/test_insights.py` |
+| главное фото образца, подстановка в граф ComfyUI, не больше трёх картинок, подмена фото в pptx и html | `designer/tests/test_images.py` |
+| растворение и морф между слайдами в pptx | `designer/tests/test_advice.py` |
 
 ## Сверка с приложением 1 к ТЗ
 

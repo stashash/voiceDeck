@@ -189,7 +189,7 @@ class CheckDef(NamedTuple):
     func: CheckFunc
 
 
-from designer.audit import checks_density, checks_integrity, checks_layout, checks_template  # noqa: E402
+from designer.audit import advice, checks_density, checks_integrity, checks_layout, checks_template  # noqa: E402
 
 CHECKS: list[CheckDef] = [
     CheckDef("layout.out_of_bounds", "layout", "Элемент вышел за границы слайда", checks_layout.check_out_of_bounds),
@@ -212,6 +212,8 @@ CHECKS: list[CheckDef] = [
     CheckDef("integrity.empty", "integrity", "Пустой слайд", checks_integrity.check_empty),
     CheckDef("integrity.chart_labels", "integrity", "Диаграмме не хватает подписей", checks_integrity.check_chart_labels),
     CheckDef("integrity.duplicate", "integrity", "Слайд дублирует другой", checks_integrity.check_duplicate),
+    CheckDef("advice.three_seconds", "advice", "Слайд не читается за три секунды", advice.check_three_seconds),
+    CheckDef("advice.same_view", "advice", "Третий слайд подряд одного вида", advice.check_same_view),
 ]
 
 

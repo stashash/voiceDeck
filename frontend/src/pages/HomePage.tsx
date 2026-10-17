@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { plural } from '../designer/labels';
 import { hashParam } from '../router';
-import { ChevronDown, ArrowUp, Upload, Settings, Boxes, Check } from 'lucide-react';
+import { ChevronDown, ArrowUp, Upload, Settings, Boxes, Check, X } from 'lucide-react';
 import {
-  AgentAssignments, AgentInfo, DeckListItem, DesignSystemListItem,
+  AgentInfo, DeckListItem, DesignSystemListItem,
   absoluteUrl, createDeck, getAgentAssignments, listAgents, listDecks, listDesignSystemItems, setAgentAssignments, errorText
 } from '../designer/api';
 import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
+import { AttachTableButton, InsightsList, TableChip, useTableInsights } from '../designer/TableInsights';
 
 type Popover = 'ds' | 'agent' | null;
 // Холст: одна строка на четыре карточки, показаны две строки (Home.dc.html + правка координатора).
@@ -16,7 +17,6 @@ export default function HomePage() {
   const [brief, setBrief] = useState('');
   const [designSystems, setDesignSystems] = useState<DesignSystemListItem[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [assignments, setAssignments] = useState<AgentAssignments | null>(null);
   const [dsId, setDsId] = useState<string>('');
   const [agentId, setAgentId] = useState<string>('');
   const [recent, setRecent] = useState<DeckListItem[]>([]);
@@ -24,12 +24,24 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const boxRef = useRef<HTMLDivElement>(null);
+  const table = useTableInsights();
 
   useEffect(() => {
     listDesignSystemItems().then(items => { setDesignSystems(items); setDsId(prev => { const asked = hashParam('ds'); return prev || (asked && items.some(i => i.id === asked) ? asked : items[0]?.id) || ''; }); }).catch(() => {});
     listAgents().then(setAgents).catch(() => {});
-    getAgentAssignments().then(a => { setAssignments(a); setAgentId(prev => prev || a.deck || ''); }).catch(() => {});
+    getAgentAssignments().then(a => setAgentId(prev => prev || a.deck || '')).catch(() => {});
     listDecks().then(items => setRecent(items.filter(d => d.slides > 0 && d.status !== 'error').slice(0, RECENT_LIMIT))).catch(() => {});
+  }, []);
+
+  // Агента могли сменить в настройках, открытых в соседней вкладке («Настроить агента»): при возврате
+  // на главную список показывает того, кто на сервере ведёт подсказки и колоду (приёмка 17.10).
+  useEffect(() => {
+    function onFocus() {
+      listAgents().then(setAgents).catch(() => {});
+      getAgentAssignments().then(a => { if (a.deck) setAgentId(a.deck); }).catch(() => {});
+    }
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   useEffect(() => {
@@ -49,16 +61,57 @@ export default function HomePage() {
 
   const ready = designSystems.length > 0 && agents.length > 0;
 
+  /** Подсказки и колоду ведёт агент из списка под брифом: назначение сверяется со свежим состоянием сервера,
+   *  а не с прочитанным при открытии страницы. */
+  async function syncAgent(id: string) {
+    if (!id) return;
+    const current = await getAgentAssignments();
+    if (current.deck !== id) await setAgentAssignments({ ...current, deck: id });
+  }
+
+  function chooseAgent(id: string) {
+    setAgentId(id);
+    setOpen(null);
+    syncAgent(id).catch(e => setError(errorText(e)));
+  }
+
+  async function attachTable(file: File) {
+    try { await syncAgent(agentId); } catch (e) { setError(errorText(e)); }
+    await table.attach(file, brief);
+  }
+
+  /** «Повторить» после сбоя модели идёт к агенту, выбранному в списке сейчас. */
+  async function retryTable() {
+    try { await syncAgent(agentId); } catch (e) { setError(errorText(e)); }
+    table.retry(brief);
+  }
+
+  const fromTable = !!table.result && table.chosen.length > 0;
+  // Бриф правили после выводов модели: через 1,5 с выводы пересчитываются, до тех пор отправка ждёт.
+  const stale = table.isStale(brief);
+  useEffect(() => {
+    if (!stale) return;
+    const timer = window.setTimeout(() => table.refresh(brief), 1500);
+    return () => window.clearTimeout(timer);
+  }, [brief, stale]);
+  const canSubmit = ready && (!!brief.trim() || fromTable) && !table.loading && !table.modelDown && !stale;
+  const submitTitle = table.modelDown ? 'Модель недоступна: сначала настройте агента'
+    : table.loading ? 'Подождите: выводы из таблицы ещё считаются'
+    : stale ? 'Выводы собраны под прежний бриф: дождитесь пересчёта или нажмите «Повторить»'
+    : !ready ? 'Сначала нужны дизайн-система и агент'
+    : fromTable ? `Создать презентацию по брифу и ${plural(table.chosen.length, 'отмеченному выводу', 'отмеченным выводам', 'отмеченным выводам')}`
+    : 'Создать презентацию по брифу';
+
   async function submit() {
-    if (!ready || !dsId || !agentId || !brief.trim() || busy) return;
+    if (!canSubmit || !dsId || !agentId || busy) return;
     setBusy(true); setError('');
     try {
-      if (assignments && assignments.deck !== agentId) {
-        const next = { ...assignments, deck: agentId };
-        await setAgentAssignments(next);
-        setAssignments(next);
-      }
-      const { deck_id } = await createDeck({ design_system_id: dsId, brief, variants: ['a', 'b', 'c'] });
+      await syncAgent(agentId);
+      const text = brief.trim() || `Итоги по таблице «${table.result!.table_name}»`;
+      const { deck_id } = await createDeck({
+        design_system_id: dsId, brief: text, variants: ['a', 'b', 'c'],
+        insights_id: fromTable ? table.result!.id : null, insight_ids: fromTable ? table.chosen : [],
+      });
       window.location.hash = `#/decks/${deck_id}`;
     } catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
@@ -70,9 +123,14 @@ export default function HomePage() {
       <label htmlFor="brief" style={{ position: 'absolute', left: -9999 }}>Бриф, текст или идея презентации</label>
       <textarea id="brief" className="field" rows={6} value={brief} onChange={e => setBrief(e.target.value)}
         placeholder="Бриф, текст или одна идея. Например: итоги пилота потоковой загрузки для директоров направлений"/>
-      {error && <div className="notice" role="alert" style={{ margin: 0 }}>{error}<button onClick={() => setError('')} aria-label="Закрыть сообщение">×</button></div>}
+      {error && <div className="notice" role="alert" style={{ margin: 0 }}>{error}
+        <button type="button" className="button-icon" onClick={() => setError('')} aria-label="Закрыть сообщение" title="Закрыть">
+          <X size={18} strokeWidth={1.5}/></button></div>}
+      <TableChip state={table} onRetry={() => void retryTable()}/>
+      <InsightsList state={table} brief={brief} onRetry={() => void retryTable()}/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
+          <AttachTableButton onPick={file => void attachTable(file)}/>
           <button type="button" className={`picker-btn ${open === 'ds' ? 'open' : ''}`} aria-haspopup="listbox"
             aria-expanded={open === 'ds'} aria-label={`Дизайн-система: ${selectedDs?.name ?? ''}`}
             onClick={() => setOpen(v => v === 'ds' ? null : 'ds')}>
@@ -93,7 +151,7 @@ export default function HomePage() {
               <ul role="listbox" aria-label="Локальный CLI" className="popover-list">
                 {cliAgents.map(a => <li key={a.id} role="option" aria-selected={a.id === agentId}>
                   <button type="button" className={`popover-option ${a.id === agentId ? 'selected' : ''}`}
-                    onClick={() => { setAgentId(a.id); setOpen(null); }}>
+                    onClick={() => chooseAgent(a.id)}>
                     <Boxes size={18} strokeWidth={1.5}/>
                     <span className="popover-option-body"><span className="popover-option-title">{agentOptionName(a)}</span>
                       <span className="popover-option-sub">{agentOptionSub(a)}</span></span>
@@ -107,7 +165,7 @@ export default function HomePage() {
               <ul role="listbox" aria-label="Локальная модель" className="popover-list">
                 {localAgents.map(a => <li key={a.id} role="option" aria-selected={a.id === agentId}>
                   <button type="button" className={`popover-option ${a.id === agentId ? 'selected' : ''}`}
-                    onClick={() => { setAgentId(a.id); setOpen(null); }}>
+                    onClick={() => chooseAgent(a.id)}>
                     <Boxes size={18} strokeWidth={1.5}/>
                     <span className="popover-option-body"><span className="popover-option-title">{agentOptionName(a)}</span>
                       <span className="popover-option-sub">{agentOptionSub(a)}</span></span>
@@ -140,8 +198,8 @@ export default function HomePage() {
             <Settings size={18} strokeWidth={1.5}/>Подключить агента
           </a>
         </div>}
-        <button type="button" className="fab" disabled={!ready || !brief.trim() || busy}
-          aria-label="Создать презентацию" title={ready ? 'Создать презентацию' : 'Сначала нужны дизайн-система и агент'}
+        <button type="button" className="fab" disabled={!canSubmit || busy}
+          aria-label="Создать презентацию" title={submitTitle}
           onClick={submit}>
           <ArrowUp size={20} strokeWidth={1.5} color="var(--accent-ink)"/>
         </button>

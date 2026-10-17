@@ -7,16 +7,51 @@ import os
 import re
 import time
 
+from urllib.parse import urlsplit
+
 import httpx
 
 DEFAULT_BASE_URL = os.environ.get("DESIGNER_LLM_URL", "http://127.0.0.1:1234/v1")
 DEFAULT_MODEL = os.environ.get("DESIGNER_LLM_MODEL", "qwen/qwen3.8-27b")
+VK_INFERENCE_URL = ("https://ai-demo.platformpreview.ru/api/inference-providers-router/"
+                    "00000000-0000-0000-0000-000000000001/v1")
+"""Роутер инференса VK из инструкции организаторов (docs/requirements/inference_quickstart.md)."""
 
 
-def auth_headers() -> dict[str, str]:
-    """Ключ OpenAI-совместимого API (DESIGNER_LLM_API_KEY): LM Studio он не нужен, внешнему провайдеру нужен."""
-    key = os.environ.get("DESIGNER_LLM_API_KEY", "").strip()
-    return {"Authorization": f"Bearer {key}"} if key else {}
+def auth_headers(url: str) -> dict[str, str]:
+    """Заголовки доступа для запроса на url.
+
+    Ключ уходит только на адрес, к которому он выдан, и этот адрес берётся из окружения, а не из
+    настроек приложения: адрес модели меняется с экрана настроек, и без привязки ключ VK ушёл бы
+    на любой сервер, который туда впишут. VK_API_KEY и VK_PROJECT_ID идут на VK_INFERENCE_URL,
+    DESIGNER_LLM_API_KEY на DESIGNER_LLM_URL. LM Studio и Ollama ключ не нужен.
+    """
+    env = os.environ
+    vk_key = env.get("VK_API_KEY", "").strip()
+    if vk_key and _same_endpoint(url, env.get("VK_INFERENCE_URL", "").strip() or VK_INFERENCE_URL):
+        headers = {"Authorization": f"Bearer {vk_key}"}
+        project = env.get("VK_PROJECT_ID", "").strip()
+        if project:
+            headers["Project-ID"] = project
+        return headers
+    key = env.get("DESIGNER_LLM_API_KEY", "").strip()
+    bound = env.get("DESIGNER_LLM_URL", "").strip()
+    if key and bound and _same_endpoint(url, bound):
+        return {"Authorization": f"Bearer {key}"}
+    return {}
+
+
+def _same_endpoint(url: str, base: str) -> bool:
+    """url лежит под base: та же схема, хост и порт, путь начинается с пути base без хвоста /v1."""
+    def parts(value: str) -> tuple[str, str, int | None, str]:
+        split = urlsplit(value.strip())
+        port = split.port or {"http": 80, "https": 443}.get(split.scheme.lower())
+        return split.scheme.lower(), (split.hostname or "").lower(), port, split.path.rstrip("/").removesuffix("/v1")
+    scheme, host, port, path = parts(url)
+    base_scheme, base_host, base_port, base_path = parts(base)
+    if not host or (scheme, host, port) != (base_scheme, base_host, base_port):
+        return False
+    return path == base_path or path.startswith(base_path + "/")
 
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)
 _MAX_ATTEMPTS = 3  # первая попытка плюс два повтора
@@ -48,7 +83,7 @@ class LlmClient:
         self.load_wait_s = load_wait_s
         configured_url = os.environ.get("DESIGNER_LLM_URL", self.base_url).rstrip("/")
         self.native_ollama = os.environ.get("DESIGNER_LLM_PROTOCOL") == "ollama" and configured_url == self.base_url
-        self._client = httpx.Client(timeout=timeout_s, transport=transport, headers=auth_headers())
+        self._client = httpx.Client(timeout=timeout_s, transport=transport, headers=auth_headers(self.base_url))
         self.call_durations_ms: list[int] = []
 
     @classmethod

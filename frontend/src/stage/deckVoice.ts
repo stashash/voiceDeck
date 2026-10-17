@@ -23,11 +23,11 @@ export function parseDeckVoice(raw:string):DeckVoiceAction{
  const s=raw.trim().replace(/[.!?]+$/,'').replace(/\s+/g,' ');const c=s.toLowerCase().replace(/ё/g,'е');
  if(/^(удали|убери)(?: (?:выбранный )?(?:элемент|объект|его))?$/.test(c))return {kind:'deleteElement'};
  if(/^(скопируй|дублируй) (?:выбранный )?(?:элемент|объект|его)$/.test(c))return {kind:'duplicateElement'};
- if(/^(сделай (?:текст )?крупнее|увеличь шрифт)$/.test(c))return {kind:'style',scale:1.15};
- if(/^(сделай (?:текст )?мельче|уменьши шрифт)$/.test(c))return {kind:'style',scale:1/1.15};
+ if(/^(сделай(?:те)? (?:текст )?крупнее|сделать (?:текст )?крупнее|увеличь шрифт)$/.test(c))return {kind:'style',scale:1.15};
+ if(/^(сделай(?:те)? (?:текст )?мельче|сделать (?:текст )?мельче|уменьши шрифт)$/.test(c))return {kind:'style',scale:1/1.15};
  const font=c.match(/^(?:размер (?:текста|шрифта)|шрифт) (.+)$/);
  if(font){const size=voiceNumber(font[1]);if(size!==undefined&&size>=6&&size<=144)return {kind:'style',size_pt:size};}
- const color=c.match(/^(?:сделай (?:текст )?|цвет текста )(красным|синим|зеленым|черным|белым|красный|синий|зеленый|черный|белый)$/);
+ const color=c.match(/^(?:(?:сделай|сделайте|сделать) (?:текст )?|цвет текста )(красным|синим|зеленым|черным|белым|красный|синий|зеленый|черный|белый)$/);
  if(color)return {kind:'style',color:color[1].startsWith('крас')?'DC2626':color[1].startsWith('син')?'2563EB':color[1].startsWith('зел')?'16A34A':color[1].startsWith('чер')?'111111':'FFFFFF'};
  if(/^(еще|повтори|повтори перемещение)$/.test(c))return {kind:'repeat',factor:1};
  if(/^(еще немного|еще чуть-чуть|еще чуть)$/.test(c))return {kind:'repeat',factor:0.25};

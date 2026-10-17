@@ -252,6 +252,20 @@ def test_deck_state_lists_slide_images_and_serves_them(client, templates, monkey
     assert image.content == PNG
 
 
+def test_deck_state_names_revision_of_slide_images(client, templates, monkeypatch):
+    """Редактор показывает картинку pptx, только если она нарисована по текущей правке."""
+    _fake_slide_images(monkeypatch)
+    deck_id = _create_deck_with_variants(client, templates, ["a"])
+    marker = store.deck_variant_files_dir(deck_id, "a") / "export-revision.json"
+
+    marker.write_text(json.dumps({"revision": "r1", "images": True}), encoding="utf-8")
+    assert client.get(f"/decks/{deck_id}").json()["variants"]["a"]["images_revision"] == "r1"
+
+    # Без конвертера экспорт идёт без картинок: прежние картинки этой правке не соответствуют.
+    marker.write_text(json.dumps({"revision": "r2", "images": False}), encoding="utf-8")
+    assert client.get(f"/decks/{deck_id}").json()["variants"]["a"]["images_revision"] is None
+
+
 def test_live_slide_returns_picture_of_the_slide(client, templates, monkeypatch):
     _fake_slide_images(monkeypatch)
     ds_id = _upload_first_template(client, templates)

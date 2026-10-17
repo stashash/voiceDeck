@@ -26,6 +26,10 @@ services:
       LLM_URL: ${LLM_URL:-http://host.docker.internal:8000/v1}
       LLM_MODEL: ${LLM_MODEL:-deckgen}
       LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-deckgen-small}
+      # Ключ и проект инференса VK живут только в .env; код шлёт их только на VK_INFERENCE_URL
+      VK_API_KEY: ${VK_API_KEY:-}
+      VK_PROJECT_ID: ${VK_PROJECT_ID:-}
+      VK_INFERENCE_URL: ${VK_INFERENCE_URL:-}
       EMBEDDING_BACKEND: ${EMBEDDING_BACKEND:-ollama}
       EMBEDDING_URL: ${EMBEDDING_URL:-http://host.docker.internal:1234/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-bge-m3}
@@ -48,14 +52,19 @@ services:
       DESIGNER_LLM_URL: ${DESIGNER_LLM_URL:-http://host.docker.internal:1234/v1}
       DESIGNER_LLM_MODEL: ${DESIGNER_LLM_MODEL:-qwen/qwen3.8-27b}
       DESIGNER_LLM_API_KEY: ${DESIGNER_LLM_API_KEY:-}
+      VK_API_KEY: ${VK_API_KEY:-}
+      VK_PROJECT_ID: ${VK_PROJECT_ID:-}
+      VK_INFERENCE_URL: ${VK_INFERENCE_URL:-}
       DESIGNER_LLM_PARALLEL: ${DESIGNER_LLM_PARALLEL:-4}
+      # Сервер картинок ComfyUI на хосте (scripts/start-images.ps1); пусто: колода без картинок
+      DESIGNER_IMAGE_URL: ${DESIGNER_IMAGE_URL:-}
       DESIGNER_LIVE_LLM_URL: ${DESIGNER_LIVE_LLM_URL:-}
       DESIGNER_LIVE_LLM_MODEL: ${DESIGNER_LIVE_LLM_MODEL:-}
       # Live editor and meaning expansion use the installed local Ollama by default.
       DESIGNER_EDITOR_LLM_URL: ${DESIGNER_EDITOR_LLM_URL:-http://host.docker.internal:11434}
       DESIGNER_EDITOR_LLM_MODEL: ${DESIGNER_EDITOR_LLM_MODEL:-qwen3:8b}
       DESIGNER_EDITOR_LLM_PROTOCOL: ${DESIGNER_EDITOR_LLM_PROTOCOL:-ollama}
-      DESIGNER_EDITOR_DEADLINE_S: ${DESIGNER_EDITOR_DEADLINE_S:-8}
+      DESIGNER_EDITOR_DEADLINE_S: ${DESIGNER_EDITOR_DEADLINE_S:-20}
       DESIGNER_EDITOR_NUM_CTX: ${DESIGNER_EDITOR_NUM_CTX:-8192}
       DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}}
       DESIGNER_AGENT_BRIDGE_URL: ${DESIGNER_AGENT_BRIDGE_URL:-http://host.docker.internal:8095}

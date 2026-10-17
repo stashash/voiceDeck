@@ -321,11 +321,13 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
         # Место отдано диаграмме или таблице: картинка образца оттуда уходит.
         if viz is not None and geo.area(box) <= geo.area(viz) and geo.overlap(box, viz) > 0.5:
             continue
-        elements.append(
-            _picture_element(
-                area.id, area.kind, box, order.get(area.shape_id or -1, 0), raw.get(area.shape_id), area.shape_id
-            )
+        element = _picture_element(
+            area.id, area.kind, box, order.get(area.shape_id or -1, 0), raw.get(area.shape_id), area.shape_id
         )
+        if area.id == spec.image_area_id and spec.image_path:
+            # Фото образца меняется на картинку слайда: рамка и порядок слоёв остаются образца.
+            element = element.model_copy(update={"image": spec.image_path, "asset": None})
+        elements.append(element)
 
     if group is not None and spec.unit_text and viz_id != group.id:
         n = unit_count(group, len(spec.unit_text))

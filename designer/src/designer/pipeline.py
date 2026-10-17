@@ -31,6 +31,7 @@ from pathlib import Path
 from designer import store
 from designer.agent_hook import _client_for
 from designer.audit import fixes as audit_fixes
+from designer.audit.advice import advise_deck
 from designer.audit.contextual import audit_deck, audit_slide
 from designer.audit.deterministic import run_checks
 from designer.contracts import Deck, DeckPlan, DesignSystem, Finding, Pattern, Scene, SlideIntent, SlideKind, SlideSpec
@@ -45,6 +46,11 @@ from designer.layout.capacity import main_group, slot_limits, unit_count
 from designer.layout.compose import compose
 from designer.layout.match import choose_pattern
 from designer.layout.scene import build_scene
+from designer.images.engine import ComfyEngine, ImageEngineError
+from designer.images.illustrate import SKILL as _ILLUSTRATE_SKILL
+from designer.images.illustrate import illustrate
+from designer.insights.suggest import SKILL as _SUGGEST_SKILL
+from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides, is_insight_slide
 from designer.llm.client import LlmClient
 from designer.llm.run import RunRecorder
 from designer.llm.skills import load_skill
@@ -401,9 +407,39 @@ class DeckCancelled(RuntimeError):
     """Автор остановил генерацию: конвейер выходит между шагами."""
 
 
+_INSIGHTS_DECK_SIZE = 12
+"""Сколько слайдов в колоде с выводами из таблицы, если автор не задал число."""
+
+
+def _illustrate(plan: DeckPlan, ds: DesignSystem, client: LlmClient, deck_id: str, audience: str,
+                recorder: RunRecorder, on_event: OnEvent) -> None:
+    """Картинки слайдов от модели text-to-image, если сервер картинок задан (DESIGNER_IMAGE_URL).
+
+    Сервер не отвечает или граф упал: колода собирается без картинок, событие images-skipped.
+    """
+    engine = ComfyEngine.from_env()
+    if engine is None:
+        return
+    try:
+        if not engine.available():
+            _emit(on_event, "images-skipped")
+            return
+        _emit(on_event, "images")
+        with recorder.stage("images"):
+            if illustrate(plan, ds, client, engine, deck_id, audience):
+                recorder.use_skill(load_skill(_ILLUSTRATE_SKILL))
+    except ImageEngineError:
+        for slide in plan.slides:
+            slide.image = None
+        _emit(on_event, "images-skipped")
+    finally:
+        engine.close()
+
+
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
-                   client: LlmClient | None = None, variants: list[str] | None = None) -> Deck:
+                   client: LlmClient | None = None, variants: list[str] | None = None,
+                   insights: list[Suggestion] | None = None, table_name: str = "") -> Deck:
     """Бриф -> план -> слайды -> аудит -> файлы. Пишет deck.json, run.json и файлы в хранилище.
 
     variants — какие варианты вёрстки собрать (по умолчанию только `a`). План строится один
@@ -411,11 +447,16 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
     Контекстный аудит по картинке автоматически считается только для первого варианта
     из списка: на все три варианта в 5 минут он не укладывается, для остальных его запускает
     run_contextual_audit по запросу. Возвращает Deck первого запрошенного варианта.
+
+    insights — отмеченные автором подсказки по таблице. Их слайды собирает код из данных таблицы,
+    план строится вокруг них, аудит сверяет числа с брифом, к которому добавлены данные таблицы.
     """
     variant_codes = _clean_variants(variants)
     first_variant = variant_codes[0]
     deck_id = deck_id or store.new_deck_id()
-    store.init_deck(deck_id, ds_id, variant_codes, brief=brief)
+    insights = list(insights or [])
+    audit_brief = brief_with_insights(brief, table_name, insights, with_data=True) if insights else brief
+    store.init_deck(deck_id, ds_id, variant_codes, brief=audit_brief)
     owns_client = client is None
     try:
         package_dir = store.design_system_dir(ds_id)
@@ -424,8 +465,17 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
         recorder = RunRecorder(model=client.model)
         _emit(on_event, "plan")
         with recorder.stage("plan"):
-            plan = make_plan(brief, purpose, audience, slide_count, client)
+            if insights:
+                plan_brief = brief_with_insights(brief, table_name, insights, with_data=False)
+                rest = max(4, (slide_count or _INSIGHTS_DECK_SIZE) - len(insights))
+                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True)
+                insert_insight_slides(plan, insights, brief)
+            else:
+                plan = make_plan(brief, purpose, audience, slide_count, client)
         recorder.use_skill(load_skill(_PLAN_SKILL))
+        if insights:
+            recorder.use_skill(load_skill(_SUGGEST_SKILL))
+        _illustrate(plan, ds, client, deck_id, audience, recorder, on_event)
 
         plans = variant_axes.make_variants(plan, ds)
         chosen_by_a = _pattern_ids_for_plan(plans["a"], ds)
@@ -439,7 +489,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
                 raise DeckCancelled("Генерация остановлена")
             deck = _build_and_export_variant(
                 deck_id, ds_id, variant_code, plans[variant_code], chosen_by_a, ds, package_dir,
-                client, recorder, on_event, brief=brief,
+                client, recorder, on_event, brief=audit_brief,
                 with_contextual_audit=(variant_code == first_variant),
             )
             store.save_run(deck_id, recorder.manifest(design_system_id=ds_id), variant=variant_code,
@@ -621,6 +671,10 @@ def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_ev
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
             # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.
             filled.items = list(intent.items)
+        if is_insight_slide(intent):
+            # Текст слайда вывода отмечен автором и сверен с расчётом: подгонка под макет его не переписывает.
+            # Прогон 17.10: числа совпали, а «с I по IV квартал 2026 года» стало «в течение 2026 года».
+            filled.title, filled.key_message, filled.items = intent.title, intent.key_message, list(intent.items)
         return filled
     except Exception:
         _emit(on_event, "slide-fallback", index, variant)
@@ -639,6 +693,7 @@ def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text
     for job in zip(scenes, png_paths):
         findings.extend(_one(job))
     findings.extend(audit_deck(scenes, client))
+    findings.extend(advise_deck(scenes, client))
     return findings
 
 

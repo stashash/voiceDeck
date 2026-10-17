@@ -54,6 +54,8 @@ export type Finding = {
 // ---------- состояние колоды ----------
 export type DeckVariantState = {
   revision?: string | null;
+  /** Правка, по которой нарисованы картинки слайдов: пока не равна revision, экспорт ещё идёт. */
+  images_revision?: string | null;
   status: 'running' | 'done' | 'error';
   design_system_id: string;
   plan: DeckPlan | null;
@@ -90,6 +92,8 @@ function url(path: string): string {
 
 /** Ошибка запроса словами человека: сбой сети браузер отдаёт как «TypeError: Failed to fetch». */
 export function errorText(e: unknown): string {
+  // Срок запроса вышел: браузер отдаёт это английским «signal timed out».
+  if (e instanceof DOMException && e.name === 'TimeoutError') return 'Сервис дизайнера не ответил вовремя: нажмите «Повторить».';
   if (e instanceof TypeError) return `Сервис дизайнера не отвечает (${BASE_URL}). Проверьте, что контейнеры запущены: docker compose ps.`;
   return e instanceof Error ? e.message : String(e);
 }
@@ -162,9 +166,44 @@ export function patternPreviewUrl(dsId: string, patternId: string): string {
   return url(`/design-systems/${dsId}/previews/${patternId}.png`);
 }
 
+// ---------- подсказки по таблице ----------
+export type InsightVisual = 'column' | 'bar' | 'line' | 'pie' | 'table' | 'big_number';
+export type InsightView = {
+  id: string; headline: string; number: string; visual: InsightVisual; why: string;
+  source: string; formula: string; by_model: boolean;
+  /** Кандидаты кода: по ним экран узнаёт подсказку после пересчёта под новый бриф. */
+  fact_ids: string[];
+  /** Начало и конец главного числа в headline: число в строке одно, внутри вывода. */
+  number_at: [number, number] | null;
+};
+/** Разбор файла без модели: строки и столбцы на плашке и ошибка файла приходят сразу. */
+export type TablePreview = { table_name: string; sheet: string; rows: number; columns: number; from_image?: boolean };
+
+export function tablePreview(file: File, signal?: AbortSignal): Promise<TablePreview> {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(url('/insights/table'), { method: 'POST', body: form, signal }, 60_000).then(r => uploadResponse<TablePreview>(r));
+}
+export type InsightsResponse = {
+  id: string; table_name: string; sheet: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
+  /** Таблицу прочитала модель с картинки: числа надо сверить с оригиналом. */
+  from_image?: boolean;
+};
+
+const INSIGHTS_TIMEOUT_MS = 6 * 60_000;
+
+export function tableInsights(file: File, brief: string, signal?: AbortSignal, useModel = true): Promise<InsightsResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('brief', brief);
+  form.append('use_model', String(useModel));
+  // Таблицу с картинки модель читает кусками до трёх минут, обычный срок запроса в 20 с её обрывал (стек 17.10).
+  return fetch(url('/insights'), { method: 'POST', body: form, signal }, INSIGHTS_TIMEOUT_MS).then(r => uploadResponse<InsightsResponse>(r));
+}
+
 export function createDeck(payload: {
   design_system_id: string; brief: string; purpose?: string; audience?: string;
-  slide_count?: number | null; variants?: string[];
+  slide_count?: number | null; variants?: string[]; insights_id?: string | null; insight_ids?: string[];
 }): Promise<{ deck_id: string }> {
   return fetch(url('/decks'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),

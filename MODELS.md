@@ -6,8 +6,11 @@
 |---|---|---|---|---|---|
 | Qwen/Qwen3.8-27B | план колоды, текст слотов под лимиты знаков, контекстный аудит слайда и колоды по картинке, описание паттерна по картинке | `designer`, по умолчанию (`DESIGNER_LLM_MODEL`, `designer/src/designer/llm/client.py`) | Apache 2.0 | 27B, принимает изображения | https://huggingface.co/Qwen/Qwen3.8-27B |
 | google/gemma-4-26B-A4B-it | те же задачи `designer`, вариант для живого режима: быстрее из-за меньшего числа активных параметров | `designer`, через `DESIGNER_LIVE_LLM_MODEL=google/gemma-4-26b-a4b` (имя в LM Studio) для живого режима или `DESIGNER_LLM_MODEL` для всего | Apache 2.0 | 25,2B всего, 3,8B активных (MoE) | https://huggingface.co/google/gemma-4-26B-A4B-it |
+| Qwen3.8-27B на инференсе VK (`qwen38-27b-fp8`) | в финале все задачи выше, плюс подсказки по таблице (`suggest-insights`), описание кадров (`illustrate`), советы по колоде (`advise-deck`), правка голосом и проверка границ темы в Java-сервисе | `designer` и `backend` через `VK_INFERENCE_URL`, ключ из `.env` (README, «Инференс VK») | Apache 2.0 | 27B, FP8 | https://huggingface.co/Qwen/Qwen3.8-27B |
+| black-forest-labs/FLUX.2-klein-4B (FP8) | картинки в слайдах, задача со звёздочкой ТЗ | ComfyUI по графу `designer/skills/illustrate/graph.json`, адрес `DESIGNER_IMAGE_URL` (`designer/src/designer/images/engine.py`) | Apache 2.0 | 4B | https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8 |
+| Qwen/Qwen3-4B | кодировщик текста для FLUX.2 klein | тот же граф ComfyUI | Apache 2.0 | 4B | https://huggingface.co/Qwen/Qwen3-4B |
 
-Обе модели — с открытыми весами не крупнее 35B, как требует ТЗ. Сервис принимает адрес и
+Все генеративные модели с открытыми весами под Apache 2.0, текстовая не крупнее 35B, картинки (FLUX.2 klein с кодировщиком) около 8B вместе, как требует ТЗ. Лицензии сверены по карточкам Hugging Face 2026-10-17. Сервис принимает адрес и
 имя модели переменными окружения (`DESIGNER_LLM_URL`, `DESIGNER_LLM_MODEL`), поэтому смена
 модели не требует правки кода.
 

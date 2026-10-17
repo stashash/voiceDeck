@@ -38,7 +38,7 @@ class EditorModel:
             if self.error and time.monotonic() < self.retry_after:
                 return {'state': 'error', 'model': model, 'message': self.error}
             try:
-                async with httpx.AsyncClient(timeout=2, headers=auth_headers()) as client:
+                async with httpx.AsyncClient(timeout=2, headers=auth_headers(base)) as client:
                     response = await client.get(base + '/api/ps')
                     response.raise_for_status()
                     loaded = response.json().get('models', [])
@@ -56,7 +56,7 @@ class EditorModel:
     async def _load(self, base, model, key):
         try:
             async with asyncio.timeout(60):
-                async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=2), headers=auth_headers()) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=2), headers=auth_headers(base)) as client:
                     response = await client.post(base + '/api/generate', json={
                         'model': model, 'prompt': '', 'stream': False,
                         'keep_alive': os.environ.get('DESIGNER_EDITOR_KEEP_ALIVE', '30m'),

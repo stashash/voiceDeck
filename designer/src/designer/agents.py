@@ -44,7 +44,7 @@ def _bridge_error_message(response: httpx.Response) -> str:
 
 def _local_models(llm_url: str) -> list[str]:
     try:
-        response = httpx.Client(timeout=5.0, headers=auth_headers()).get(f"{llm_url.rstrip('/')}/models")
+        response = httpx.Client(timeout=5.0, headers=auth_headers(llm_url)).get(f"{llm_url.rstrip('/')}/models")
         response.raise_for_status()
     except httpx.HTTPError:
         return []
@@ -73,7 +73,12 @@ def list_agents() -> dict:
         bridge_error = f"мост агентов недоступен на {bridge_url()}: {error}"
 
     settings = load_settings()
-    for model in _local_models(settings.llm_url):
+    models = _local_models(settings.llm_url)
+    if settings.llm_model and settings.llm_model not in models:
+        # Сервер модели может не отдавать список (роутер VK без ключа отвечает 401):
+        # модель из настроек всё равно та, которой работает конвейер, её можно выбрать.
+        models.append(settings.llm_model)
+    for model in models:
         items.append({
             "id": f"local:{model}",
             "kind": "local",

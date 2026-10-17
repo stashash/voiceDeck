@@ -2,6 +2,22 @@ import {deckElementAction,moveDeckElement,patchSlideText,patchNotes,revertVarian
 import type {DeckVariantState,Scene,SlidePatternOption} from '../designer/api';
 import type {DeckVoiceAction} from './deckVoice';
 
+/** Распознавание оформляет продиктованный текст как цитату: «замени текст на «отчёты готовы…».» и иногда
+ * ставит заглавную у второго слова, когда первое строчное. Новый текст начинается с заглавной, кавычки вокруг
+ * всего текста и точка в конце уходят; точка остаётся, только если она была в прежнем тексте. */
+export function replacementText(spoken:string,previous:string):string{
+ let text=spoken.trim();
+ const opens=(value:string)=>(value.match(/[«“„]/g)??[]).length;
+ const closes=(value:string)=>(value.match(/[»”]/g)??[]).length;
+ text=text.replace(/^[«“„"]/,m=>closes(text)>=opens(text)&&opens(text)>0||m==='"'?'':m);
+ const tail=text.match(/[»”"](?=[.!?…]*$)/);
+ if(tail&&(tail[0]==='"'?(text.match(/"/g)??[]).length%2===1:closes(text)>opens(text)))text=text.slice(0,tail.index)+text.slice(tail.index!+1);
+ if(!/[.]$/.test(previous.trim()))text=text.replace(/(?<!\.)\.$/,'');
+ const words=text.split(' ');
+ if(words.length>2&&/^[а-яё]/.test(words[0])&&/^[А-ЯЁ][а-яё]+[,;:]?$/.test(words[1]))words[1]=words[1].charAt(0).toLocaleLowerCase('ru')+words[1].slice(1);
+ text=words.join(' ');
+ return text.charAt(0).toLocaleUpperCase('ru')+text.slice(1);
+}
 export const deckSelectable=(scene:Scene)=>[...scene.elements.filter(e=>e.type==='text'),...scene.elements.filter(e=>e.type!=='text')];
 export type DeckVoiceContext={deckId:string;variant:string;scenes:Scene[];index:number;selectedId:string|null;patterns?:SlidePatternOption[]};
 export type DeckVoiceResult={index?:number;selectedId?:string|null;notice?:string;dictate?:{slide:number;id:string};confirmDelete?:number;state?:DeckVariantState;movement?:{dx:number;dy:number;align?:'left'|'right'|'top'|'bottom'|'center'}};
@@ -33,7 +49,7 @@ export async function executeDeckVoice(a:DeckVoiceAction,c:DeckVoiceContext):Pro
  if(a.kind==='text'||a.kind==='appendText'||a.kind==='textStart'){
   if(el!.type!=='text')return invalid('Выбранный объект не является текстом');
   if(a.kind==='textStart')return {...result,selectedId:el!.id,dictate:{slide:n,id:el!.id},notice:'Ожидается текст'};
-  result.state=await patchSlideText(deckId,variant,n,el!.id,a.kind==='appendText'?`${el!.text.trimEnd()} ${a.text}`.trimStart():a.text);
+  result.state=await patchSlideText(deckId,variant,n,el!.id,a.kind==='appendText'?`${el!.text.trimEnd()} ${a.text}`.trimStart():replacementText(a.text,el!.text));
  }else if(a.kind==='style'){
   const {kind:_,slide:__,elementNumber:___,...props}=a;
   result.state=await deckElementAction(deckId,variant,n,{...props,action:'style',element_id:el!.id});

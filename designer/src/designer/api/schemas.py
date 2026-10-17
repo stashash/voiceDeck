@@ -15,10 +15,46 @@ class DeckCreateRequest(BaseModel):
     audience: str = ""
     slide_count: int | None = None
     variants: list[str] = Field(default_factory=lambda: ["a", "b", "c"], description="a, b, c — любое подмножество")
+    insights_id: str | None = Field(default=None, description="ответ POST /insights: подсказки лежат на сервере")
+    insight_ids: list[str] = Field(default_factory=list, description="отмеченные автором подсказки, s1..s7")
 
 
 class DeckCreateResponse(BaseModel):
     deck_id: str
+
+
+class InsightView(BaseModel):
+    """Подсказка, как её видит автор: вывод, число, вид показа и источник числа для тултипа."""
+    id: str
+    headline: str
+    number: str
+    visual: str
+    why: str
+    source: str
+    formula: str
+    by_model: bool
+    fact_ids: list[str] = Field(default_factory=list, description="кандидаты кода: по ним экран узнаёт подсказку после пересчёта")
+    number_at: list[int] | None = Field(default=None, description="начало и конец главного числа в headline")
+
+
+class TablePreview(BaseModel):
+    """Разбор файла до модели: плашка сразу показывает строки и столбцы, ошибка файла приходит сразу."""
+    table_name: str
+    sheet: str = ""
+    rows: int = 0
+    columns: int = 0
+    from_image: bool = Field(default=False, description="таблица на картинке: прочитает модель, строк и столбцов ещё нет")
+
+
+class InsightsResponse(BaseModel):
+    id: str
+    table_name: str
+    sheet: str = Field(default="", description="лист xlsx, с которого прочитана таблица")
+    rows: int
+    columns: int
+    suggestions: list[InsightView]
+    note: str = Field(default="", description="почему выводы сформулировал код, а не модель")
+    from_image: bool = Field(default=False, description="таблицу прочитала модель с картинки: числа сверить с оригиналом")
 
 
 class DeckVariantState(BaseModel):
@@ -33,6 +69,8 @@ class DeckVariantState(BaseModel):
     error: str | None = None
     slide_images: list[str] = Field(default_factory=list,
                                      description="адреса картинок слайдов по порядку; пусто, если движка нет")
+    images_revision: str | None = Field(default=None,
+                                        description="правка, по которой нарисованы картинки слайдов; не равна revision, пока экспорт идёт")
     brief: str = Field(default="", description="бриф автора, с которого собрана колода")
 
 
