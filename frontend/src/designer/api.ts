@@ -93,6 +93,8 @@ function url(path: string): string {
 
 /** Ошибка запроса словами человека: сбой сети браузер отдаёт как «TypeError: Failed to fetch». */
 export function errorText(e: unknown): string {
+  // Срок запроса вышел: браузер отдаёт это английским «signal timed out».
+  if (e instanceof DOMException && e.name === 'TimeoutError') return 'Сервис дизайнера не ответил вовремя: нажмите «Повторить».';
   if (e instanceof TypeError) return `Сервис дизайнера не отвечает (${BASE_URL}). Проверьте, что контейнеры запущены: docker compose ps.`;
   return e instanceof Error ? e.message : String(e);
 }
@@ -181,7 +183,7 @@ export type TablePreview = { table_name: string; sheet: string; rows: number; co
 export function tablePreview(file: File, signal?: AbortSignal): Promise<TablePreview> {
   const form = new FormData();
   form.append('file', file);
-  return fetch(url('/insights/table'), { method: 'POST', body: form, signal }).then(r => uploadResponse<TablePreview>(r));
+  return fetch(url('/insights/table'), { method: 'POST', body: form, signal }, 60_000).then(r => uploadResponse<TablePreview>(r));
 }
 export type InsightsResponse = {
   id: string; table_name: string; sheet: string; rows: number; columns: number; suggestions: InsightView[]; note: string;
@@ -189,12 +191,15 @@ export type InsightsResponse = {
   from_image?: boolean;
 };
 
+const INSIGHTS_TIMEOUT_MS = 6 * 60_000;
+
 export function tableInsights(file: File, brief: string, signal?: AbortSignal, useModel = true): Promise<InsightsResponse> {
   const form = new FormData();
   form.append('file', file);
   form.append('brief', brief);
   form.append('use_model', String(useModel));
-  return fetch(url('/insights'), { method: 'POST', body: form, signal }).then(r => uploadResponse<InsightsResponse>(r));
+  // Таблицу с картинки модель читает кусками до трёх минут, обычный срок запроса в 20 с её обрывал (стек 17.10).
+  return fetch(url('/insights'), { method: 'POST', body: form, signal }, INSIGHTS_TIMEOUT_MS).then(r => uploadResponse<InsightsResponse>(r));
 }
 
 export function createDeck(payload: {
