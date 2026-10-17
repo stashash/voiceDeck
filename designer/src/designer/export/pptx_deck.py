@@ -15,7 +15,9 @@ from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pptx.oxml.ns import qn
 
-from designer import icons
+from PIL import Image
+
+from designer import icons, store
 from designer.contracts import Box, DesignSystem, Pattern, RepeatGroup, SlideSpec
 from designer.export.pptx_clone import clone_slide
 from designer.export.pptx_text import set_text
@@ -471,6 +473,49 @@ def _replace_picture(slide, item: _Placed, name: str) -> None:
             ext.getparent().remove(ext)
 
 
+def _cover_crop(data: bytes, box: Box, slide_size: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Обрезка srcRect (l, t, r, b в стотысячных), с которой картинка заполняет рамку без искажения."""
+    with Image.open(io.BytesIO(data)) as image:
+        width, height = image.size
+    frame = (box[2] * slide_size[0]) / max(box[3] * slide_size[1], 1)
+    picture = width / max(height, 1)
+    if picture > frame:
+        side = int(round((1 - frame / picture) / 2 * 100000))
+        return side, 0, side, 0
+    side = int(round((1 - picture / frame) / 2 * 100000))
+    return 0, side, 0, side
+
+
+def _fill_image(slide, placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
+    """Фото образца меняется на картинку слайда: рамка, маска формы и порядок слоёв остаются образца."""
+    if not spec.image_area_id or not spec.image_path:
+        return
+    area = next((a for a in pattern.areas if a.id == spec.image_area_id), None)
+    item = _live(placed, area.shape_id) if area is not None and area.shape_id is not None else None
+    path = store.data_dir() / spec.image_path
+    if item is None or not path.is_file():
+        return
+    blip = item.element.find(".//" + qn("a:blip"))
+    if blip is None:
+        return
+    data = path.read_bytes()
+    _, rid = slide.part.get_or_add_image_part(io.BytesIO(data))
+    blip.set(qn("r:embed"), rid)
+    for ext in blip.findall(qn("a:extLst") + "/" + qn("a:ext")):
+        if ext.get("uri") == _SVG_BLIP_URI:
+            ext.getparent().remove(ext)
+    fill = blip.getparent()
+    src = fill.find(qn("a:srcRect"))
+    if src is None:
+        src = fill.makeelement(qn("a:srcRect"), {})
+        blip.addnext(src)
+    for name, value in zip(("l", "t", "r", "b"), _cover_crop(data, item.box, ds.slide_size_emu)):
+        if value:
+            src.set(name, str(value))
+        elif name in src.attrib:
+            del src.attrib[name]
+
+
 def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> None:
     placed = _walk(slide.shapes, ds.slide_size_emu)
     issue = _next_id(slide)
@@ -480,6 +525,7 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
     _fill_group(placed, spec, pattern, ds, issue)
     _set_unit_icons(slide, placed, spec, pattern)
     _fill_viz(slide, placed, spec, pattern, ds)
+    _fill_image(slide, placed, spec, pattern, ds)
     if spec.element_positions:
         final_shapes = _walk(slide.shapes, ds.slide_size_emu)
         source_slots = {slot.shape_id: slot for slot in pattern.slots}

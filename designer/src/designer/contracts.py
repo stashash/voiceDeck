@@ -242,6 +242,13 @@ class TableSpec(BaseModel):
     rows: list[list[str]]
 
 
+class SlideImage(BaseModel):
+    """Картинка слайда от модели text-to-image: что нарисовано и где лежит файл."""
+    prompt: str
+    path: str = Field(default="", description="файл картинки относительно каталога данных designer")
+    alt: str = ""
+
+
 class SlideIntent(BaseModel):
     """Что слайд должен сказать, до выбора паттерна."""
     id: str
@@ -253,6 +260,7 @@ class SlideIntent(BaseModel):
     table: TableSpec | None = None
     attribution: str = Field(default="", description="автор цитаты или подпись")
     notes: str = ""
+    image: SlideImage | None = Field(default=None, description="ставит шаг иллюстраций, не план")
 
 
 class DeckPlan(BaseModel):
@@ -296,6 +304,8 @@ class SlideSpec(BaseModel):
     table: TableSpec | None = None
     viz_area_id: str | None = None
     notes: str = ""
+    image_area_id: str | None = Field(default=None, description="место образца, где фото образца меняется на картинку слайда")
+    image_path: str | None = Field(default=None, description="файл картинки относительно каталога данных designer")
 
 
 class Element(BaseModel):
@@ -310,6 +320,7 @@ class Element(BaseModel):
     fill: str | None = None
     asset: str | None = None
     icon: str | None = Field(default=None, description="пиктограмма набора designer/icons вместо картинки образца")
+    image: str | None = Field(default=None, description="картинка слайда вместо фото образца: файл относительно каталога данных")
     source_shape_id: int | None = None
     chart: ChartSpec | None = None
     table: TableSpec | None = None

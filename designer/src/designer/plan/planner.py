@@ -16,7 +16,7 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
               visuals_ready: bool = False) -> DeckPlan:
     """visuals_ready: слайды с диаграммами уже собраны из таблицы, план их не обязан делать."""
     skill = load_skill(_SKILL_NAME)
-    schema = DeckPlan.model_json_schema()
+    schema = plan_schema()
     system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count),
                           icon_names=icons.names_text())
 
@@ -40,6 +40,15 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     for index, slide in enumerate(plan.slides, start=1):
         slide.id = f"s{index}"
     return plan
+
+
+def plan_schema() -> dict:
+    """Схема ответа плана без поля image: картинку слайду ставит шаг иллюстраций, модель плана её не пишет."""
+    schema = DeckPlan.model_json_schema()
+    intent = schema.get("$defs", {}).get("SlideIntent", {})
+    intent.get("properties", {}).pop("image", None)
+    schema.get("$defs", {}).pop("SlideImage", None)
+    return schema
 
 
 def _slide_count_hint(slide_count: int | None) -> str:

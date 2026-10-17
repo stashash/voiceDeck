@@ -44,6 +44,7 @@ from designer.layout.capacity import (
     unit_slot_box,
     unit_slot_frame,
 )
+from designer.layout.match import hero_area
 from designer.layout.units import text_frame
 from designer import icons
 from designer.parse import geometry as geo
@@ -361,7 +362,7 @@ def _removed(pattern: Pattern, spec: SlideSpec, texts: dict[str, str], n: int) -
                 out.update(unit.shape_ids)
 
     for area in pattern.areas:
-        if area.id == spec.viz_area_id:
+        if area.id in (spec.viz_area_id, spec.image_area_id):
             continue
         if area.shape_id is None:
             # Образец диаграммы собран из фигур оформления: своей фигуры у него нет.
@@ -646,6 +647,11 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.chart, spec.table = intent.chart, intent.table
         busy = [slot.box for slot in pattern.slots if texts.get(slot.id)]
         spec.viz_area_id, spec.viz_box = _viz_place(pattern, ds, want, busy)
+
+    if intent.image is not None and intent.image.path:
+        hero = hero_area(pattern)
+        if hero is not None:
+            spec.image_area_id, spec.image_path = hero.id, intent.image.path
 
     spec.slot_text = texts
     spec.fitted_size_pt = _fitted(pattern, spec, texts, ds, n)

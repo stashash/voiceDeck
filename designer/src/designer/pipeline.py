@@ -45,6 +45,9 @@ from designer.layout.capacity import main_group, slot_limits, unit_count
 from designer.layout.compose import compose
 from designer.layout.match import choose_pattern
 from designer.layout.scene import build_scene
+from designer.images.engine import ComfyEngine, ImageEngineError
+from designer.images.illustrate import SKILL as _ILLUSTRATE_SKILL
+from designer.images.illustrate import illustrate
 from designer.insights.suggest import SKILL as _SUGGEST_SKILL
 from designer.insights.suggest import Suggestion, brief_with_insights, insert_insight_slides
 from designer.llm.client import LlmClient
@@ -407,6 +410,31 @@ _INSIGHTS_DECK_SIZE = 12
 """Сколько слайдов в колоде с выводами из таблицы, если автор не задал число."""
 
 
+def _illustrate(plan: DeckPlan, ds: DesignSystem, client: LlmClient, deck_id: str, audience: str,
+                recorder: RunRecorder, on_event: OnEvent) -> None:
+    """Картинки слайдов от модели text-to-image, если сервер картинок задан (DESIGNER_IMAGE_URL).
+
+    Сервер не отвечает или граф упал: колода собирается без картинок, событие images-skipped.
+    """
+    engine = ComfyEngine.from_env()
+    if engine is None:
+        return
+    try:
+        if not engine.available():
+            _emit(on_event, "images-skipped")
+            return
+        _emit(on_event, "images")
+        with recorder.stage("images"):
+            if illustrate(plan, ds, client, engine, deck_id, audience):
+                recorder.use_skill(load_skill(_ILLUSTRATE_SKILL))
+    except ImageEngineError:
+        for slide in plan.slides:
+            slide.image = None
+        _emit(on_event, "images-skipped")
+    finally:
+        engine.close()
+
+
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
                    client: LlmClient | None = None, variants: list[str] | None = None,
@@ -446,6 +474,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
         recorder.use_skill(load_skill(_PLAN_SKILL))
         if insights:
             recorder.use_skill(load_skill(_SUGGEST_SKILL))
+        _illustrate(plan, ds, client, deck_id, audience, recorder, on_event)
 
         plans = variant_axes.make_variants(plan, ds)
         chosen_by_a = _pattern_ids_for_plan(plans["a"], ds)

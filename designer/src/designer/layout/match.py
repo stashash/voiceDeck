@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from designer.contracts import DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
+from designer.contracts import Area, DesignSystem, Item, Pattern, RepeatGroup, SlideIntent, SlideKind
 from designer.layout.capacity import (
     unit_count,
     content_region,
@@ -361,11 +361,44 @@ def score_pattern(
     return round(total, 6)
 
 
+HERO_MIN = 0.12
+"""Доля слайда, с которой фото образца это главная картинка слайда, а не значок или логотип."""
+
+
+def hero_area(pattern: Pattern) -> Area | None:
+    """Главное фото образца, которое можно заменить картинкой слайда.
+
+    Годится образец ровно с одним крупным фото и без фото в блоках: второе крупное фото
+    (экран телефона в рамке, вторая колонка скриншотов) осталось бы на слайде чужим.
+    """
+    if any(a.kind == "image" for g in pattern.groups for a in g.unit_areas):
+        return None
+    big = [a for a in pattern.areas if a.kind == "image" and geo.area(a.box) >= HERO_MIN]
+    return big[0] if len(big) == 1 else None
+
+
+def _fits_with_image(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
+    """Годится ли образец под слайд со своей картинкой: фото образца заменяется, остальное как у fits."""
+    hero = hero_area(pattern)
+    if hero is None or ds.pattern_overrides.get(pattern.id) is False:
+        return False
+    # Образец «держится на фото» ровно потому, что у него есть фото: картинка слайда его заменит.
+    bare = pattern.model_copy(update={"needs_images": False, "areas": [a for a in pattern.areas if a.id != hero.id]})
+    return fits(intent, bare, ds.model_copy(update={"pattern_overrides": {}}))
+
+
 def choose_pattern(intent: SlideIntent, ds: DesignSystem, used: list[str] | None = None) -> Pattern:
-    """Паттерн шаблона под намерение. При равных оценках побеждает меньший id."""
+    """Паттерн шаблона под намерение. При равных оценках побеждает меньший id.
+
+    У слайда с готовой картинкой сначала ищется образец с фото, которое она заменит.
+    """
     if not ds.patterns:
         raise ValueError("в дизайн-системе нет ни одного паттерна")
     seen = list(used or [])
+    if intent.image is not None and intent.image.path:
+        pictured = [p for p in ds.patterns if _fits_with_image(intent, p, ds)]
+        if pictured:
+            return min(pictured, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))
     if intent.kind is SlideKind.big_number and not any(_big_number_slot(p, ds) for p in ds.patterns):
         # В шаблоне нет слайда с крупной цифрой: число уходит в заголовок раздела, а не в мелкую плашку.
         intent = intent.model_copy(update={"kind": SlideKind.section})

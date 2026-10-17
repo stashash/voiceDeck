@@ -20,7 +20,8 @@ const STEP_ORDER: StepId[] = ['plan', 'layout', 'audit', 'files', 'meaning', 'va
 
 /** Сырой шаг события SSE → канонический шаг ленты. null — событие не относится к пяти шагам одного варианта. */
 export function stepIdFor(rawStep: string): StepId | null {
-  if (rawStep === 'plan') return 'plan';
+  // Картинки слайдов рисуются сразу после плана, до вёрстки: шаг «План» идёт, пока они не готовы.
+  if (rawStep === 'plan' || rawStep === 'images' || rawStep === 'images-skipped') return 'plan';
   if (rawStep === 'slide' || rawStep === 'slide-image' || rawStep === 'slide-fallback') return 'layout';
   if (rawStep === 'audit') return 'audit';
   if (rawStep === 'export-pptx' || rawStep === 'export-html' || rawStep === 'export-pdf' || rawStep === 'convert' || rawStep === 'convert-failed') return 'files';
