@@ -5,12 +5,12 @@ services:
       args:
         VITE_DESIGNER_URL: /designer
     environment:
-      ALLOWED_ORIGIN: ${PUBLIC_DEMO_URL:-http://localhost:8087}
+      ALLOWED_ORIGINS: http://localhost:8087,${PUBLIC_DEMO_URL:-}
       DESIGNER_PUBLIC_URL: ${PUBLIC_DEMO_URL:-http://localhost:8087}
 
   designer:
     environment:
-      DESIGNER_ALLOWED_ORIGINS: ${PUBLIC_DEMO_URL:-http://localhost:8087}
+      DESIGNER_ALLOWED_ORIGINS: http://localhost:${APP_PORT:-8088},http://localhost:8087,${PUBLIC_DEMO_URL:-}
 
   public-proxy:
     image: nginx:1.27-alpine

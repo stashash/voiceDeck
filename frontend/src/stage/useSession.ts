@@ -2,8 +2,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {initial,reduce,Chunk,Event,Slide,State} from '../store';
 import {Credentials,Microphone,Transport} from '../transport';
+import {BASE_URL as DESIGNER_URL} from '../designer/api';
 
-const DEFAULT_DESIGNER_URL='http://localhost:8090';
 
 export function channelName(sessionId:string){return `voicedeck-stage-${sessionId}`;}
 
@@ -120,8 +120,7 @@ export function useSession():Session{
 
  useEffect(()=>{
   fetch('/health').then(r=>r.json()).then(h=>setLive(h.mode==='live')).catch(()=>{});
-  const designerUrl=(import.meta.env.VITE_DESIGNER_URL as string|undefined)??DEFAULT_DESIGNER_URL;
-  fetch(`${designerUrl}/design-systems`).then(r=>r.json()).then(d=>setDesignSystems(d.ids??[])).catch(()=>{});
+  fetch(`${DESIGNER_URL}/design-systems`).then(r=>r.json()).then(d=>setDesignSystems(d.ids??[])).catch(()=>{});
   return ()=>{eng.close();void mic.current?.stop();};
  },[]);
 

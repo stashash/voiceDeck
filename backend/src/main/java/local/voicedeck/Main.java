@@ -26,12 +26,14 @@ public final class Main {
         Store store=new Store();store.init();Models models=loadModels(env("MODE","demo").equals("live"));boolean live=models.live;Llm llm=new Llm();Designer designer=new Designer();
         Vertx vertx=Vertx.vertx();Router router=Router.router(vertx);
         Map<String,Session> sessions=new ConcurrentHashMap<>();
-        String allowedOrigin=env("ALLOWED_ORIGIN","http://localhost:8080");
-        Set<String> origins=new HashSet<>(List.of(allowedOrigin,allowedOrigin.replace("localhost","127.0.0.1")));
+        Set<String> origins=new HashSet<>();
+        addAllowedOrigin(origins,env("ALLOWED_ORIGIN","http://localhost:8080"));
+        for(String origin:env("ALLOWED_ORIGINS","").split(","))addAllowedOrigin(origins,origin);
         // Страницы «Колода», «Шаблон» и «Сцена» ходят из браузера в сервис designer: его адрес разрешён для запросов и картинок слайдов.
         String designerPublic=env("DESIGNER_PUBLIC_URL","http://localhost:8090");
         router.route().handler(ctx->{
-            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerPublic+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org "+designerPublic+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
+            String designerSources=browserDesignerSources(ctx.request().host(),designerPublic,origins);
+            ctx.response().putHeader("X-Content-Type-Options","nosniff").putHeader("Referrer-Policy","no-referrer").putHeader("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' "+designerSources+" "+String.join(" ",origins.stream().map(o->o.replaceFirst("^http","ws")).toList())+"; worker-src 'self'; img-src 'self' data: blob: https://upload.wikimedia.org https://thumb.wikimedia.org "+designerSources+"; font-src 'self' data:; frame-src 'self' about: data:; frame-ancestors 'none'");
             String origin=ctx.request().getHeader("Origin");
             if(origin!=null&&!origins.contains(origin)){ctx.response().setStatusCode(403).end("Origin not allowed");return;}ctx.next();
         });
@@ -93,5 +95,18 @@ public final class Main {
         vertx.createHttpServer(new HttpServerOptions().setMaxWebSocketFrameSize(32768).setMaxWebSocketMessageSize(32768)).requestHandler(router).listen(Integer.parseInt(env("PORT","8080")),env("HOST","0.0.0.0")).toCompletionStage().toCompletableFuture().join();
         Runtime.getRuntime().addShutdownHook(new Thread(()->{sessions.values().forEach(Session::close);try{models.close();}catch(Exception ignored){}vertx.close();}));
         System.out.println("VoiceDeck ready at http://localhost:"+env("PORT","8080")+"; mode="+(live?"live":"demo"));
+    }
+    static void addAllowedOrigin(Set<String> origins,String origin){
+        if(origin==null||origin.isBlank())return;
+        String normalized=origin.trim().replaceAll("/+$","");
+        origins.add(normalized);
+        origins.add(normalized.replaceFirst("://localhost(?=:[0-9]+$)","://127.0.0.1"));
+    }
+    static String browserDesignerSources(String host,String configured,Set<String> origins){
+        LinkedHashSet<String> sources=new LinkedHashSet<>();
+        if(configured!=null)for(String source:configured.split(","))if(!source.isBlank())sources.add(source.trim());
+        boolean loopback=host!=null&&(host.startsWith("localhost:")||host.startsWith("127.0.0.1:")||host.startsWith("[::1]:"));
+        if(loopback&&origins.contains("http://"+host))sources.add("http://localhost:8090");
+        return String.join(" ",sources);
     }
 }
