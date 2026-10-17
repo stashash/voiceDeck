@@ -85,7 +85,7 @@ def suggest(table: Table, facts: list[Fact], brief: str, audience: str,
                                         schema=_Answer.model_json_schema(), params=skill.params)
             picked = _checked(_Answer.model_validate(data), by_id)
         except (LlmResponseError, ModelLoading, ValueError, httpx.HTTPError) as exc:
-            note = f"{_reason(exc)} Выводы посчитал и сформулировал код."
+            note = f"{_reason(exc)} Выводы посчитаны и записаны без неё."
     picked += _fallback(facts, picked)
     for index, suggestion in enumerate(picked[:MAX_SUGGESTIONS], start=1):
         suggestion.id = f"s{index}"
@@ -155,8 +155,9 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
                 and _same_direction(headline + " " + pick.number, main)):
             continue
         seen.add(key)
-        # «Зачем показывать» идёт в тултип и заметки: число в нём проходит ту же сверку, иначе поле пустое.
-        why = pick.why.strip() if not numbers_in(pick.why) - allowed else ""
+        # «Зачем показывать» идёт в заметки докладчика: число в нём проходит ту же сверку, а причину,
+        # которой в таблице нет («драйвер роста», «благодаря»), поле не несёт. Иначе поле пустое.
+        why = pick.why.strip() if not numbers_in(pick.why) - allowed and not _CAUSAL.search(pick.why) else ""
         # Справа в строке и крупно на слайде стоит главное число расчёта (изменение со знаком), а не уровень:
         # у вывода «отток снизился на 1,3 п. п.» модель ставила «5,1 %» (ред-тим 17.10).
         number = pick.number.strip()
@@ -171,6 +172,7 @@ def _checked(answer: _Answer, by_id: dict[str, Fact]) -> list[Suggestion]:
     return result
 
 
+_CAUSAL = re.compile(r"(благодаря|из-за|драйвер|свидетельств|подтвержда|обеспечи|повыша|привел|привёл|результат\w* (работ|усили)|потому что|вследствие)", re.I)
 _STEM = 4
 _UP = re.compile(r"\b(вырос|выросл|рост|увелич|прибав|подня|ускор|больше)", re.I)
 _DOWN = re.compile(r"\b(снизи|сниже|сократ|упал|упа|уменьш|паден|спад|меньше|потер)", re.I)
@@ -346,7 +348,8 @@ def drop_repeats(plan: DeckPlan, suggestions: list[Suggestion]) -> None:
         if slide.kind in _DATA_KINDS and _slide_numbers(slide) & numbers:
             return True
         words = _words(slide.title)
-        return any(words and head and len(words & head) / len(words | head) >= 0.5 for head in heads)
+        # Одно общее слово («рост») повтором не считается: у коротких заголовков доля совпадения обманчива.
+        return any(len(words & head) >= 2 and len(words & head) / len(words | head) >= 0.5 for head in heads)
 
     plan.slides = [slide for slide in plan.slides if not repeats(slide)]
 

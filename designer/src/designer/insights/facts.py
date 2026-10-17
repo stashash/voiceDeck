@@ -141,7 +141,14 @@ def _period_key(label: str) -> tuple[int, int] | None:
     date = re.search(r"(\d{2})\.(\d{2})\.((19|20)\d{2})", text)
     if date:
         return int(date.group(3)), int(date.group(2)) * 40 + int(date.group(1))
-    quarter = re.search(r"\bq([1-4])\b", text) or re.search(r"\b([1-4])\s*кв", text)
+    iso = re.search(r"((19|20)\d{2})-(\d{2})(?:-(\d{2}))?", text)
+    if iso:
+        return int(iso.group(1)), int(iso.group(3)) * 40 + int(iso.group(4) or 0)
+    english = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)", text)
+    if english:
+        months = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+        return year, months.index(english.group(1)) + 1
+    quarter =re.search(r"\bq([1-4])\b", text) or re.search(r"\b([1-4])\s*кв", text)
     if quarter:
         return year, int(quarter.group(1)) * 3
     roman = re.search(r"\b(iv|iii|ii|i)\s*кв", text)
@@ -156,6 +163,11 @@ def _period_key(label: str) -> tuple[int, int] | None:
     if year_match and _YEAR.match(text.strip()):
         return year, 0
     return None
+
+
+def _trend(shown: str) -> str:
+    """Существительное вместо глагола: «рост», «снижение» читаются выводом без согласования с родом показателя."""
+    return "рост на" if shown.startswith("+") else "снижение на" if shown.startswith("−") else "изменение"
 
 
 def _times_word(times: str) -> str:
@@ -208,7 +220,7 @@ def _period_facts(metric: _Metric) -> list[Fact]:
         shown, formula = change_fact
         facts.append(Fact(
             id="", kind="change_last",
-            statement=f"{metric.name}, {prev_label} → {last_label}: {shown} "
+            statement=f"{metric.name}: {_trend(shown)} {shown.lstrip('+−')}, {prev_label} → {last_label} "
                       f"({_with_unit(prev, metric.unit)} → {_with_unit(last, metric.unit)})",
             numbers=[shown, fmt(prev), fmt(last)], formula=formula, periods=[prev_label, last_label],
             source=source, chart=chart, big_number=shown, data_lines=lines))
@@ -218,7 +230,7 @@ def _period_facts(metric: _Metric) -> list[Fact]:
         shown, formula = change_fact
         facts.append(Fact(
             id="", kind="change_total",
-            statement=f"{metric.name}, {first_label} → {last_label}: {shown} "
+            statement=f"{metric.name}: {_trend(shown)} {shown.lstrip('+−')} с {first_label} по {last_label} "
                       f"({_with_unit(first, metric.unit)} → {_with_unit(last, metric.unit)})",
             numbers=[shown, fmt(first), fmt(last)], formula=formula, periods=[first_label, last_label],
             source=source, chart=chart, big_number=shown, data_lines=lines))
@@ -227,7 +239,7 @@ def _period_facts(metric: _Metric) -> list[Fact]:
         grew = sum(b[2] > a[2] for a, b in zip(metric.points, metric.points[1:]))
         facts.append(Fact(
             id="", kind="growth_count",
-            statement=f"{metric.name}: рост к прошлому периоду {grew} раз из {steps} ({first_label} → {last_label})",
+            statement=f"{metric.name}: рост в {grew} из {steps} сравнений с прошлым периодом ({first_label} → {last_label})",
             numbers=[str(grew), str(steps)], periods=[first_label, last_label],
             formula=f"сравнений с прошлым периодом, где значение выросло: {grew} из {steps}",
             source=source, chart=chart, big_number=f"{grew} из {steps}", data_lines=lines))

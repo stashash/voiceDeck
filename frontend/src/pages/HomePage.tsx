@@ -64,7 +64,7 @@ export default function HomePage() {
   }
 
   const fromTable = !!table.result && table.chosen.length > 0;
-  const canSubmit = ready && (!!brief.trim() || fromTable) && !table.loading;
+  const canSubmit = ready && (!!brief.trim() || fromTable) && !table.loading && !table.modelDown;
 
   async function submit() {
     if (!canSubmit || !dsId || !agentId || busy) return;
@@ -164,7 +164,7 @@ export default function HomePage() {
           </a>
         </div>}
         <button type="button" className="fab" disabled={!canSubmit || busy}
-          aria-label="Создать презентацию" title={ready ? 'Создать презентацию' : 'Сначала нужны дизайн-система и агент'}
+          aria-label="Создать презентацию" title={table.modelDown ? 'Модель недоступна: сначала настройте агента' : ready ? 'Создать презентацию' : 'Сначала нужны дизайн-система и агент'}
           onClick={submit}>
           <ArrowUp size={20} strokeWidth={1.5} color="var(--accent-ink)"/>
         </button>

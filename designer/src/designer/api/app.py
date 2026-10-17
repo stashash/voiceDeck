@@ -259,7 +259,7 @@ async def table_insights(file: UploadFile = File(...), brief: str = Form(""), au
         suggestions, note = await run_in_threadpool(insights_suggest.suggest, table, facts, brief, audience,
                                                     client if use_model else None)
         if not use_model:
-            note = "Модель остановлена, выводы сформулировал код"
+            note = "Модель остановлена: выводы посчитаны и записаны без неё."
     except insights_table.TableError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:

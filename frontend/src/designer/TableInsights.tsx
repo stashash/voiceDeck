@@ -69,7 +69,9 @@ export function useTableInsights() {
   }
 
   const chosen = result ? result.suggestions.filter(s => selected.has(s.id)).map(s => s.id) : [];
-  return { file, result, selected, loading, error, chosen, attach, clear, stop, toggle, dismissError: () => setError('') };
+  // Колоду строит тот же агент, что и подсказки: недоступен он, колода тоже не соберётся.
+  const modelDown = !!result?.note.startsWith('Модель недоступна');
+  return { file, result, selected, loading, error, chosen, modelDown, attach, clear, stop, toggle, dismissError: () => setError('') };
 }
 
 export type TableInsightsState = ReturnType<typeof useTableInsights>;
@@ -88,6 +90,9 @@ export function AttachTableButton({ onPick }: { onPick: (file: File) => void }) 
 }
 
 export function TableChip({ state }: { state: TableInsightsState }) {
+  // Ошибка файла стоит там же, где плашка файла, у скрепки, а не в списке подсказок.
+  if (state.error) return <div className="notice table-error" role="alert">{state.error}
+    <button onClick={state.dismissError} aria-label="Закрыть сообщение">×</button></div>;
   if (!state.file) return null;
   const r = state.result;
   return <div className="table-chip">
@@ -103,17 +108,16 @@ export function TableChip({ state }: { state: TableInsightsState }) {
 
 export function InsightsList({ state }: { state: TableInsightsState }) {
   const r = state.result;
-  if (!state.loading && !r && !state.error) return null;
+  if (!state.loading && !r) return null;
   return <section className="insights" aria-label="Что показать из таблицы">
     <h2 className="insights-title">Что показать из таблицы</h2>
-    {state.error && <div className="notice" role="alert" style={{ margin: 0 }}>{state.error}
-      <button onClick={state.dismissError} aria-label="Закрыть сообщение">×</button></div>}
     {state.loading && <div className="insights-status" role="status">
-      <span className="insights-spinner" aria-hidden="true"/>Ищу выводы в таблице
+      <span className="insights-spinner" aria-hidden="true"/>Ищу выводы в таблице, обычно до 20 секунд
       <button type="button" className="button" onClick={state.stop}>Остановить</button>
     </div>}
     {r && !state.loading && r.note && <p className="insights-note">{r.note}
-      {r.note.startsWith('Модель недоступна') && <> <a href="#/settings">Настроить агента</a></>}</p>}
+      {state.modelDown && <> Колода без модели не соберётся. <a href="#/settings" target="_blank" rel="noreferrer">Настроить агента</a></>}</p>}
+    {r && !state.loading && state.chosen.length === 0 && <p className="insights-note">Ни один вывод не отмечен: колода соберётся только по брифу.</p>}
     {r && !state.loading && <ul className="insights-list">
       {r.suggestions.map(s => {
         const Icon = VISUAL_ICON[s.visual] ?? Hash;
@@ -125,7 +129,8 @@ export function InsightsList({ state }: { state: TableInsightsState }) {
             <span className="insight-visual" title={VISUAL_NAME[s.visual]} aria-label={VISUAL_NAME[s.visual]}>
               <Icon size={18} strokeWidth={1.5}/>
             </span>
-            <span className="insight-headline">{s.headline}</span>
+            <span className="insight-headline">{s.headline}
+              {!s.by_model && !r.note && <span className="insight-plain" title="Модель не предложила этот вывод: он записан по расчёту без неё"> без модели</span>}</span>
             {/* Щелчок по числу открывает источник, а не снимает галочку строки. */}
             <span className="insight-number" tabIndex={0} aria-describedby={tip} onClick={e => e.preventDefault()}>
               {s.number}

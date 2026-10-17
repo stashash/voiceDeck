@@ -232,7 +232,8 @@ def test_insight_slide_keeps_model_reading_out_of_slide_text():
     insert_insight_slides(plan, suggestions[:1])
     made = plan.slides[1]
     text = made.title + made.key_message + " ".join(i.heading for i in made.items)
-    assert "свидетельствует" not in text and "свидетельствует" in made.notes
+    # Причинное толкование модели не идёт ни на слайд, ни в заметки: причин в таблице нет.
+    assert "свидетельствует" not in text and "свидетельствует" not in made.notes
     assert made.items[0].heading == share.statement
 
 

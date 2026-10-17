@@ -361,7 +361,9 @@ p{margin:0}
 .table-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .table-chip-meta{color:var(--text-muted);white-space:nowrap}
 .table-chip-remove{width:28px;height:28px}
-.insights{width:880px;max-width:calc(100vw - 48px);box-sizing:border-box;margin-top:24px;display:flex;flex-direction:column;gap:12px}
+.insights{width:880px;max-width:calc(100vw - 48px);box-sizing:border-box;margin-top:-24px;display:flex;flex-direction:column;gap:12px}
+.table-error{margin:0}
+.insight-plain{font-size:12px;color:var(--text-muted);margin-left:6px}
 .insights-title{font-size:16px;font-weight:600;margin:0}
 .insights-status{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--text-muted)}
 .insights-spinner{width:16px;height:16px;border-radius:999px;border:2px solid var(--accent);border-right-color:transparent;animation:spin 1s linear infinite}
