@@ -659,4 +659,7 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     cleared = _head_fix(pattern, title, texts, spec.fitted_size_pt, ds)
     plates = set(hints.values()) | {s.shape_id for s in pattern.slots if s.id in hints}
     spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared | plates)
+    if intent.source_note:
+        from designer.layout.source_note import add_source_note
+        add_source_note(spec, intent.source_note, pattern, ds)
     return spec

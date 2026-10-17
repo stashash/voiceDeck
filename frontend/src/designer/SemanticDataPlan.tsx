@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { analyzeDatasetBundle, DatasetBundlePlanResponse, DatasetTablePlan, errorText, VisualizationCandidate } from './api';
+import { DatasetTablePlan, errorText, VisualizationCandidate } from './api';
+import { analyzePersistedBundle, candidateKey, DatasetSelection, PersistedBundle, selectedCandidates } from './datasetBundle';
 
 const MAX_FILES = 7;
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -17,12 +18,8 @@ const GOALS = [
 
 const KIND_LABELS: Record<VisualizationCandidate['kind'], string> = {
   table: 'Таблица', line: 'Линия', bar: 'Столбцы горизонтально', column: 'Столбцы вертикально', pie: 'Доли',
-  histogram: 'Распределение', scatter: 'Связь показателей', grouped_column: 'Факт и план', kpi: 'Показатель',
+  histogram: 'Распределение', scatter: 'Связь показателей', grouped_column: 'Факт и план', stacked_column: 'Состав с накоплением', kpi: 'Показатель',
 };
-
-function candidateKey(candidate: VisualizationCandidate) {
-  return `${candidate.kind}:${candidate.required_fields.join('|')}`;
-}
 
 function roleLabel(column: DatasetTablePlan['profile']['columns'][number]) {
   const roles = column.role_candidates.map(role => ({
@@ -31,22 +28,28 @@ function roleLabel(column: DatasetTablePlan['profile']['columns'][number]) {
   return roles.length ? roles.join(', ') : column.type === 'empty' ? 'пусто' : column.type;
 }
 
-export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset: DatasetTablePlan, candidate: VisualizationCandidate, goal: string) => Promise<void> }) {
+export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (bundle: PersistedBundle, selections: DatasetSelection[]) => Promise<void>; creating?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [goal, setGoal] = useState('');
-  const [result, setResult] = useState<DatasetBundlePlanResponse | null>(null);
+  const [result, setResult] = useState<PersistedBundle | null>(null);
   const [activeDataset, setActiveDataset] = useState(0);
-  const [activeCandidate, setActiveCandidate] = useState('');
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [included, setIncluded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const dataset = result?.datasets[activeDataset];
   const selectedCandidate = useMemo(() => {
     if (!dataset) return null;
-    return dataset.plan.candidates.find(candidate => candidateKey(candidate) === activeCandidate)
+    const key = selected[dataset.dataset_id] ?? candidateKey(dataset.plan.selected_candidate);
+    return dataset.plan.candidates.find(candidate => candidateKey(candidate) === key)
       ?? dataset.plan.selected_candidate;
-  }, [dataset, activeCandidate]);
+  }, [dataset, selected]);
+  const selections = result ? selectedCandidates(result, selected, included) : [];
+  const unsupported = result?.datasets.filter(item => included[item.dataset_id] !== false &&
+    !item.plan.candidates.some(candidate => candidate.renderable && candidateKey(candidate) ===
+      (selected[item.dataset_id] ?? candidateKey(item.plan.selected_candidate)))).length ?? 0;
 
   function addFiles(list: FileList | null) {
     if (!list) return;
@@ -70,7 +73,7 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
     setFiles(next);
     setResult(null);
     setActiveDataset(0);
-    setActiveCandidate('');
+    setSelected({}); setIncluded({});
     setError('');
   }
 
@@ -78,7 +81,7 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
     setFiles(current => current.filter((_, i) => i !== index));
     setResult(null);
     setActiveDataset(0);
-    setActiveCandidate('');
+    setSelected({}); setIncluded({});
   }
 
   async function analyze() {
@@ -87,10 +90,10 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
     setError('');
     setResult(null);
     try {
-      const response = await analyzeDatasetBundle(files, goal);
+      const response = await analyzePersistedBundle(files, goal);
       setResult(response);
       setActiveDataset(0);
-      setActiveCandidate('');
+      setSelected({}); setIncluded({});
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -108,18 +111,18 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
     </div>
 
     <div className="semantic-plan-controls">
-      <button type="button" className="button" onClick={() => inputRef.current?.click()}>
+      <button type="button" className="button" disabled={busy || creating} onClick={() => inputRef.current?.click()}>
         {files.length ? 'Добавить файлы' : 'Выбрать данные'}
       </button>
       <input ref={inputRef} type="file" hidden multiple accept=".csv,.xlsx,.json,.txt,.md,.markdown"
         onChange={event => { addFiles(event.target.files); event.target.value = ''; }}/>
       <label className="semantic-plan-goal">
         <span>Что хотите понять?</span>
-        <select value={goal} onChange={event => { setGoal(event.target.value); setResult(null); }}>
+        <select value={goal} disabled={busy || creating} onChange={event => { setGoal(event.target.value); setResult(null); }}>
           {GOALS.map(([label, value]) => <option key={label} value={value}>{label}</option>)}
         </select>
       </label>
-      <button type="button" className="button primary" disabled={!files.length || busy} onClick={() => void analyze()}>
+      <button type="button" className="button primary" disabled={!files.length || busy || creating} onClick={() => void analyze()}>
         {busy ? 'Анализирую…' : 'Проанализировать'}
       </button>
     </div>
@@ -127,7 +130,7 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
     {!!files.length && <ul className="semantic-plan-files" aria-label="Выбранные файлы">
       {files.map((file, index) => <li key={`${file.name}:${file.size}:${file.lastModified}`}>
         <span>{file.name}</span><span>{(file.size / 1024).toFixed(0)} КБ</span>
-        <button type="button" aria-label={`Убрать ${file.name}`} onClick={() => removeFile(index)}>×</button>
+        <button type="button" disabled={busy || creating} aria-label={`Убрать ${file.name}`} onClick={() => removeFile(index)}>×</button>
       </li>)}
     </ul>}
 
@@ -139,13 +142,16 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
       <div className="semantic-plan-datasets" role="tablist" aria-label="Наборы данных">
         {result.datasets.map((item, index) => <button key={`${item.file_name}:${item.sheet}:${index}`} type="button"
           role="tab" aria-selected={activeDataset === index} className={activeDataset === index ? 'selected' : ''}
-          onClick={() => { setActiveDataset(index); setActiveCandidate(''); }}>
+          onClick={() => setActiveDataset(index)}>
           <span>{item.file_name}{item.sheet ? ` · ${item.sheet}` : ''}</span>
           <small>{item.rows} строк · {item.columns} столбца</small>
         </button>)}
       </div>
 
       {dataset && <>
+        <label><input type="checkbox" checked={included[dataset.dataset_id] !== false} disabled={creating}
+          onChange={event => setIncluded(current => ({ ...current, [dataset.dataset_id]: event.target.checked }))}/>
+          Включить эту таблицу в презентацию</label>
         <div className="semantic-plan-profile">
           <div className="semantic-plan-profile-heading">
             <strong>Структура</strong><span>{dataset.rows} строк · {dataset.columns} столбца</span>
@@ -158,7 +164,7 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
         <div className="semantic-plan-candidates">
           {dataset.plan.candidates.map(candidate => <button type="button" key={candidateKey(candidate)}
             aria-pressed={selectedCandidate === candidate} className={selectedCandidate === candidate ? 'selected' : ''}
-            onClick={() => setActiveCandidate(candidateKey(candidate))}>
+            disabled={creating} onClick={() => setSelected(current => ({ ...current, [dataset.dataset_id]: candidateKey(candidate) }))}>
             <strong>{KIND_LABELS[candidate.kind]}</strong>
             <span>{candidate.reason}</span>
             {!candidate.renderable && <small>Рендерер этого типа ещё не подключён</small>}
@@ -170,11 +176,12 @@ export function SemanticDataPlan({ onCreate }: { onCreate?: (file: File, dataset
           {selectedCandidate.excluded_row_lines.length > 0 && <p>Строки с пропусками: {selectedCandidate.excluded_row_lines.join(', ')}</p>}
           {selectedCandidate.warnings.map(warning => <p key={warning} className="semantic-plan-warning">{warning}</p>)}
         </div>}
-        {selectedCandidate?.renderable && onCreate && <button type="button" className="button primary"
-          disabled={busy || !files[dataset.file_index]} onClick={() => void onCreate(files[dataset.file_index], dataset, selectedCandidate, goal)}>
-          Создать презентацию с этим смыслом
+        {onCreate && <button type="button" className="button primary"
+          disabled={busy || creating || !selections.length || unsupported > 0} onClick={() => void onCreate(result, selections)}>
+          {creating ? 'Создаю презентацию…' : `Создать презентацию по выбранным таблицам (${selections.length})`}
         </button>}
-        <p className="semantic-plan-footnote">Выбранный допустимый вариант попадёт в существующий генератор; неподдерживаемые типы пока доступны только как аналитические рекомендации.</p>
+        {unsupported > 0 && <p className="semantic-plan-warning">Для {unsupported} таблиц выбран неподдерживаемый тип. Выберите другой вариант или исключите эти таблицы.</p>}
+        <p className="semantic-plan-footnote">Выбор сохраняется для каждой таблицы. Источники, охват и выбранные варианты будут переданы в одну презентацию.</p>
       </>}
     </div>}
   </section>;

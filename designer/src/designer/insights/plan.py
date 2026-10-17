@@ -1,8 +1,7 @@
 """Pure, deterministic analytical choices, independent of presentation styling.
 
 No conclusions, aggregations of business measures or chart data are invented here.
-``renderable`` means the visualization family has an existing renderer, not that
-this new plan is wired into the application. Grouped/histogram/scatter need adapters.
+``renderable`` means the visualization has a materializer and both export renderers.
 Source lines are provenance only and intentionally excluded from the content hash.
 """
 from __future__ import annotations
@@ -10,16 +9,18 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from typing import Literal
 
 from designer.insights.profile import DatasetProfile, profile_table
+from designer.insights.labels import field_label
 from designer.insights.table import Table, parse_number
 
 GoalKind = Literal["auto", "trend", "comparison", "shares", "distribution", "relationship", "reference", "kpi"]
-VisualKind = Literal["table", "line", "bar", "column", "pie", "histogram", "scatter", "grouped_column", "kpi"]
+VisualKind = Literal["table", "line", "bar", "column", "pie", "histogram", "scatter", "grouped_column", "stacked_column", "kpi"]
 
 
 @dataclass(frozen=True)
@@ -209,10 +210,18 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         excluded = tuple(table.lines[i] for i in range(len(table.rows)) if i not in kept)
         if excluded:
             limits += (f"{len(excluded)} row(s) with missing/unparseable selected cells excluded; see excluded_row_lines. No zero filling.",)
+        renderable = True
+        if kind in {"scatter", "grouped_column", "stacked_column"}:
+            exact = [v for field in metrics for v in numbers(field, indices)]
+            renderable = all(math.isfinite(float(v)) and Decimal(str(float(v))) == v for v in exact)
+            if kind == "stacked_column":
+                renderable = renderable and all(math.isfinite(sum(float(numbers(field, [i])[0]) for field in metrics)) for i in indices)
+            if not renderable:
+                limits += ("Numeric precision/range exceeds the export format; choose the reference table.",)
         candidates.append(VisualizationCandidate(
             kind, base + (50 if goal.kind in preferred else 0), reason, fields, dims, metrics,
             tuple(table.lines[i] for i in indices), excluded, limits,
-            kind not in {"scatter", "grouped_column"}, denominator, denominator_field, aggregation, value))
+            renderable, denominator, denominator_field, aggregation, value))
 
     if axis and metric:
         indices = complete((axis, metric))
@@ -270,7 +279,23 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             indices = complete((category, *pair))
             if len(indices) >= 2 and len({table.rows[i][positions[category]] for i in indices}) == len(indices):
                 add("grouped_column", 85, ("comparison",), f"Matched actual/target fields '{pair[0]}' and '{pair[1]}' share '{category}'; compare complete pairs without summing them.",
-                    (category,), pair, indices, ("Grouped-column plan adapter is not implemented; verify units before rendering.",))
+                    (category,), pair, indices, ("Compare paired measures without summing them; verify units before interpretation.",))
+
+        # A shared unit is necessary but does not prove additivity. Only a literal
+        # stacking request authorizes this composition view, never a generic shares goal.
+        if re.search(r"stacked|\bсостав\b|накопительн", goal.text, re.I):
+            units = [field_label(n)[1] for n in measures]
+            indices = complete((category, *measures))
+            valid = (2 <= len(measures) <= 5 and len(set(units)) == 1 and bool(units[0])
+                     and len(indices) >= 2 and len({table.rows[i][positions[category]].strip() for i in indices}) == len(indices)
+                     and all(v >= 0 for n in measures for v in numbers(n, indices)) and not pairs)
+            if valid:
+                add("stacked_column", 150, (), "Explicit stacked composition request with matching declared units; no normalization.",
+                    (category,), measures, indices,
+                    ("Values are stacked as components; additivity and mutual exclusivity are user assumptions, not inferred facts.",),
+                    aggregation="stack_components")
+            else:
+                warnings.append("Stacked composition requires 2–5 nonnegative component measures with matching explicit units and unique categories; actual/target pairs are not components.")
 
     if metric:
         indices = complete((metric,))
@@ -285,7 +310,7 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         indices = complete(pair)
         if len(indices) >= 5 and all(len(set(numbers(n, indices))) >= 2 for n in pair):
             add("scatter", 75, ("relationship",), f"'{pair[0]}' and '{pair[1]}' have {len(indices)} complete numeric pairs with variation.",
-                metrics=pair, indices=indices, limits=("Scatter renderer is not implemented. Association is not causation; no correlation value is asserted.",))
+                metrics=pair, indices=indices, limits=("Association is not causation; no correlation value is asserted.",))
         elif goal.kind == "relationship":
             warnings.append("Scatter needs at least five complete pairs and variation in both distinct numeric measures.")
     elif goal.kind == "relationship":

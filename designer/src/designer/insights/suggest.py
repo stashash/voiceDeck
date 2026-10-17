@@ -13,7 +13,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, Field
 
-from designer.contracts import ChartSpec, DeckPlan, Item, SlideIntent, SlideKind, TableSpec
+from designer.contracts import ChartSpec, DataProvenance, DeckPlan, Item, SlideIntent, SlideKind, TableSpec
 from designer.insights.facts import Fact
 from designer.insights.table import Table
 from designer.llm.client import LlmClient, LlmResponseError, ModelLoading
@@ -22,7 +22,7 @@ from designer.llm.skills import load_skill
 SKILL = "suggest-insights"
 MIN_SUGGESTIONS, MAX_SUGGESTIONS = 3, 7
 PREVIEW_ROWS = 30
-Visual = Literal["column", "bar", "line", "pie", "table", "big_number"]
+Visual = Literal["column", "bar", "line", "pie", "table", "big_number", "scatter", "grouped_column", "stacked_column"]
 _PERIOD_KINDS = ("change_last", "change_total", "growth_count")
 _FALLBACK_ORDER = ("change_last", "rows_grew", "share_top", "total_change", "leader_gap",
                    "change_total", "fastest_row", "growth_count", "count_top", "count_distinct")
@@ -33,7 +33,9 @@ class _Pick(BaseModel):
     fact_ids: list[str] = Field(min_length=1, max_length=2)
     headline: str = Field(max_length=120)
     number: str = Field(max_length=40)
-    visual: Visual
+    # Extended charts require the deterministic stage-2 data adapter, not a
+    # model-directed type substitution on legacy categorical facts.
+    visual: Literal["column", "bar", "line", "pie", "table", "big_number"]
     why: str = Field(max_length=200)
 
 
@@ -58,6 +60,8 @@ class Suggestion(BaseModel):
     data_lines: list[str] = Field(default_factory=list)
     by_model: bool
     number_at: list[int] | None = None
+    provenance: DataProvenance | None = None
+    coverage: str = ""
     """Начало и конец главного числа в headline; None, если его там нет."""
 
 
@@ -321,16 +325,22 @@ def insight_slide(suggestion: Suggestion) -> SlideIntent:
     не ловят «критично для LTV» и «успешную диджитализацию» (приёмка 17.10). В заметках источник и расчёт.
     """
     notes = f"{INSIGHT_NOTES} {suggestion.source}. Расчёт: {suggestion.formula}."
+    if suggestion.provenance is not None:
+        notes += f" Данные: {suggestion.provenance.dataset_id}; SHA-256: {suggestion.provenance.source_sha256}."
+    source_note = "Источник: " + suggestion.source
+    if suggestion.coverage:
+        source_note += "\n" + suggestion.coverage
+    evidence = {"source_note": source_note, "provenance": suggestion.provenance}
     statement = suggestion.statement or suggestion.headline
     if suggestion.visual == "big_number" or (suggestion.chart is None and suggestion.table is None):
         return SlideIntent(id="", kind=SlideKind.big_number, title=suggestion.headline,
-                           items=[Item(heading=statement, number=suggestion.number)], notes=notes)
+                           items=[Item(heading=statement, number=suggestion.number)], notes=notes, **evidence)
     if suggestion.visual == "table" and suggestion.table is not None:
         return SlideIntent(id="", kind=SlideKind.table, title=suggestion.headline, key_message=statement,
-                           table=suggestion.table, notes=notes)
+                           table=suggestion.table, notes=notes, **evidence)
     chart = suggestion.chart.model_copy(update={"type": suggestion.visual}) if suggestion.chart else None
     return SlideIntent(id="", kind=SlideKind.chart, title=suggestion.headline, key_message=statement,
-                       chart=chart, notes=notes)
+                       chart=chart, notes=notes, **evidence)
 
 
 def brief_with_insights(brief: str, table_name: str, suggestions: list[Suggestion], with_data: bool) -> str:
@@ -362,7 +372,7 @@ _WORD = re.compile(r"[а-яёa-z]{4,}", re.I)
 def _insight_numbers(suggestion: Suggestion) -> set[str]:
     found = numbers_in(suggestion.headline + " " + suggestion.number)
     if suggestion.chart:
-        found |= {format(Decimal(repr(v)).normalize(), "f") for s in suggestion.chart.series for v in s.values}
+        found |= {format(Decimal(repr(v)).normalize(), "f") for s in suggestion.chart.series for v in [*s.values, *(s.x_values or [])]}
     return {n for n in found if not _YEAR.match(n)}
 
 
@@ -370,7 +380,7 @@ def _slide_numbers(slide: SlideIntent) -> set[str]:
     text = " ".join([slide.title, slide.key_message] + [f"{i.heading} {i.body} {i.number or ''}" for i in slide.items])
     found = numbers_in(text)
     if slide.chart:
-        found |= {format(Decimal(repr(v)).normalize(), "f") for s in slide.chart.series for v in s.values}
+        found |= {format(Decimal(repr(v)).normalize(), "f") for s in slide.chart.series for v in [*s.values, *(s.x_values or [])]}
     return {n for n in found if not _YEAR.match(n)}
 
 

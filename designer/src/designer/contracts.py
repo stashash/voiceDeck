@@ -9,9 +9,10 @@
 from __future__ import annotations
 
 from enum import Enum
+import math
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 SCHEMA_VERSION = "1"
 
@@ -227,14 +228,41 @@ class Item(BaseModel):
 class Series(BaseModel):
     name: str
     values: list[float]
+    x_values: list[float] | None = None
 
 
 class ChartSpec(BaseModel):
-    type: Literal["column", "bar", "line", "pie", "donut"]
+    type: Literal["column", "bar", "line", "pie", "donut", "scatter", "grouped_column", "stacked_column"]
     title: str = ""
-    categories: list[str]
+    categories: list[str] = Field(default_factory=list)
     series: list[Series]
     unit: str = ""
+    x_axis_title: str = ""
+    y_axis_title: str = ""
+
+    @model_validator(mode="after")
+    def validate_extended_chart(self):
+        if self.type not in {"scatter", "grouped_column", "stacked_column"}:
+            if any(s.x_values is not None for s in self.series):
+                raise ValueError("x_values are only supported by scatter charts")
+            return self
+        if not 1 <= len(self.series) <= 5:
+            raise ValueError("Extended charts need one to five series")
+        for series in self.series:
+            if not series.values or not all(math.isfinite(v) for v in series.values):
+                raise ValueError("Chart values must be nonempty and finite")
+            if self.type == "scatter":
+                if self.categories or series.x_values is None or len(series.x_values) != len(series.values):
+                    raise ValueError("Scatter requires paired x_values and values without categories")
+                if not all(math.isfinite(v) for v in series.x_values):
+                    raise ValueError("Scatter X values must be finite")
+            elif series.x_values is not None or len(series.values) != len(self.categories):
+                raise ValueError("Column series must match the categories; no zero filling")
+        if self.type == "stacked_column":
+            totals = [sum(s.values[i] for s in self.series) for i in range(len(self.categories))]
+            if any(v < 0 for s in self.series for v in s.values) or not all(math.isfinite(v) for v in totals):
+                raise ValueError("Stacked composition requires nonnegative values and finite totals")
+        return self
 
 
 class TableSpec(BaseModel):
@@ -249,6 +277,32 @@ class SlideImage(BaseModel):
     alt: str = ""
 
 
+class DataProvenance(BaseModel):
+    """Server-computed evidence for an analytical slide; never model-generated."""
+    version: int = 1
+    dataset_id: str
+    source_sha256: str
+    content_hash: str
+    file_name: str
+    sheet: str = ""
+    table_index: int
+    columns: list[str]
+    total_rows: int
+    row_lines: list[int]
+    excluded_row_lines: list[int]
+    displayed_row_lines: list[int]
+    visualization: str
+    aggregation: str
+    missing_policy: str
+    formula: str
+    unit: str = ""
+    denominator: str | None = None
+    denominator_field: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    page_index: int | None = None
+    page_count: int | None = None
+
+
 class SlideIntent(BaseModel):
     """Что слайд должен сказать, до выбора паттерна."""
     id: str
@@ -260,6 +314,8 @@ class SlideIntent(BaseModel):
     table: TableSpec | None = None
     attribution: str = Field(default="", description="автор цитаты или подпись")
     notes: str = ""
+    source_note: str = ""
+    provenance: DataProvenance | None = None
     image: SlideImage | None = Field(default=None, description="ставит шаг иллюстраций, не план")
 
 

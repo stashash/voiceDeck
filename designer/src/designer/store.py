@@ -419,3 +419,33 @@ def save_insights(result: dict) -> str:
 def load_insights(insights_id: str) -> dict | None:
     path = data_dir() / "insights" / f"{_check_id(insights_id)}.json"
     return _read_json(path) if path.is_file() else None
+
+
+def save_dataset(snapshot: dict) -> str:
+    """Immutable evidence snapshot addressed by its complete canonical contents."""
+    import hashlib
+    encoded = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    dataset_id = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    path = data_dir() / "datasets" / f"{dataset_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        write_text_atomic(path, encoded)
+    return dataset_id
+
+
+def load_dataset(dataset_id: str) -> dict | None:
+    path = data_dir() / "datasets" / f"{_check_id(dataset_id)}.json"
+    return _read_json(path) if path.is_file() else None
+
+
+def save_dataset_bundle(bundle: dict) -> str:
+    bundle_id = uuid.uuid4().hex
+    path = data_dir() / "dataset-bundles" / f"{bundle_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, {**bundle, "id": bundle_id})
+    return bundle_id
+
+
+def load_dataset_bundle(bundle_id: str) -> dict | None:
+    path = data_dir() / "dataset-bundles" / f"{_check_id(bundle_id)}.json"
+    return _read_json(path) if path.is_file() else None

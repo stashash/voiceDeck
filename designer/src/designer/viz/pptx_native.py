@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pptx.chart.data import CategoryChartData
+from pptx.chart.data import CategoryChartData, XyChartData
 from pptx.dml.color import RGBColor
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_MARKER_STYLE
 from pptx.util import Emu, Pt
 
 from designer.contracts import Box, ChartSpec, TableSpec, Tokens
@@ -17,6 +17,9 @@ _CHART_TYPES = {
     "line": XL_CHART_TYPE.LINE,
     "pie": XL_CHART_TYPE.PIE,
     "donut": XL_CHART_TYPE.DOUGHNUT,
+    "scatter": XL_CHART_TYPE.XY_SCATTER,
+    "grouped_column": XL_CHART_TYPE.COLUMN_CLUSTERED,
+    "stacked_column": XL_CHART_TYPE.COLUMN_STACKED,
 }
 
 EMU_PER_PT = 12700
@@ -102,14 +105,31 @@ def add_chart(
     if len(spec.series) > 5:
         raise ValueError("не больше пяти рядов")
 
-    chart_data = CategoryChartData()
-    chart_data.categories = spec.categories
-    for series in spec.series:
-        chart_data.add_series(series.name, series.values)
+    values = [value for series in spec.series for value in [*series.values, *(series.x_values or [])]]
+    span = max(values, default=0) - min(values, default=0)
+    if any(0 < abs(value) < 0.01 for value in values):
+        number_format = "0.00E+00"
+    elif all(float(value).is_integer() for value in values) and (span >= 10 or span == 0):
+        number_format = "#,##0"
+    else:
+        number_format = "#,##0.00"
+    if spec.type == "scatter":
+        chart_data = XyChartData(number_format=number_format)
+        for series in spec.series:
+            xy_series = chart_data.add_series(series.name)
+            for x, y in zip(series.x_values, series.values):
+                xy_series.add_data_point(x, y)
+    else:
+        chart_data = CategoryChartData(number_format=number_format)
+        chart_data.categories = spec.categories
+        for series in spec.series:
+            chart_data.add_series(series.name, series.values)
 
     left, top, width, height = _box_to_emu(box, slide_size_emu)
     graphic_frame = slide.shapes.add_chart(_CHART_TYPES[spec.type], left, top, width, height, chart_data)
     chart = graphic_frame.chart
+    if spec.type == "stacked_column":
+        chart.plots[0].overlap = 100
 
     family = _body_font_family(tokens)
     if family:
@@ -135,14 +155,33 @@ def add_chart(
                 point.format.fill.solid()
                 point.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
     else:
+        # Localized PowerPoint can render the default General format as a literal
+        # word (for example «Основной»). Use an explicit portable numeric format.
+        chart.value_axis.tick_labels.number_format = number_format
+        chart.value_axis.tick_labels.number_format_is_linked = False
+        if spec.type == "scatter":
+            chart.category_axis.tick_labels.number_format = number_format
+            chart.category_axis.tick_labels.number_format_is_linked = False
+            for series_obj in chart.series:
+                series_obj.marker.style = XL_MARKER_STYLE.CIRCLE
+                series_obj.marker.size = 6
         if colors:
             for idx, series_obj in enumerate(chart.series):
                 series_obj.format.fill.solid()
                 series_obj.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
-        if spec.unit:
+                if spec.type == "scatter":
+                    series_obj.marker.format.fill.solid()
+                    series_obj.marker.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+                    series_obj.marker.format.line.color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+        if spec.x_axis_title:
+            chart.category_axis.has_title = True
+            chart.category_axis.axis_title.text_frame.text = spec.x_axis_title
+            if text_hex:
+                chart.category_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string(text_hex)
+        if spec.y_axis_title or spec.unit:
             value_axis = chart.value_axis
             value_axis.has_title = True
-            value_axis.axis_title.text_frame.text = spec.unit
+            value_axis.axis_title.text_frame.text = spec.y_axis_title or spec.unit
             if text_hex:
                 title_run = value_axis.axis_title.text_frame.paragraphs[0].runs[0]
                 title_run.font.color.rgb = RGBColor.from_string(text_hex)

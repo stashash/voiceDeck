@@ -597,6 +597,8 @@ def _fill_slide(slide, spec: SlideSpec, pattern: Pattern, ds: DesignSystem) -> N
             shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *box)
             shape.fill.solid()
             shape.fill.fore_color.rgb = RGBColor.from_string(element.fill or "D9D9D9")
+            if element.role == "source_background":
+                shape.line.fill.background()
     _prune_groups(slide)
     if spec.notes:
         slide.notes_slide.notes_text_frame.text = spec.notes

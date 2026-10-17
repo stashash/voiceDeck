@@ -55,6 +55,8 @@ def _spec(chart_type: str, series_count: int = 2, categories_count: int = 3) -> 
 
 @pytest.mark.parametrize("chart_type,xl_type", [
     ("column", XL_CHART_TYPE.COLUMN_CLUSTERED),
+    ("grouped_column", XL_CHART_TYPE.COLUMN_CLUSTERED),
+    ("stacked_column", XL_CHART_TYPE.COLUMN_STACKED),
     ("bar", XL_CHART_TYPE.BAR_CLUSTERED),
     ("line", XL_CHART_TYPE.LINE),
     ("pie", XL_CHART_TYPE.PIE),

@@ -16,9 +16,11 @@ const EXPECTED_IMAGE_S = 180;
 export const VISUAL_NAME: Record<InsightVisual, string> = {
   column: 'Столбчатая диаграмма', bar: 'Линейчатая диаграмма', line: 'График',
   pie: 'Круговая диаграмма', table: 'Таблица', big_number: 'Крупное число',
+  scatter: 'Точечная диаграмма', grouped_column: 'Сгруппированные столбцы', stacked_column: 'Столбцы с накоплением',
 };
 const VISUAL_ICON: Record<InsightVisual, typeof Hash> = {
   column: ChartColumn, bar: ChartBar, line: ChartLine, pie: ChartPie, table: Table2, big_number: Hash,
+  scatter: ChartLine, grouped_column: ChartColumn, stacked_column: ChartColumn,
 };
 
 /** Подсказка узнаётся по кандидатам кода: после пересчёта под новый бриф снятая галочка остаётся снятой. */

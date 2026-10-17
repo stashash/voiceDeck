@@ -78,34 +78,87 @@ def _svg_wrap(body: str, kind: str, spec: ChartSpec, legend: str) -> str:
     )
 
 
+def _fraction(value: float, low: float, high: float) -> float:
+    scale = max(abs(low), abs(high), 1e-300)
+    return (value / scale - low / scale) / (high / scale - low / scale)
+
+
+def _domain(values: list[float], zero: bool = False) -> tuple[float, float]:
+    low, high = min(values), max(values)
+    if zero or low == high:
+        low, high = min(low, 0), max(high, 0)
+    return (low, high) if low != high else (-1.0, 1.0)
+
+
+def _y_ticks(low: float, high: float, plot_h: float) -> str:
+    return "".join(
+        f'<text x="{_PAD_LEFT - 6:.1f}" y="{_PAD_TOP + plot_h * (1 - i / 4):.1f}" '
+        f'class="chart-label" text-anchor="end">{low * (1 - i / 4) + high * (i / 4):.4g}</text>'
+        for i in range(5)
+    )
+
+
 def _render_columns(spec: ChartSpec, colors: list[str]) -> str:
     n_cat = len(spec.categories)
     n_series = len(spec.series)
-    max_v = _max_value(spec)
+    stacked = spec.type == "stacked_column"
+    values = ([sum(s.values[i] for s in spec.series) for i in range(n_cat)] if stacked
+              else [v for s in spec.series for v in s.values])
+    low, high = _domain(values or [0], zero=True)
     has_legend = n_series >= 2
     legend = _legend_items([s.name for s in spec.series], colors, _VIEW_H - _LEGEND_H + 8) if has_legend else ""
     plot_h = _VIEW_H - _PAD_TOP - _PAD_BOTTOM - (_LEGEND_H if has_legend else 0)
     plot_w = _VIEW_W - _PAD_LEFT - _PAD_RIGHT
     group_w = plot_w / max(n_cat, 1)
-    bar_w = (group_w * 0.7) / max(n_series, 1)
+    bar_w = (group_w * 0.7) / (1 if stacked else max(n_series, 1))
     bars: list[str] = []
     labels: list[str] = []
     for ci, category in enumerate(spec.categories):
         group_x = _PAD_LEFT + ci * group_w + group_w * 0.15
+        total = 0.0
         for si, series in enumerate(spec.series):
             value = series.values[ci] if ci < len(series.values) else 0.0
-            bar_h = (value / max_v) * plot_h if max_v else 0.0
-            x = group_x + si * bar_w
-            y = _PAD_TOP + (plot_h - bar_h)
+            start, end = (total, total + value) if stacked else (0.0, value)
+            total = end
+            y1 = _PAD_TOP + (1 - _fraction(start, low, high)) * plot_h
+            y2 = _PAD_TOP + (1 - _fraction(end, low, high)) * plot_h
+            bar_h = abs(y2 - y1)
+            x = group_x if stacked else group_x + si * bar_w
+            y = min(y1, y2)
             bars.append(
                 f'<rect class="chart-bar" x="{x:.1f}" y="{y:.1f}" '
-                f'width="{bar_w * 0.85:.1f}" height="{bar_h:.1f}" fill="{_color(colors, si)}"/>'
+                f'width="{bar_w * 0.85:.1f}" height="{bar_h:.1f}" fill="{_color(colors, si)}">'
+                f'<title>{html.escape(series.name)} · {html.escape(category)}: {value:g}</title></rect>'
             )
         labels.append(
             f'<text x="{group_x + group_w * 0.35:.1f}" y="{_PAD_TOP + plot_h + 16:.1f}" '
             f'class="chart-label" text-anchor="middle">{html.escape(category)}</text>'
         )
-    return _svg_wrap("".join(bars) + "".join(labels), "column", spec, legend)
+    baseline = _PAD_TOP + (1 - _fraction(0, low, high)) * plot_h
+    axis = f'<line class="chart-axis" x1="{_PAD_LEFT}" x2="{_VIEW_W - _PAD_RIGHT}" y1="{baseline:.1f}" y2="{baseline:.1f}" stroke="currentColor"/>'
+    return _svg_wrap(axis + _y_ticks(low, high, plot_h) + "".join(bars) + "".join(labels), spec.type, spec, legend)
+
+
+def _render_scatter(spec: ChartSpec, colors: list[str]) -> str:
+    has_legend = len(spec.series) >= 2
+    plot_h = _VIEW_H - _PAD_TOP - _PAD_BOTTOM - (_LEGEND_H if has_legend else 0)
+    plot_w = _VIEW_W - _PAD_LEFT - _PAD_RIGHT
+    xmin, xmax = _domain([x for s in spec.series for x in s.x_values])
+    ymin, ymax = _domain([y for s in spec.series for y in s.values])
+    parts = [_y_ticks(ymin, ymax, plot_h)]
+    parts.append(f'<path class="chart-axis" d="M {_PAD_LEFT} {_PAD_TOP} V {_PAD_TOP + plot_h} H {_PAD_LEFT + plot_w}" fill="none" stroke="currentColor"/>')
+    for i in range(5):
+        tick = xmin * (1 - i / 4) + xmax * (i / 4)
+        parts.append(f'<text class="chart-label" x="{_PAD_LEFT + plot_w * i / 4:.1f}" y="{_PAD_TOP + plot_h + 16:.1f}" text-anchor="middle">{tick:.4g}</text>')
+    for si, series in enumerate(spec.series):
+        for x, y in zip(series.x_values, series.values):
+            px = _PAD_LEFT + _fraction(x, xmin, xmax) * plot_w
+            py = _PAD_TOP + (1 - _fraction(y, ymin, ymax)) * plot_h
+            parts.append(f'<circle class="chart-point" cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{_color(colors, si)}"><title>{html.escape(series.name)}: ({x:g}, {y:g})</title></circle>')
+    parts.append(f'<text class="chart-label" x="{_PAD_LEFT + plot_w / 2:.1f}" y="{_PAD_TOP + plot_h + 34:.1f}" text-anchor="middle">{html.escape(spec.x_axis_title)}</text>')
+    parts.append(f'<text class="chart-label" transform="translate(12 {_PAD_TOP + plot_h / 2:.1f}) rotate(-90)" text-anchor="middle">{html.escape(spec.y_axis_title or spec.unit)}</text>')
+    legend = _legend_items([s.name for s in spec.series], colors, _VIEW_H - _LEGEND_H + 8)
+    return _svg_wrap("".join(parts), "scatter", spec, legend)
 
 
 def _render_bars(spec: ChartSpec, colors: list[str]) -> str:
@@ -205,10 +258,14 @@ def render_chart(spec: ChartSpec, colors: list[str]) -> str:
     """Возвращает встраиваемый <svg>...</svg> для диаграммы spec.type."""
     if not colors:
         colors = list(_FALLBACK_COLORS)
-    if spec.type == "column":
+    if spec.type in {"column", "grouped_column", "stacked_column"}:
         return _render_columns(spec, colors)
     if spec.type == "bar":
         return _render_bars(spec, colors)
     if spec.type == "line":
         return _render_line(spec, colors)
-    return _render_pie(spec, colors, donut=(spec.type == "donut"))
+    if spec.type == "scatter":
+        return _render_scatter(spec, colors)
+    if spec.type in {"pie", "donut"}:
+        return _render_pie(spec, colors, donut=(spec.type == "donut"))
+    raise ValueError(f"Unsupported chart type: {spec.type}")

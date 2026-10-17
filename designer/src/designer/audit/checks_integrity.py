@@ -72,7 +72,10 @@ def check_chart_labels(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
             if el.type != "chart" or el.chart is None:
                 continue
             missing = []
-            if not el.chart.categories:
+            if el.chart.type == "scatter":
+                if not el.chart.x_axis_title or not el.chart.y_axis_title:
+                    missing.append("подписей числовых осей X/Y")
+            elif not el.chart.categories:
                 missing.append("категорий")
             if any(not s.name for s in el.chart.series):
                 missing.append("имён рядов")

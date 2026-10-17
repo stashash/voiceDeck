@@ -168,7 +168,7 @@ export function patternPreviewUrl(dsId: string, patternId: string): string {
 }
 
 // ---------- подсказки по таблице ----------
-export type InsightVisual = 'column' | 'bar' | 'line' | 'pie' | 'table' | 'big_number';
+export type InsightVisual = 'column' | 'bar' | 'line' | 'pie' | 'table' | 'big_number' | 'scatter' | 'grouped_column' | 'stacked_column';
 export type InsightView = {
   id: string; headline: string; number: string; visual: InsightVisual; why: string;
   source: string; formula: string; by_model: boolean;
@@ -201,7 +201,7 @@ export type ProfileView = {
   identifier_candidates: string[]; likely_time_axis: string | null;
 };
 export type VisualizationCandidate = {
-  kind: 'table' | 'line' | 'bar' | 'column' | 'pie' | 'histogram' | 'scatter' | 'grouped_column' | 'kpi';
+  kind: 'table' | 'line' | 'bar' | 'column' | 'pie' | 'histogram' | 'scatter' | 'grouped_column' | 'stacked_column' | 'kpi';
   score: number; reason: string; required_fields: string[]; dimension_fields: string[]; measure_fields: string[];
   row_lines: number[]; excluded_row_lines: number[]; warnings: string[]; renderable: boolean;
   denominator: string | null; denominator_field: string | null; aggregation: string; value: string | null;

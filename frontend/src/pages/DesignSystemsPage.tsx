@@ -7,6 +7,7 @@ import {
 } from '../designer/api';
 import { agentDisplayName } from '../designer/agentName';
 import { KIND_LABEL, plural } from '../designer/labels';
+import { BrandbookState, getBrandbook, removeBrandbook, setBrandbookPriority, uploadBrandbook } from '../designer/brandbookApi';
 
 // Словарь типов образцов и подписей ролей — docs/design/canvas/gen.py (KIND, ROLE_RU, STEP_RU, FROLE).
 const KIND = KIND_LABEL;
@@ -146,6 +147,64 @@ function SampleDrawer({ ds, id, patterns, onClose, onNav, onToggle }: {
   </>;
 }
 
+function BrandbookPanel({ id, onApplied }: { id: string; onApplied: (ds: DesignSystem) => void }) {
+  const [state, setState] = useState<BrandbookState | null>(null);
+  const [priority, setPriority] = useState<'brand' | 'template'>('brand');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { getBrandbook(id).then(result => { setState(result); setPriority(result.priority); }).catch(e => setError(errorText(e))); }, [id]);
+
+  async function importFile(file?: File) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.json')) { setError('Загрузите файл токенов .json.'); return; }
+    setBusy(true); setError('');
+    try {
+      const next = await uploadBrandbook(id, file, priority);
+      setState(next); onApplied(next.design_system);
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function changePriority(next: 'brand' | 'template') {
+    setPriority(next);
+    if (!state?.file_name) return;
+    setBusy(true); setError('');
+    try {
+      const updated = await setBrandbookPriority(id, next);
+      setState(updated); onApplied(updated.design_system);
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+
+  async function clear() {
+    setBusy(true); setError('');
+    try {
+      await removeBrandbook(id);
+      const restored = await getManifest(id);
+      setState({ design_system: restored, file_name: '', sha256: '', priority: 'brand', brand_fields: [], applied_fields: [] });
+      setPriority('brand'); onApplied(restored);
+    } catch (e) { setError(errorText(e)); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="card tight" aria-label="Брендбук" style={{ marginBottom: 20 }}>
+    <h2>Брендбук и токены</h2>
+    <p className="muted">Загрузите локальный JSON с цветами, шрифтами, кеглями и полями. Аналитика не меняется, меняется только оформление.</p>
+    <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <label className="button" style={{ cursor: busy ? 'wait' : 'pointer' }}>
+        <Upload size={16} strokeWidth={1.5}/>{busy ? 'Применяем…' : state?.file_name ? 'Заменить JSON' : 'Загрузить JSON'}
+        <input type="file" accept=".json,application/json" disabled={busy} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} style={{ display: 'none' }}/>
+      </label>
+      <label>Приоритет <select value={priority} disabled={busy} onChange={event => void changePriority(event.target.value as 'brand' | 'template')}>
+        <option value="brand">Брендбук</option><option value="template">Шаблон</option>
+      </select></label>
+      {state?.file_name && <button type="button" className="button" disabled={busy} onClick={() => void clear()}>Убрать брендбук</button>}
+    </div>
+    {state?.file_name && <p className="muted" role="status">{state.file_name} · приоритет: {state.priority === 'brand' ? 'брендбук' : 'шаблон'} · применены: {state.applied_fields.join(', ') || 'нет токенов'}</p>}
+    {error && <p className="notice" role="alert">{error}</p>}
+  </section>;
+}
+
 function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
   const [ds, setDs] = useState<DesignSystem | null>(null);
   // Имя агента, который описывает образцы: его называет полоса сбоя описания.
@@ -265,6 +324,7 @@ function Detail({ id, onChanged }: { id: string; onChanged?: () => void }) {
     </div>}
 
     <div className={`ds-body ${(running || failed) ? '' : 'tight'}`}>
+      <BrandbookPanel id={id} onApplied={setDs}/>
       <section>
         <div className="ds-section-title-row">
           <h2>Палитра</h2>

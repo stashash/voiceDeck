@@ -187,7 +187,7 @@ def test_scatter_complete_pairs_and_no_correlation_claim():
     table = data(["x", "y"], [[0, 0], [1, 2], [2, None], [3, 6], [4, 8], [5, 10]])
     plan = plan_table(table, "relationship")
     scatter = plan.selected_candidate
-    assert scatter.kind == "scatter" and not scatter.renderable
+    assert scatter.kind == "scatter" and scatter.renderable
     assert scatter.measure_fields == ("x", "y")
     assert scatter.row_lines == (1, 2, 4, 5, 6) and scatter.excluded_row_lines == (3,)
     assert "5 complete numeric pairs" in scatter.reason
@@ -260,7 +260,7 @@ def test_only_explicit_record_count_is_automatic_kpi():
 
 
 def test_renderer_flags_distinguish_existing_and_future_families():
-    assert not plan_table(fixture("category_comparison.csv"), "compare").selected_candidate.renderable
+    assert plan_table(fixture("category_comparison.csv"), "compare").selected_candidate.renderable
     assert plan_table(fixture("time_series.csv"), "growth").selected_candidate.renderable
     assert plan_table(fixture("category_shares.json"), "shares").selected_candidate.renderable
     assert plan_table(fixture("reference_201.csv")).selected_candidate.renderable

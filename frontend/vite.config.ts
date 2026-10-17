@@ -13,5 +13,5 @@ const designer=process.env.DESIGNER_PROXY_URL||'http://localhost:8090';
 const app=process.env.APP_PROXY_URL||'http://localhost:8088';
 export default defineConfig({base,plugins:[react()],server:{proxy:{
  '/api':app,'/health':app,'/ws':{target:app.replace(/^http/,'ws'),ws:true},
- '/design-systems':designer,'/decks':designer,'/agents':designer,'/settings/agents':designer,'/editor':designer,'/library':designer,
+ '/design-systems':designer,'/decks':designer,'/agents':designer,'/settings/agents':designer,'/editor':designer,'/library':designer,'/insights':designer,
 }}});

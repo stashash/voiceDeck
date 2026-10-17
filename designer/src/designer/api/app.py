@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import math
 import os
@@ -61,11 +62,15 @@ from designer.api.schemas import (
     ElementActionRequest,
     TablePreview,
 )
-from designer.contracts import ChartSpec, DesignSystem, RunManifest, Series, TableSpec
+from designer.contracts import ChartSpec, DataProvenance, DesignSystem, RunManifest, Series, TableSpec
+from designer.contracts import Tokens
+from designer.brandbook_json import BrandTokenError, parse_brand_tokens, resolve_tokens
 from designer.export import convert
 from designer.insights import source as insights_source
 from designer.insights.plan import plan_table
 from designer.insights.profile import profile_table
+from designer.insights.provenance import persist_source
+from designer.insights.labels import field_label
 from designer.insights import suggest as insights_suggest
 from designer.insights import table as insights_table
 from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
@@ -176,6 +181,123 @@ def get_design_system(ds_id: str) -> DesignSystem:
         raise _not_found(True)
 
 
+_MAX_BRANDBOOK_BYTES = 256 * 1024
+_BRANDBOOK_STATE = "brandbook-state.json"
+
+
+def _brandbook_paths(ds_id: str):
+    package = store.design_system_dir(ds_id)
+    return package, package / _BRANDBOOK_STATE
+
+
+def _resolved_brandbook_tokens(template: Tokens, brand: Tokens, priority: str) -> Tokens:
+    if priority not in {"brand", "template"}:
+        raise HTTPException(422, "Приоритет должен быть brand или template.")
+    return resolve_tokens(template, brand, brand_priority=(priority == "brand"))
+
+
+def _brandbook_response(ds: DesignSystem, state: dict) -> dict:
+    return {
+        "design_system": ds.model_dump(mode="json"),
+        "file_name": state["file_name"],
+        "sha256": state["sha256"],
+        "priority": state["priority"],
+        "brand_fields": state["brand_fields"],
+        "applied_fields": [name for name in state["brand_fields"] if name in {"colors", "fonts", "type_scale", "margins"}],
+    }
+
+
+@app.get("/design-systems/{ds_id}/brandbook")
+def get_brandbook(ds_id: str) -> dict:
+    try:
+        package, state_path = _brandbook_paths(ds_id)
+        ds = load_package(package)
+        if not state_path.is_file():
+            return {"design_system": ds.model_dump(mode="json"), "file_name": "", "sha256": "",
+                    "priority": "brand", "brand_fields": [], "applied_fields": []}
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        return _brandbook_response(ds, state)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found(True)
+
+
+@app.post("/design-systems/{ds_id}/brandbook")
+async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), priority: str = Form("brand")) -> dict:
+    """Import a bounded local JSON token file, or change priority using the saved token set."""
+    try:
+        package, state_path = _brandbook_paths(ds_id)
+        ds = load_package(package)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found(True)
+    state = None
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(500, "Состояние брендбука повреждено; повторно загрузите JSON.") from exc
+    if priority not in {"brand", "template"}:
+        raise HTTPException(422, "Приоритет должен быть brand или template.")
+    if file is not None:
+        try:
+            raw = await file.read(_MAX_BRANDBOOK_BYTES + 1)
+        finally:
+            await file.close()
+        if len(raw) > _MAX_BRANDBOOK_BYTES:
+            raise HTTPException(413, "Файл токенов больше 256 КиБ.")
+        try:
+            brand = parse_brand_tokens(raw)
+        except BrandTokenError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        try:
+            template = Tokens.model_validate(state["template_tokens"]) if state else ds.tokens
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(500, "Сохранённые исходные токены повреждены.") from exc
+        filename = insights_table.file_name(file.filename or "brandbook.json")
+        source_hash = hashlib.sha256(raw).hexdigest()
+        brand_fields = [name for name, values in (("colors", brand.colors), ("fonts", brand.fonts),
+                                                   ("type_scale", brand.type_scale)) if values]
+        if any(getattr(brand.margins, side) != 0 for side in ("left", "top", "right", "bottom")):
+            brand_fields.append("margins")
+    else:
+        if state is None:
+            raise HTTPException(422, "Сначала загрузите файл JSON с токенами.")
+        try:
+            template = Tokens.model_validate(state["template_tokens"])
+            brand = Tokens.model_validate(state["brand_tokens"])
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(500, "Сохранённые токены брендбука повреждены.") from exc
+        filename, source_hash, brand_fields = state["file_name"], state["sha256"], state["brand_fields"]
+    resolved = _resolved_brandbook_tokens(template, brand, priority)
+    updated = ds.model_copy(update={"tokens": resolved})
+    store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
+    new_state = {"schema_version": 1, "file_name": filename, "sha256": source_hash, "priority": priority,
+                 "brand_fields": brand_fields, "template_tokens": template.model_dump(mode="json"),
+                 "brand_tokens": brand.model_dump(mode="json")}
+    store.write_text_atomic(state_path, json.dumps(new_state, ensure_ascii=False, indent=2))
+    return _brandbook_response(updated, new_state)
+
+
+@app.delete("/design-systems/{ds_id}/brandbook")
+def remove_brandbook(ds_id: str) -> dict:
+    """Remove the brand overlay and restore the original template tokens."""
+    try:
+        package, state_path = _brandbook_paths(ds_id)
+        ds = load_package(package)
+    except (store.InvalidId, FileNotFoundError):
+        raise _not_found(True)
+    if not state_path.is_file():
+        return {"design_system": ds.model_dump(mode="json"), "removed": False}
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        template = Tokens.model_validate(state["template_tokens"])
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        raise HTTPException(500, "Сохранённые исходные токены повреждены.") from exc
+    updated = ds.model_copy(update={"tokens": template})
+    store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
+    state_path.unlink(missing_ok=True)
+    return {"design_system": updated.model_dump(mode="json"), "removed": True}
+
+
 @app.patch("/design-systems/{ds_id}", response_model=DesignSystem)
 def patch_design_system(ds_id: str, payload: DesignSystemPatchRequest) -> DesignSystem:
     try:
@@ -271,6 +393,9 @@ async def table_preview(file: UploadFile = File(...)) -> TablePreview:
 _MAX_PLAN_FILES = 7
 _MAX_PLAN_TABLES = 21
 _MAX_PLAN_TOTAL_BYTES = insights_table.MAX_BYTES * _MAX_PLAN_FILES
+_REFERENCE_PAGE_ROWS = 20
+_MAX_REFERENCE_PAGES = 20
+_MAX_BUNDLE_SLIDES = 60
 
 
 def _json_safe(value):
@@ -286,6 +411,43 @@ def _json_safe(value):
     return value
 
 
+def _reference_pages(suggestion: dict, snapshot: dict) -> list[dict]:
+    """Split a large reference dataset into readable, provenance-bounded slide pages."""
+    if suggestion.get("visual") != "table":
+        return [suggestion]
+    table = snapshot.get("table") or {}
+    rows = table.get("rows") or []
+    lines = table.get("row_lines") or []
+    headers = table.get("headers") or []
+    if not rows or len(rows) != len(lines) or len(headers) != len(rows[0]):
+        raise HTTPException(422, "Исходная таблица неполна и не может быть разбита на страницы.")
+    pages = math.ceil(len(rows) / _REFERENCE_PAGE_ROWS)
+    if pages > _MAX_REFERENCE_PAGES:
+        raise HTTPException(422, f"Таблица требует {pages} слайдов; предел {_MAX_REFERENCE_PAGES}. Отфильтруйте источник.")
+    result = []
+    for page_index in range(pages):
+        start = page_index * _REFERENCE_PAGE_ROWS
+        end = min(len(rows), start + _REFERENCE_PAGE_ROWS)
+        page = dict(suggestion)
+        page_rows = rows[start:end]
+        page_lines = lines[start:end]
+        page_count = pages
+        page["headline"] = f"Справочник · строки {start + 1}–{end} из {len(rows)}"
+        page["statement"] = f"Справочная таблица: строки {start + 1}–{end} из {len(rows)}; страница {page_index + 1} из {page_count}."
+        page["table"] = {"columns": headers, "rows": page_rows}
+        page["coverage"] = (f"Охват: страница {page_index + 1}/{page_count}; строки источника "
+                            f"{page_lines[0]}–{page_lines[-1]} из {len(rows)}; пропуски показаны как в источнике.")
+        page["formula"] = f"Постраничный показ исходных строк; {len(rows)} строк всего; без агрегации."
+        page["data_lines"] = [" | ".join([*headers, *row]) for row in page_rows]
+        provenance = dict(page.get("provenance") or {})
+        provenance.update({"displayed_row_lines": page_lines, "formula": page["formula"],
+                           "missing_policy": "preserve_all_rows", "page_index": page_index + 1,
+                           "page_count": page_count})
+        page["provenance"] = provenance
+        result.append(page)
+    return result
+
+
 def _bundle_plan(inputs: list[tuple[str, bytes]], goal: str) -> list[DatasetTablePlan]:
     datasets = []
     for file_index, (filename, data) in enumerate(inputs):
@@ -298,8 +460,10 @@ def _bundle_plan(inputs: list[tuple[str, bytes]], goal: str) -> list[DatasetTabl
                 raise HTTPException(422, f"Найдено больше {_MAX_PLAN_TABLES} таблиц: разделите файлы на несколько запросов.")
             profile = profile_table(table)
             plan = plan_table(table, goal)
+            dataset_id, source_sha256 = persist_source(data, filename, table_index, table)
             datasets.append(DatasetTablePlan(
                 file_index=file_index, table_index=table_index,
+                dataset_id=dataset_id, source_sha256=source_sha256,
                 file_name=insights_table.file_name(filename), table_name=table.name, sheet=table.sheet,
                 rows=len(table.rows), columns=len(table.headers), headers=table.headers,
                 preview_rows=[row[:10] for row in table.rows[:5]],
@@ -335,7 +499,20 @@ async def dataset_bundle_plan(files: list[UploadFile] = File(...), goal: str = F
             await upload.close()
     if not datasets:
         raise HTTPException(422, "В файлах не найдено табличных данных.")
-    return DatasetBundlePlanResponse(file_count=len(files), table_count=len(datasets), goal=goal, datasets=datasets)
+    response = DatasetBundlePlanResponse(file_count=len(files), table_count=len(datasets), goal=goal, datasets=datasets)
+    response.id = store.save_dataset_bundle(response.model_dump(mode="json"))
+    return response
+
+
+@app.get("/insights/plan/{bundle_id}", response_model=DatasetBundlePlanResponse)
+async def get_dataset_bundle_plan(bundle_id: str) -> DatasetBundlePlanResponse:
+    try:
+        saved = store.load_dataset_bundle(bundle_id)
+    except store.InvalidId as exc:
+        raise HTTPException(422, "Некорректный идентификатор пакета данных.") from exc
+    if saved is None:
+        raise HTTPException(404, "Пакет данных не найден.")
+    return DatasetBundlePlanResponse(**saved)
 
 
 @app.post("/insights/plan/materialize", response_model=InsightsResponse)
@@ -347,8 +524,16 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
     await file.close()
     if len(data) > insights_table.MAX_BYTES:
         raise HTTPException(413, "Файл больше 1 МБ.")
+    return await run_in_threadpool(_materialize_plan_candidate, data, file.filename or "", goal,
+                                  table_index, candidate_kind, required_fields)
+
+
+def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_index: int,
+                                candidate_kind: str, required_fields: str) -> InsightsResponse:
     try:
-        tables = insights_table.read_tables(data, file.filename or "")
+        if table_index < 0:
+            raise ValueError("Номер таблицы не может быть отрицательным.")
+        tables = insights_table.read_tables(data, filename)
         fields = json.loads(required_fields)
         if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
             raise ValueError("Список полей должен быть массивом строк.")
@@ -357,7 +542,7 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
         candidate = next(c for c in plan.candidates if c.kind == candidate_kind and list(c.required_fields) == fields)
     except (insights_table.TableError, ValueError, IndexError, StopIteration, json.JSONDecodeError) as exc:
         raise HTTPException(422, f"Выбранный вариант больше не доступен: {exc}") from exc
-    if not candidate.renderable or candidate.kind not in {"line", "bar", "column", "pie", "histogram", "table", "kpi"}:
+    if not candidate.renderable or candidate.kind not in {"line", "bar", "column", "pie", "histogram", "table", "kpi", "scatter", "grouped_column", "stacked_column"}:
         raise HTTPException(422, "Этот тип пока нельзя передать в рендерер слайда.")
 
     row_map = dict(zip(table.lines, table.rows))
@@ -365,6 +550,8 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
     positions = {header: index for index, header in enumerate(table.headers)}
     visual, chart, table_spec = "big_number", None, None
     warnings = " ".join(candidate.warnings)
+    measure_label, measure_unit = field_label(candidate.measure_fields[0]) if candidate.measure_fields else ("", "")
+    dimension_label = field_label(candidate.dimension_fields[0])[0] if candidate.dimension_fields else ""
     if candidate.kind == "histogram":
         metric = candidate.measure_fields[0]
         exact_values = [insights_table.parse_number(row[positions[metric]]) for row in source_rows]
@@ -407,12 +594,40 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
             low_text, high_text = format(low.normalize(), "f"), format(high.normalize(), "f")
             categories.append(f"{low_text}–{high_text}" + ("]" if index == bins - 1 else ")"))
         visual = "column"
-        chart = ChartSpec(type="column", title=f"Распределение · {metric}", categories=categories,
+        chart = ChartSpec(type="column", title=f"Распределение · {measure_label}" + (f", {measure_unit}" if measure_unit else ""),
+                          unit="наблюдений", categories=categories,
                           series=[Series(name="Число наблюдений", values=[float(value) for value in counts])])
         statement = f"Распределение {metric}: частота по {bins} интервалам; учтены все {count} значений."
         number = str(count)
         rule = "Freedman–Diaconis" if iqr > 0 else "Sturges (IQR = 0)"
         formula = f"{rule}; {bins} равных интервалов; сумма частот = {sum(counts)}; n = {count}."
+    elif candidate.kind in {"scatter", "grouped_column", "stacked_column"}:
+        numeric = {}
+        for field in candidate.measure_fields:
+            exact = [insights_table.parse_number(row[positions[field]]) for row in source_rows]
+            if not exact or any(v is None or not math.isfinite(float(v)) or Decimal(str(float(v))) != v for v in exact):
+                raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
+            numeric[field] = [float(v) for v in exact]
+        visual = candidate.kind
+        if visual == "scatter":
+            x_field, y_field = candidate.measure_fields
+            x_label, x_unit = field_label(x_field)
+            y_label, measure_unit = field_label(y_field)
+            chart = ChartSpec(type=visual, title=f"{y_label} · {x_label}", unit=measure_unit,
+                              x_axis_title=x_label + (f", {x_unit}" if x_unit else ""),
+                              y_axis_title=y_label + (f", {measure_unit}" if measure_unit else ""),
+                              series=[Series(name=y_label, x_values=numeric[x_field], values=numeric[y_field])])
+            statement = f"{y_field} и {x_field}: {len(source_rows)} полных пар; связь не доказывает причинность."
+            formula = f"X = {x_field}; Y = {y_field}; исходные пары без агрегации; корреляция не вычислялась."
+        else:
+            dimension = candidate.dimension_fields[0]
+            chart = ChartSpec(type=visual, title=f"{' · '.join(field_label(f)[0] for f in candidate.measure_fields)} · {dimension_label}",
+                              categories=[row[positions[dimension]] for row in source_rows], unit=measure_unit,
+                              series=[Series(name=field_label(f)[0], values=numeric[f]) for f in candidate.measure_fields])
+            statement = f"{' и '.join(candidate.measure_fields)} по полю «{dimension}»; исходные значения полных строк."
+            formula = ("Накопление исходных компонентов в каждой категории; без нормирования; аддитивность задана автором."
+                       if visual == "stacked_column" else "Сопоставление рядов внутри каждой категории; значения не суммировались.")
+        number = str(len(source_rows))
     elif candidate.kind in {"line", "bar", "column", "pie"}:
         dimension, measure = candidate.dimension_fields[0], candidate.measure_fields[0]
         categories = [row[positions[dimension]] for row in source_rows]
@@ -423,8 +638,8 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
         if any(not math.isfinite(value) for value in values):
             raise HTTPException(422, "Значения слишком велики для диаграммы; используйте таблицу.")
         visual = candidate.kind
-        chart = ChartSpec(type=visual, title=f"{measure} · {dimension}", categories=categories,
-                          series=[Series(name=measure, values=values)])
+        chart = ChartSpec(type=visual, title=f"{measure_label} · {dimension_label}", categories=categories,
+                          unit=measure_unit, series=[Series(name=measure_label, values=values)])
         statement = f"{measure} по полю «{dimension}»; показаны исходные значения без группировки."
         number = format(candidate.denominator, "f") if candidate.denominator is not None else str(len(categories))
         formula = (f"Сумма показанных долей: {candidate.denominator}; охват — {len(categories)} наблюдений."
@@ -442,27 +657,97 @@ async def materialize_plan_candidate(file: UploadFile = File(...), goal: str = F
         statement = f"Количество исходных записей: {number}."
         formula = "Число строк источника, включая записи с пропусками; суммы мер не вычислялись."
 
-    source = insights_table.file_name(file.filename or "таблица")
+    source = insights_table.file_name(filename or "таблица")
     if table.sheet:
         source += f" · лист «{table.sheet}»"
     source += f" · {len(candidate.row_lines)} исходных строк"
-    headline = (f"Распределение {candidate.measure_fields[0]}" if candidate.kind == "histogram" else
-                f"{candidate.measure_fields[0]} по {candidate.dimension_fields[0]}"
+    displayed_lines = list(candidate.row_lines[:20] if candidate.kind == "table" else candidate.row_lines)
+    coverage = f"Охват: {len(candidate.row_lines)} из {len(table.rows)} строк; исключено: {len(candidate.excluded_row_lines)}."
+    if candidate.kind == "table":
+        coverage += f" На слайде: {len(displayed_lines)}; не показано: {len(candidate.row_lines) - len(displayed_lines)}."
+    dataset_id, source_sha256 = persist_source(data, filename, table_index, table)
+    provenance = DataProvenance(
+        dataset_id=dataset_id, source_sha256=source_sha256, content_hash=plan.content_hash,
+        file_name=insights_table.file_name(filename), sheet=table.sheet, table_index=table_index,
+        columns=list(candidate.required_fields), total_rows=len(table.rows),
+        row_lines=list(candidate.row_lines), excluded_row_lines=list(candidate.excluded_row_lines),
+        displayed_row_lines=displayed_lines, visualization=candidate.kind, aggregation=candidate.aggregation,
+        missing_policy="preserve_all_rows" if candidate.kind in {"table", "kpi"} else "exclude_incomplete_selected_fields",
+        formula=formula, denominator=format(candidate.denominator, "f") if candidate.denominator is not None else None,
+        unit=measure_unit,
+        denominator_field=candidate.denominator_field, warnings=list(candidate.warnings),
+    )
+    headline = (f"Распределение: {measure_label}" if candidate.kind == "histogram" else
+                f"{measure_label}: динамика" if candidate.kind == "line" else
+                f"{measure_label} · {dimension_label}"
                 if candidate.measure_fields and candidate.dimension_fields else statement)
     suggestion = insights_suggest.Suggestion(
         id="s1", headline=headline, number=number, visual=visual, why=candidate.reason,
         fact_ids=[f"{plan.content_hash[:16]}:{candidate.kind}:{','.join(candidate.required_fields)}"],
         statement=statement, topic=candidate.measure_fields[0] if candidate.measure_fields else table.name,
         source=source, formula=formula, chart=chart, table=table_spec,
+        provenance=provenance, coverage=coverage,
         data_lines=[" | ".join([*table.headers, *row]) for row in source_rows], by_model=False,
     )
     suggestion.number_at = insights_suggest.number_span(suggestion.headline, suggestion.number)
     stored = {"table_name": table.name, "rows": len(table.rows), "columns": len(table.headers),
+              "dataset_id": dataset_id, "analytical_plan": _json_safe(plan), "selected_candidate": _json_safe(candidate),
               "suggestions": [suggestion.model_dump(mode="json")], "note": warnings, "from_image": False}
     insights_id = store.save_insights(stored)
     return InsightsResponse(id=insights_id, table_name=table.name, sheet=table.sheet, rows=len(table.rows),
                             columns=len(table.headers), suggestions=[InsightView(**suggestion.model_dump())],
                             note=warnings, from_image=False)
+
+
+@app.post("/insights/plan/materialize-bundle", response_model=InsightsResponse)
+async def materialize_plan_bundle(bundle_id: str = Form(...), selections: str = Form(..., max_length=30000)) -> InsightsResponse:
+    """Revalidate chosen tables against durable original bytes, then build one deck input."""
+    try:
+        bundle = store.load_dataset_bundle(bundle_id)
+        choices = json.loads(selections)
+        if not isinstance(choices, list) or not 1 <= len(choices) <= _MAX_PLAN_TABLES:
+            raise ValueError("Выберите от 1 до 21 варианта.")
+        if bundle is None:
+            raise HTTPException(404, "Пакет данных не найден.")
+        by_id = {item["dataset_id"]: item for item in bundle["datasets"]}
+        validated = []
+        seen = set()
+        for choice in choices:
+            if not isinstance(choice, dict):
+                raise ValueError("Некорректный выбор варианта.")
+            dataset_id = choice["dataset_id"]
+            if dataset_id not in by_id or dataset_id in seen:
+                raise ValueError("Таблица отсутствует в пакете или выбрана повторно.")
+            seen.add(dataset_id)
+            snapshot = store.load_dataset(dataset_id)
+            if snapshot is None:
+                raise ValueError("Исходные данные таблицы не найдены.")
+            raw = base64.b64decode(snapshot["source_base64"], validate=True)
+            import hashlib
+            if hashlib.sha256(raw).hexdigest() != by_id[dataset_id]["source_sha256"]:
+                raise ValueError("Контрольная сумма исходного файла не совпадает.")
+            validated.append((dataset_id, raw, snapshot["file_name"], bundle["goal"], snapshot["table_index"],
+                              choice["candidate_kind"], json.dumps(choice["required_fields"])))
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(422, f"Пакет не может быть использован: {exc}") from exc
+    results = []
+    suggestions = []
+    for dataset_id, *args in validated:
+        result = await run_in_threadpool(_materialize_plan_candidate, *args)
+        item = store.load_insights(result.id)
+        results.append(item)
+        suggestions.extend(_reference_pages(dict(item["suggestions"][0]), store.load_dataset(dataset_id)))
+        if len(suggestions) > _MAX_BUNDLE_SLIDES:
+            raise HTTPException(422, f"Выбор создаёт больше {_MAX_BUNDLE_SLIDES} слайдов; уменьшите число таблиц или объём справочника.")
+    for index, suggestion in enumerate(suggestions, start=1):
+        suggestion["id"] = f"s{index}"
+    combined = {"bundle_id": bundle_id, "table_name": "Пакет данных", "rows": sum(item["rows"] for item in results),
+                "columns": sum(item["columns"] for item in results), "suggestions": suggestions,
+                "analyses": [{key: item[key] for key in ("dataset_id", "analytical_plan", "selected_candidate")} for item in results],
+                "note": " ".join(item["note"] for item in results if item["note"]), "from_image": False}
+    insights_id = store.save_insights(combined)
+    return InsightsResponse(id=insights_id, **{key: combined[key] for key in
+                            ("table_name", "rows", "columns", "suggestions", "note", "from_image")})
 
 
 async def _wait_unless_gone(task: asyncio.Future, request: Request, client: object, poll_s: float = 0.5) -> bool:

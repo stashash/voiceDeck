@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from designer.contracts import DeckPlan, Finding, Scene, SkillRef, SlideSpec, TableSpec
+from designer.contracts import DataProvenance, DeckPlan, Finding, Scene, SkillRef, SlideSpec, TableSpec
 
 
 class DeckCreateRequest(BaseModel):
@@ -33,6 +33,8 @@ class InsightView(BaseModel):
     source: str
     formula: str
     by_model: bool
+    provenance: DataProvenance | None = None
+    coverage: str = ""
     fact_ids: list[str] = Field(default_factory=list, description="кандидаты кода: по ним экран узнаёт подсказку после пересчёта")
     number_at: list[int] | None = Field(default=None, description="начало и конец главного числа в headline")
 
@@ -49,6 +51,8 @@ class TablePreview(BaseModel):
 class DatasetTablePlan(BaseModel):
     """Предварительный анализ одной таблицы/листа: профиль и объяснимые варианты визуализации."""
     file_index: int
+    dataset_id: str = ""
+    source_sha256: str = ""
     table_index: int
     file_name: str
     table_name: str
@@ -64,6 +68,7 @@ class DatasetTablePlan(BaseModel):
 class DatasetBundlePlanResponse(BaseModel):
     """Детерминированный анализ 1–7 файлов, не вызывающий языковую модель."""
     file_count: int
+    id: str = ""
     table_count: int
     goal: str
     datasets: list[DatasetTablePlan]
