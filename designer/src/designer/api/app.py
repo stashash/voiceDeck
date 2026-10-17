@@ -9,6 +9,8 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import asdict, is_dataclass
+from decimal import Decimal
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -35,6 +37,8 @@ from designer.api.schemas import (
     DeckRewriteRequest,
     DeckStateResponse,
     DeckVariantState,
+    DatasetBundlePlanResponse,
+    DatasetTablePlan,
     DesignSystemListResponse,
     DesignSystemPatchRequest,
     HealthResponse,
@@ -59,6 +63,8 @@ from designer.api.schemas import (
 from designer.contracts import DesignSystem, RunManifest
 from designer.export import convert
 from designer.insights import source as insights_source
+from designer.insights.plan import plan_table
+from designer.insights.profile import profile_table
 from designer.insights import suggest as insights_suggest
 from designer.insights import table as insights_table
 from designer.llm.client import LlmClient, LlmResponseError, ModelLoading, auth_headers
@@ -259,6 +265,75 @@ async def table_preview(file: UploadFile = File(...)) -> TablePreview:
     if table is None:
         return TablePreview(table_name=name, from_image=from_image)
     return TablePreview(table_name=table.name, sheet=table.sheet, rows=len(table.rows), columns=len(table.headers))
+
+
+_MAX_PLAN_FILES = 7
+_MAX_PLAN_TABLES = 21
+_MAX_PLAN_TOTAL_BYTES = insights_table.MAX_BYTES * _MAX_PLAN_FILES
+
+
+def _json_safe(value):
+    """Serialize internal immutable plan dataclasses without rounding Decimal values."""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if is_dataclass(value):
+        return _json_safe(asdict(value))
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _bundle_plan(inputs: list[tuple[str, bytes]], goal: str) -> list[DatasetTablePlan]:
+    datasets = []
+    for filename, data in inputs:
+        try:
+            tables = insights_table.read_tables(data, filename)
+        except insights_table.TableError as exc:
+            raise HTTPException(422, f"«{insights_table.file_name(filename)}»: {exc}") from exc
+        for table in tables:
+            if len(datasets) >= _MAX_PLAN_TABLES:
+                raise HTTPException(422, f"Найдено больше {_MAX_PLAN_TABLES} таблиц: разделите файлы на несколько запросов.")
+            profile = profile_table(table)
+            plan = plan_table(table, goal)
+            datasets.append(DatasetTablePlan(
+                file_name=insights_table.file_name(filename), table_name=table.name, sheet=table.sheet,
+                rows=len(table.rows), columns=len(table.headers), headers=table.headers,
+                preview_rows=[row[:10] for row in table.rows[:5]],
+                profile=_json_safe(profile), plan=_json_safe(plan),
+            ))
+    return datasets
+
+
+@app.post("/insights/plan", response_model=DatasetBundlePlanResponse)
+async def dataset_bundle_plan(files: list[UploadFile] = File(...), goal: str = Form("", max_length=2000)) -> DatasetBundlePlanResponse:
+    """Profile 1–7 CSV/XLSX/JSON/TXT/Markdown files and rank deterministic slide options.
+
+    This additive endpoint deliberately does not call an LLM or alter the existing
+    single-file `/insights` workflow. XLSX sheets containing independent tables are
+    exposed as separate datasets, with a bounded overall table count.
+    """
+    if not 1 <= len(files) <= _MAX_PLAN_FILES:
+        raise HTTPException(422, f"Прикрепите от 1 до {_MAX_PLAN_FILES} файлов данных.")
+    inputs, total = [], 0
+    try:
+        for upload in files:
+            filename = upload.filename or ""
+            data = await upload.read(insights_table.MAX_BYTES + 1)
+            if len(data) > insights_table.MAX_BYTES:
+                raise HTTPException(413, f"«{insights_table.file_name(filename)}» больше 1 МБ.")
+            total += len(data)
+            if total > _MAX_PLAN_TOTAL_BYTES:
+                raise HTTPException(413, f"Общий размер файлов больше {_MAX_PLAN_TOTAL_BYTES // (1024 * 1024)} МБ.")
+            inputs.append((filename, data))
+        datasets = await run_in_threadpool(_bundle_plan, inputs, goal)
+    finally:
+        for upload in files:
+            await upload.close()
+    if not datasets:
+        raise HTTPException(422, "В файлах не найдено табличных данных.")
+    return DatasetBundlePlanResponse(file_count=len(files), table_count=len(datasets), goal=goal, datasets=datasets)
 
 
 async def _wait_unless_gone(task: asyncio.Future, request: Request, client: object, poll_s: float = 0.5) -> bool:

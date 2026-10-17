@@ -8,6 +8,7 @@ import {
 } from '../designer/api';
 import { agentDisplayName, agentOptionName, agentOptionSub } from '../designer/agentName';
 import { AttachTableButton, InsightsList, TableChip, useTableInsights } from '../designer/TableInsights';
+import { SemanticDataPlan } from '../designer/SemanticDataPlan';
 
 type Popover = 'ds' | 'agent' | null;
 // Холст: одна строка на четыре карточки, показаны две строки (Home.dc.html + правка координатора).
@@ -128,6 +129,7 @@ export default function HomePage() {
           <X size={18} strokeWidth={1.5}/></button></div>}
       <TableChip state={table} onRetry={() => void retryTable()}/>
       <InsightsList state={table} brief={brief} onRetry={() => void retryTable()}/>
+      <SemanticDataPlan/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
           <AttachTableButton onPick={file => void attachTable(file)}/>

@@ -1,0 +1,5 @@
+period,actual_units,planned_units,note
+Week 1,0,0,observed zero
+Week 2,,12,actual missing
+Week 3,8,,planned missing
+Week 4,0,10,actual zero

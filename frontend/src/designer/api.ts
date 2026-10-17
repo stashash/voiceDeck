@@ -191,6 +191,41 @@ export type InsightsResponse = {
   from_image?: boolean;
 };
 
+export type ProfileColumn = {
+  name: string; type: string; confidence: number; role_candidates: string[]; missing_count: number;
+  cardinality: number; numeric_outlier_count: number | null;
+};
+export type ProfileView = {
+  source_name: string; source_sheet: string; row_count: number; column_count: number; columns: ProfileColumn[];
+  numeric_candidates: string[]; category_candidates: string[]; datetime_candidates: string[];
+  identifier_candidates: string[]; likely_time_axis: string | null;
+};
+export type VisualizationCandidate = {
+  kind: 'table' | 'line' | 'bar' | 'column' | 'pie' | 'histogram' | 'scatter' | 'grouped_column' | 'kpi';
+  score: number; reason: string; required_fields: string[]; dimension_fields: string[]; measure_fields: string[];
+  row_lines: number[]; excluded_row_lines: number[]; warnings: string[]; renderable: boolean;
+  denominator: string | null; denominator_field: string | null; aggregation: string; value: string | null;
+};
+export type DatasetPlanView = {
+  content_hash: string; row_count: number; column_count: number;
+  goal: { kind: string; text: string; dimensions: string[]; measures: string[]; aggregation: string };
+  selected_fields: string[]; candidates: VisualizationCandidate[]; selected_candidate: VisualizationCandidate; warnings: string[];
+};
+export type DatasetTablePlan = {
+  file_name: string; table_name: string; sheet: string; rows: number; columns: number; headers: string[];
+  preview_rows: string[][]; profile: ProfileView; plan: DatasetPlanView;
+};
+export type DatasetBundlePlanResponse = { file_count: number; table_count: number; goal: string; datasets: DatasetTablePlan[] };
+
+/** Анализирует до семи источников; не вызывает модель и возвращает профиль + варианты с обоснованием. */
+export function analyzeDatasetBundle(files: File[], goal: string, signal?: AbortSignal): Promise<DatasetBundlePlanResponse> {
+  const form = new FormData();
+  files.forEach(file => form.append('files', file));
+  form.append('goal', goal);
+  return fetch(url('/insights/plan'), { method: 'POST', body: form, signal }, 90_000)
+    .then(r => uploadResponse<DatasetBundlePlanResponse>(r));
+}
+
 const INSIGHTS_TIMEOUT_MS = 6 * 60_000;
 
 export function tableInsights(file: File, brief: string, signal?: AbortSignal, useModel = true): Promise<InsightsResponse> {

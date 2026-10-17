@@ -1,0 +1,8 @@
+{
+  "columns": ["outcome", "tickets", "total_tickets"],
+  "rows": [
+    ["Resolved", 620, 1000],
+    ["Pending", 250, 1000],
+    ["Escalated", 130, 1000]
+  ]
+}

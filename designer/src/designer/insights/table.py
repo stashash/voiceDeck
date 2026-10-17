@@ -13,6 +13,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import json
 import re
 import zipfile
 from dataclasses import dataclass
@@ -40,7 +41,7 @@ class Table:
     numbers: list[list[Decimal | None]]
     """Число в ячейке или None, если ячейка не число."""
     lines: list[int]
-    """Номер строки данных в файле, как его видит автор в Excel: пустые строки файла не сдвигают счёт."""
+    """Исходная строка Excel/текста (начало CSV-записи); для JSON — индекс записи массива, начиная с 1."""
     sheet: str = ""
     """Лист xlsx, с которого прочитана таблица; у csv пусто."""
     from_image: bool = False
@@ -107,9 +108,11 @@ def read_tables(data: bytes, filename: str) -> list[Table]:
         if tables:
             return tables
         raise TableError(_no_table(reasons))
-    if lower.endswith(".csv") or lower.endswith(".txt"):
-        return [table_from_grid(name, _read_csv(data))]
-    raise TableError("Нужен файл xlsx, csv или картинка таблицы (png, jpg)")
+    if lower.endswith(".json"):
+        return [_read_json(data, name)]
+    if lower.endswith((".csv", ".txt", ".md", ".markdown")):
+        return [_read_text_table(data, name)]
+    raise TableError("Нужен файл xlsx, csv или картинка таблицы (png, jpg); также поддерживаются json, txt и md")
 
 
 def read_table(data: bytes, filename: str) -> Table:
@@ -201,6 +204,174 @@ def _read_xlsx(data: bytes) -> list[tuple[str, list[list[str]]]]:
     return sheets
 
 
+def _explicit_table(name: str, headers: list[str], rows: list[list[str]], lines: list[int]) -> Table:
+    """Structured formats already identify their header; never guess or drop empty columns/rows."""
+    if not headers or len(headers) > MAX_COLS:
+        raise TableError(f"Нужны от 1 до {MAX_COLS} столбцов.")
+    if any(not h.strip() for h in headers) or len(set(headers)) != len(headers):
+        raise TableError("Имена столбцов должны быть непустыми и уникальными.")
+    if len(rows) < 2:
+        raise TableError("Нужны шапка и хотя бы две строки данных.")
+    if len(rows) > MAX_ROWS:
+        raise TableError(f"Больше {MAX_ROWS} строк данных: оставьте только нужные.")
+    if any(len(row) != len(headers) for row in rows):
+        raise TableError("Число ячеек в строках не совпадает с числом столбцов.")
+    if any(len(cell) > MAX_CELL for row in [headers, *rows] for cell in row):
+        raise TableError(f"Ячейка длиннее {MAX_CELL} знаков.")
+    return Table(name, headers, rows, [[parse_number(cell) for cell in row] for row in rows], lines)
+
+
+def _read_json(data: bytes, name: str) -> Table:
+    """JSON row provenance is the 1-based index in the source array, not a physical text line."""
+    def object_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise TableError(f"JSON: повторяется ключ «{key[:80]}».")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise TableError(f"JSON: недопустимое число {value}.")
+
+    try:
+        payload = json.loads(data.decode("utf-8-sig"), object_pairs_hook=object_pairs,
+                             parse_float=Decimal, parse_int=Decimal, parse_constant=invalid_constant)
+    except (UnicodeDecodeError, ValueError, RecursionError, InvalidOperation, OverflowError) as exc:
+        if isinstance(exc, TableError):
+            raise
+        raise TableError("Некорректный JSON: нужен UTF-8 и массив объектов или объект {columns, rows}.") from exc
+    if isinstance(payload, list):
+        if not payload or not all(isinstance(row, dict) for row in payload):
+            raise TableError("JSON: нужен непустой массив объектов.")
+        if len(payload) > MAX_ROWS:
+            raise TableError(f"Больше {MAX_ROWS} строк данных: оставьте только нужные.")
+        headers = list(dict.fromkeys(key for row in payload for key in row))
+        if len(headers) > MAX_COLS:
+            raise TableError(f"Больше {MAX_COLS} столбцов: оставьте только нужные.")
+        raw_rows = [[row.get(key) for key in headers] for row in payload]
+    elif isinstance(payload, dict) and set(payload) == {"columns", "rows"}:
+        headers, raw_rows = payload["columns"], payload["rows"]
+        if not isinstance(headers, list) or not all(isinstance(h, str) for h in headers):
+            raise TableError("JSON: columns должен быть массивом имён столбцов.")
+        if not isinstance(raw_rows, list) or not all(isinstance(row, list) for row in raw_rows):
+            raise TableError("JSON: rows должен быть массивом массивов ячеек.")
+        if len(raw_rows) > MAX_ROWS or len(headers) > MAX_COLS:
+            raise TableError(f"JSON: предел — {MAX_ROWS} строк и {MAX_COLS} столбцов.")
+    else:
+        raise TableError("JSON: нужен массив объектов или объект с полями columns и rows.")
+
+    def cell(value):
+        if isinstance(value, (dict, list)):
+            raise TableError("JSON: вложенные объекты и массивы в ячейках не поддерживаются.")
+        if isinstance(value, Decimal):
+            # Bound expansion before formatting scientific notation (e.g. 1e99999999).
+            if abs(value.adjusted()) > MAX_CELL or len(value.as_tuple().digits) > MAX_CELL:
+                raise TableError(f"JSON: число длиннее {MAX_CELL} знаков.")
+            return format(value, "f")
+        return _cell_text(value)
+
+    return _explicit_table(name, headers, [[cell(v) for v in row] for row in raw_rows],
+                           list(range(1, len(raw_rows) + 1)))
+
+
+def _read_text_table(data: bytes, name: str) -> Table:
+    """One unambiguous delimited or Markdown table, optionally surrounded by prose.
+
+    Prose after a delimited table must be separated by an empty line. Newlines inside
+    quoted CSV fields are supported; provenance points at each record's starting line.
+    Whitespace-aligned prose is deliberately not treated as a table.
+    """
+    if b"\0" in data:
+        raise TableError("Файл сохранён не как csv: сохраните текст в UTF-8.")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = data.decode("cp1251")
+        except UnicodeDecodeError as exc:
+            raise TableError("Не удалось распознать кодировку: сохраните файл как «CSV UTF-8».") from exc
+    physical = text.splitlines()
+    markdown = []
+    covered = set()
+    for i in range(1, len(physical)):
+        separator = _pipe_cells(physical[i])
+        if len(separator) < 2 or not all(re.fullmatch(r":?-{3,}:?", c) for c in separator):
+            continue
+        headers = _pipe_cells(physical[i - 1])
+        rows, lines = [], []
+        for j in range(i + 1, len(physical)):
+            if not physical[j].strip() or "|" not in physical[j]:
+                break
+            rows.append(_pipe_cells(physical[j]))
+            lines.append(j + 1)
+        if len(headers) != len(separator):
+            raise TableError("Markdown: число столбцов шапки и разделителя не совпадает.")
+        markdown.append(_explicit_table(name, headers, rows, lines))
+        covered.update([i - 1, i, *(line - 1 for line in lines)])
+    if markdown:
+        if len(markdown) != 1:
+            raise TableError("Найдено несколько таблиц: оставьте одну таблицу в текстовом файле.")
+        # Search the remaining prose too: a Markdown table plus a CSV table is ambiguous.
+        text = "\n".join("" if index in covered else line for index, line in enumerate(physical))
+
+    candidates, errors = list(markdown), []
+    for delimiter in (";", ",", "\t", "|"):
+        reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+        blocks, block, start_line, blank = [], [], 1, False
+        parsed = []
+        try:
+            for row in reader:
+                line, start_line = start_line, reader.line_num + 1
+                if not any(cell.strip() for cell in row):
+                    blank = True
+                    continue
+                if len(row) < 2:
+                    if block:
+                        if not blank:
+                            raise TableError(f"Строка {line}: число ячеек не совпадает с шапкой; отделите пояснение пустой строкой.")
+                        blocks.append(block)
+                        block = []
+                else:
+                    block.append((line, row))
+                blank = False
+            if block:
+                blocks.append(block)
+            for block in blocks:
+                width = len(block[0][1])
+                if any(len(row) != width for _, row in block):
+                    raise TableError("Число ячеек в строках не совпадает с шапкой таблицы.")
+                if any(row == block[0][1] for _, row in block[1:]):
+                    raise TableError("Повторяется шапка: разделите несколько таблиц на отдельные файлы.")
+                grid = [[] for _ in range(block[-1][0])]
+                for line, row in block:
+                    grid[line - 1] = row
+                parsed.append(table_from_grid(name, grid))
+            candidates.extend(parsed)
+        except csv.Error as exc:
+            errors.append(TableError(f"Строка {reader.line_num}: кавычка в значении не закрыта или стоит не на месте. "
+                                     "Сохраните таблицу как CSV UTF-8."))
+        except TableError as exc:
+            errors.append(exc)
+    if len(candidates) > 1:
+        raise TableError("Неоднозначный текст: найдено несколько таблиц или разделителей. Оставьте одну таблицу.")
+    if candidates:
+        return candidates[0]
+    if errors:
+        raise errors[0]
+    raise TableError("Не нашёл таблицу: нужны шапка и хотя бы две строки данных с разделителем ; , TAB или Markdown.")
+
+
+def _pipe_cells(line: str) -> list[str]:
+    """Basic Markdown pipes, including escaped literal pipes; no Markdown execution."""
+    line = line.strip()
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|") and not line.endswith("\\|"):
+        line = line[:-1]
+    return [cell.replace("\\|", "|").strip() for cell in re.split(r"(?<!\\)\|", line)]
+
+
 def _cell_text(value: object) -> str:
     if value is None:
         return ""
@@ -241,6 +412,8 @@ def table_from_grid(name: str, grid: list[list[str]], sheet: str = "", from_imag
                    for top, bottom in zip(headers, second)]
         body_from += 1
     headers = _unique(headers)
+    if any(len(cell) > MAX_CELL for cell in headers):
+        raise TableError(f"Ячейка длиннее {MAX_CELL} знаков.")
     body = numbered[body_from:]
     if len(body) > MAX_ROWS:
         raise TableError(f"Больше {MAX_ROWS} строк данных: оставьте только нужные.")

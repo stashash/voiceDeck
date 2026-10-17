@@ -1,7 +1,7 @@
 """Схемы запросов и ответов HTTP API. Владелец: задача T-13, варианты — T-12."""
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -44,6 +44,27 @@ class TablePreview(BaseModel):
     rows: int = 0
     columns: int = 0
     from_image: bool = Field(default=False, description="таблица на картинке: прочитает модель, строк и столбцов ещё нет")
+
+
+class DatasetTablePlan(BaseModel):
+    """Предварительный анализ одной таблицы/листа: профиль и объяснимые варианты визуализации."""
+    file_name: str
+    table_name: str
+    sheet: str = ""
+    rows: int
+    columns: int
+    headers: list[str]
+    preview_rows: list[list[str]]
+    profile: dict[str, Any]
+    plan: dict[str, Any]
+
+
+class DatasetBundlePlanResponse(BaseModel):
+    """Детерминированный анализ 1–7 файлов, не вызывающий языковую модель."""
+    file_count: int
+    table_count: int
+    goal: str
+    datasets: list[DatasetTablePlan]
 
 
 class InsightsResponse(BaseModel):
