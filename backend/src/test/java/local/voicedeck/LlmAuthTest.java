@@ -24,8 +24,12 @@ class LlmAuthTest {
             assertEquals(Map.of(),Llm.vkHeaders(url,VK),url);
     }
 
-    @Test void vkRouterWithoutKeyIsRejectedAsNonLocal(){
-        assertThrows(IllegalArgumentException.class,()->new Llm(Llm.VK_INFERENCE_URL,Map.of()));
+    @Test void vkRouterWithoutKeyIsDisabledNotFatal(){
+        // Чистый клон с .env.example без ключа: сервис стартует, модель просто не зовётся.
+        var llm=new Llm(Llm.VK_INFERENCE_URL,Map.of());
+        assertFalse(llm.enabled());
+        assertThrows(IllegalStateException.class,()->llm.verifyBoundaries(List.of("a.","b.","c."),List.of(2)));
+        assertTrue(new Llm(Llm.VK_INFERENCE_URL,VK).enabled());
     }
 
     @Test void requestCarriesHeadersToConfiguredRouter()throws Exception{

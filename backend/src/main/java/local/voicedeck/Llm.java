@@ -19,19 +19,28 @@ public final class Llm {
     /** Роутер инференса VK из инструкции организаторов (docs/requirements/inference_quickstart.md). */
     static final String VK_INFERENCE_URL="https://ai-demo.platformpreview.ru/api/inference-providers-router/00000000-0000-0000-0000-000000000001/v1";
     private final Map<String,String> auth;
+    private final String disabled;
     public Llm() {
         this(Main.env("LLM_URL","http://127.0.0.1:8000/v1"),System.getenv());
     }
     Llm(String url) {this(url,Map.of());}
     Llm(String url,Map<String,String> env) {
         this.url=url;
-        URI uri=URI.create(url);
-        if(!"http".equals(uri.getScheme())&&!"https".equals(uri.getScheme()))throw new IllegalArgumentException("LLM_URL must use HTTP(S)");
         auth=vkHeaders(url,env);
-        if(!auth.isEmpty())return;
-        try {for(InetAddress ip:InetAddress.getAllByName(uri.getHost()))if(!EmbeddingClient.isLocalAddress(ip))throw new IllegalArgumentException("LLM_URL must resolve inside the local network or be VK_INFERENCE_URL with VK_API_KEY");}
-        catch(UnknownHostException e){throw new IllegalArgumentException("Cannot resolve local LLM host",e);}
+        disabled=auth.isEmpty()?rejection(url):null;
+        // Чужой адрес без ключа VK сервис не роняет: без модели слайды из речи идут без её проверки границ темы.
+        if(disabled!=null)System.err.println("Модель LLM_URL выключена: "+disabled);
     }
+    /** Почему адрес модели не годится без ключа VK, или null: модель зовётся только в локальной сети. */
+    static String rejection(String url) {
+        URI uri;
+        try{uri=URI.create(url);}catch(IllegalArgumentException e){return "LLM_URL is not a URL";}
+        if(!"http".equals(uri.getScheme())&&!"https".equals(uri.getScheme()))return "LLM_URL must use HTTP(S)";
+        try {for(InetAddress ip:InetAddress.getAllByName(uri.getHost()))if(!EmbeddingClient.isLocalAddress(ip))return "LLM_URL must resolve inside the local network or be VK_INFERENCE_URL with VK_API_KEY";}
+        catch(UnknownHostException e){return "Cannot resolve LLM host";}
+        return null;
+    }
+    public boolean enabled(){return disabled==null;}
     /** Ключ VK и Project-ID уходят только на роутер VK; любой другой адрес модели обязан быть в локальной сети. */
     static Map<String,String> vkHeaders(String url,Map<String,String> env) {
         String key=env.getOrDefault("VK_API_KEY","").strip(),base=env.getOrDefault("VK_INFERENCE_URL","").strip();
@@ -50,6 +59,7 @@ public final class Llm {
     private static int port(URI u){return u.getPort()!=-1?u.getPort():"https".equalsIgnoreCase(u.getScheme())?443:80;}
     private static String path(URI u){String p=u.getPath()==null?"":u.getPath().replaceAll("/+$","");return p.endsWith("/v1")?p.substring(0,p.length()-3):p;}
     private String ask(String system,String input,JsonObject schema)throws Exception {
+        if(disabled!=null)throw new IllegalStateException(disabled);
         var body=new JsonObject().put("model",Main.env(fallback?"LLM_FALLBACK_MODEL":"LLM_MODEL",fallback?"deckgen-small":"deckgen"))
             .put("temperature",0).put("max_tokens",1200)
             .put("messages",new JsonArray().add(new JsonObject().put("role","system").put("content",system)).add(new JsonObject().put("role","user").put("content",input)))
