@@ -131,7 +131,7 @@ def test_share_denominator_is_full_and_matches_explicit_total():
     assert pie.measure_fields == ("tickets",)
     assert pie.aggregation == "share_of_observed_sum"
     assert pie.required_fields == ("outcome", "tickets", "total_tickets")
-    assert "1000" in pie.reason and "observed" in pie.reason
+    assert "1000" in pie.reason and "сумма" in pie.reason
 
 
 @pytest.mark.parametrize("rows", [
@@ -148,7 +148,7 @@ def test_declared_population_mismatch_does_not_create_misleading_pie():
     plan = plan_table(data(["category", "tickets", "total_tickets"],
                           [["A", 20, 100], ["B", 30, 100]]), "shares")
     assert "pie" not in kinds(plan)
-    assert any("declared total" in w for w in plan.warnings)
+    assert any("совпадение с итогом" in w for w in plan.warnings)
 
 
 def test_missing_zero_and_actual_target_pair_are_not_summed_or_imputed():
@@ -159,8 +159,8 @@ def test_missing_zero_and_actual_target_pair_are_not_summed_or_imputed():
     assert selected.row_lines == (2, 5)
     assert selected.excluded_row_lines == (3, 4)
     assert selected.aggregation == "none" and selected.value is None
-    assert "No zero filling" in selected.reason
-    assert any("temporal" in w for w in plan.warnings)
+    assert "Нулями пропуски не заполняются" in selected.reason
+    assert any("времени" in w for w in plan.warnings)
 
 
 def test_explicit_measure_selection_not_default_mixed_units():
@@ -179,7 +179,7 @@ def test_distribution_retains_outlier_and_is_not_available_renderer():
     histogram = plan.selected_candidate
     assert histogram.kind == "histogram" and histogram.renderable
     assert histogram.row_lines == tuple(table.lines)
-    assert "IQR outlier" in histogram.reason
+    assert "выброс" in histogram.reason
     assert histogram.aggregation == "none"  # No invented bins/counts at plan stage.
 
 
@@ -190,8 +190,8 @@ def test_scatter_complete_pairs_and_no_correlation_claim():
     assert scatter.kind == "scatter" and scatter.renderable
     assert scatter.measure_fields == ("x", "y")
     assert scatter.row_lines == (1, 2, 4, 5, 6) and scatter.excluded_row_lines == (3,)
-    assert "5 complete numeric pairs" in scatter.reason
-    assert "not causation" in scatter.reason and scatter.value is None
+    assert "5 полных пар чисел" in scatter.reason
+    assert "не значит причину" in scatter.reason and scatter.value is None
 
 
 @pytest.mark.parametrize("rows", [[[i, i * 2] for i in range(4)], [[i, 1] for i in range(6)],
@@ -199,13 +199,13 @@ def test_scatter_complete_pairs_and_no_correlation_claim():
 def test_scatter_rejects_insufficient_pairs_and_constant_columns(rows):
     plan = plan_table(data(["x", "y"], rows), "relationship")
     assert "scatter" not in kinds(plan)
-    assert any("five complete pairs" in w for w in plan.warnings)
+    assert any("пять полных пар" in w for w in plan.warnings)
 
 
 def test_id_is_not_a_relationship_measure():
     plan = plan_table(data(["record_id", "amount"], [[i, i * 2] for i in range(6)]), "relationship")
     assert "scatter" not in kinds(plan)
-    assert any("identifiers" in w for w in plan.warnings)
+    assert any("идентификаторы" in w for w in plan.warnings)
 
 
 @pytest.mark.parametrize("dates", [["2026-01", "2026-01"], ["2026-01", "2026-02-01"],
@@ -235,7 +235,7 @@ def test_partially_parseable_date_column_cannot_be_used_as_clear_axis():
 def test_histogram_needs_enough_nonconstant_observations(rows):
     plan = plan_table(data(["value"], rows), "distribution")
     assert "histogram" not in kinds(plan)
-    assert any("five numeric observations" in w for w in plan.warnings)
+    assert any("пять чисел" in w for w in plan.warnings)
 
 
 def test_reference_covers_all_201_rows_with_pagination_warning():
@@ -243,7 +243,7 @@ def test_reference_covers_all_201_rows_with_pagination_warning():
     plan = plan_table(table)
     assert kinds(plan) == {"table"}
     assert plan.selected_candidate.row_lines == tuple(table.lines)
-    assert "Paginate" in plan.selected_candidate.reason
+    assert "на страницы" in plan.selected_candidate.reason
 
 
 def test_only_explicit_record_count_is_automatic_kpi():
@@ -251,10 +251,10 @@ def test_only_explicit_record_count_is_automatic_kpi():
     safe = plan_table(table, "count rows").selected_candidate
     assert safe.kind == "kpi" and safe.value == Decimal(4)
     assert safe.aggregation == "count_rows" and safe.row_lines == tuple(table.lines)
-    assert "including incomplete" in safe.reason
+    assert "неполные тоже" in safe.reason
     unsafe = plan_table(table, "KPI")
     assert "kpi" not in kinds(unsafe)
-    assert any("not summed" in w for w in unsafe.warnings)
+    assert any("не суммируются" in w for w in unsafe.warnings)
     with pytest.raises(ValueError, match="Only explicit row"):
         AnalyticalGoal("kpi", aggregation="sum")
 
@@ -279,4 +279,4 @@ def test_empty_untyped_input_has_explanatory_table_and_no_fabricated_chart():
     plan = plan_table(empty, "growth")
     assert kinds(plan) == {"table"} and plan.row_count == 0
     assert plan.selected_candidate.value is None
-    assert "0 rows" in plan.selected_candidate.reason
+    assert "0 строк" in plan.selected_candidate.reason

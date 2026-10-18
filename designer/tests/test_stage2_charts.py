@@ -182,4 +182,4 @@ def test_precision_loss_keeps_extended_candidate_unrenderable():
     table = read_tables(b"category,actual,target\nA,9007199254740993,2\nB,9007199254740995,4\n", "data.csv")[0]
     candidate = next(c for c in plan_table(table, "compare").candidates if c.kind == "grouped_column")
     assert not candidate.renderable
-    assert "precision/range" in candidate.reason
+    assert "диапазон чисел" in candidate.reason
