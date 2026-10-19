@@ -122,7 +122,9 @@ def test_large_reference_table_materializes_as_readable_complete_pages():
     lines = list(range(2, 203))
     suggestion = {"visual": "table", "headline": "Reference", "table": {}, "provenance": {}}
     pages = _reference_pages(suggestion, {"table": {"headers": ["id", "label"], "rows": rows, "row_lines": lines}})
-    assert len(pages) == 29
+    assert len(pages) == 30
+    assert pages[0]["visual"] == "big_number"
+    pages = pages[1:]
     assert all(1 <= len(page["table"]["rows"]) <= 7 for page in pages)
     assert sum(len(page["table"]["rows"]) for page in pages) == 201
     assert pages[0]["provenance"]["page_count"] == 29

@@ -131,7 +131,7 @@ def test_export_fails_closed_for_undeclared_chart_type():
 
 @pytest.mark.parametrize("kind,goal,data,fields", [
     ("scatter", "relationship", b"x,y\n0,0\n1,2\n2,\n3,6\n4,8\n5,10\n", ["x", "y"]),
-    ("grouped_column", "compare", b"category,actual,target\nA,0,1\nB,2,\nC,3,4\n", ["category", "actual", "target"]),
+    ("grouped_column", "compare", b"category,actual,target\nA,0,1\nB,2,3\nC,3,4\n", ["category", "actual", "target"]),
     ("stacked_column", "stacked composition", b"category,online_usd,offline_usd\nA,0,2\nB,3,4\nC,5,\n", ["category", "online_usd", "offline_usd"]),
 ])
 def test_plan_materialization_and_html_deck_export_preserve_source_rows(tmp_path, monkeypatch, kind, goal, data, fields):
@@ -144,7 +144,7 @@ def test_plan_materialization_and_html_deck_export_preserve_source_rows(tmp_path
     intent = insight_slide(suggestion)
     assert intent.chart.type == kind
     assert intent.chart.series[0].values[0] == 0
-    assert len(intent.provenance.excluded_row_lines) == 1
+    assert len(intent.provenance.excluded_row_lines) == (0 if kind == "grouped_column" else 1)
     assert intent.provenance.columns == fields
     assert intent.provenance.visualization == kind
     if kind == "scatter":
@@ -152,7 +152,7 @@ def test_plan_materialization_and_html_deck_export_preserve_source_rows(tmp_path
         assert intent.chart.series[0].values == [0, 2, 6, 8, 10]
     else:
         assert len(intent.chart.series) == 2
-        assert all(len(s.values) == 2 for s in intent.chart.series)
+        assert all(len(s.values) == (3 if kind == "grouped_column" else 2) for s in intent.chart.series)
     element = Element(id="chart", type="chart", box=(0.1, 0.1, 0.8, 0.8), chart=intent.chart)
     scene = Scene(slide_id="s1", pattern_id="p1", elements=[element])
     ds = DesignSystem(id="ds", source_file="", slide_size_emu=(9144000, 5143500), tokens=tokens())

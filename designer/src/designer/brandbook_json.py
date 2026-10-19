@@ -17,7 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from designer.contracts import ColorToken, FontToken, Margins, Tokens, TypeStep
+from designer.contracts import ChartStyle, ColorToken, FontToken, Margins, Tokens, TypeStep
 
 
 class BrandTokenError(ValueError):
@@ -30,7 +30,7 @@ _ROLES = {
     "fonts": {"heading", "body", "mono", "other"},
     "type_scale": {"display", "title", "heading", "body", "caption"},
 }
-_TOP_KEYS = {"tokens", "colors", "fonts", "fontFamilies", "type_scale", "typeScale", "fontSizes", "margins", "spacing"}
+_TOP_KEYS = {"tokens", "colors", "fonts", "fontFamilies", "type_scale", "typeScale", "fontSizes", "margins", "spacing", "chart_style", "guides_x", "guides_y"}
 
 
 def _fail(path: str, message: str) -> None:
@@ -121,7 +121,7 @@ def parse_brand_tokens(json_bytes_or_dict: bytes | bytearray | Mapping[str, Any]
         prefix = "$.tokens"
     else:
         prefix = "$"
-    allowed = {"colors", "fonts", "fontFamilies", "type_scale", "typeScale", "fontSizes", "margins", "spacing"}
+    allowed = _TOP_KEYS - {"tokens"}
     unknown = set(root) - allowed
     if unknown:
         _fail(prefix, f"unknown fields: {', '.join(sorted(unknown))}")
@@ -199,7 +199,17 @@ def parse_brand_tokens(json_bytes_or_dict: bytes | bytearray | Mapping[str, Any]
     else:
         margins = Margins(**margin_values)
     try:
-        return Tokens(colors=colors, fonts=fonts, type_scale=scale, margins=margins)
+        guides = {}
+        for axis in ("guides_x", "guides_y"):
+            values = root.get(axis, [])
+            if not isinstance(values, list) or len(values) > 100 or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 1 for v in values):
+                _fail(prefix + "." + axis, "expected at most 100 slide fractions")
+            guides[axis] = sorted(set(values))
+        style = root.get("chart_style")
+        if style is not None and (not isinstance(style, dict) or set(style) - set(ChartStyle.model_fields)):
+            _fail(prefix + ".chart_style", "unknown chart style fields")
+        return Tokens(colors=colors, fonts=fonts, type_scale=scale, margins=margins,
+                      chart_style=ChartStyle.model_validate(style) if style is not None else None, **guides)
     except ValidationError as exc:
         raise _validation_error(exc, prefix) from exc
 
@@ -211,12 +221,16 @@ def resolve_tokens(template_tokens: Tokens, brand_tokens: Tokens, brand_priority
     A zero-valued margins object is treated as omitted, allowing template fallback.
     """
     preferred, fallback = (brand_tokens, template_tokens) if brand_priority else (template_tokens, brand_tokens)
+    def merge_roles(primary, secondary):
+        roles = {item.role for item in primary}
+        return list(primary) + [item for item in secondary if item.role not in roles]
     margins_are_empty = all(getattr(preferred.margins, side) == 0 for side in ("left", "top", "right", "bottom"))
     return Tokens(
-        colors=list(preferred.colors or fallback.colors),
-        fonts=list(preferred.fonts or fallback.fonts),
-        type_scale=list(preferred.type_scale or fallback.type_scale),
+        colors=merge_roles(preferred.colors, fallback.colors),
+        fonts=merge_roles(preferred.fonts, fallback.fonts),
+        type_scale=merge_roles(preferred.type_scale, fallback.type_scale),
         margins=preferred.margins if not margins_are_empty else fallback.margins,
-        guides_x=list(template_tokens.guides_x),
-        guides_y=list(template_tokens.guides_y),
+        guides_x=list(preferred.guides_x or fallback.guides_x),
+        guides_y=list(preferred.guides_y or fallback.guides_y),
+        chart_style=preferred.chart_style or fallback.chart_style,
     )

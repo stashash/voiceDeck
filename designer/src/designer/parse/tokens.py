@@ -11,7 +11,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
-from designer.contracts import ColorToken, FontToken, Margins, Tokens, TypeStep
+from designer.contracts import ChartStyle, ColorToken, FontToken, Margins, Tokens, TypeStep
 
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -446,7 +446,38 @@ def extract_tokens(pptx_path: Path) -> Tokens:
         margins=margins,
         guides_x=guides_x,
         guides_y=guides_y,
+        chart_style=_chart_style(prs, tokens_colors),
     )
+
+
+def _chart_style(prs, colors) -> ChartStyle:
+    # The template's actual native chart is authoritative where present. With no
+    # sample chart, derive explicit axis/legend defaults from the extracted palette.
+    style = {"gridline_color": next((c.hex for c in colors if c.role == "text_muted"), "DADDE5"),
+             "gridline_width_pt": 0.6, "legend_position": "bottom"}
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not shape.has_chart:
+                continue
+            chart = shape.chart
+            try:
+                size = chart.font.size
+                if size and 8 <= size.pt <= 32:
+                    style["label_size_pt"] = size.pt
+                if chart.has_legend:
+                    name = chart.legend.position.name.lower()
+                    if name in {"bottom", "top", "left", "right"}:
+                        style["legend_position"] = name
+                if chart.value_axis.has_major_gridlines:
+                    line = chart.value_axis.major_gridlines.format.line
+                    if line.color.type and line.color.rgb:
+                        style["gridline_color"] = str(line.color.rgb)
+                    if line.width and 0.1 <= line.width.pt <= 5:
+                        style["gridline_width_pt"] = line.width.pt
+            except (AttributeError, ValueError, TypeError):
+                pass
+            return ChartStyle(**style)
+    return ChartStyle(**style)
 
 
 def _flattened_template_palette(prs) -> list[ColorToken]:

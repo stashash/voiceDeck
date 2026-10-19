@@ -360,6 +360,8 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
                 element.style = override.style
     elements = [el for el in elements if not (el.id in spec.element_positions and spec.element_positions[el.id].deleted)]
     elements.extend(el.model_copy(deep=True) for el in spec.added_elements)
+    from designer.layout.brand import apply_brand
+    elements = apply_brand(elements, ds)
     elements.sort(key=lambda el: el.z)
     return Scene(
         slide_id=spec.slide_id,

@@ -35,7 +35,7 @@ def kinds(plan):
     ("category_shares.json", "структура долей", "pie"),
     ("distribution.csv", "показать распределение", "histogram"),
     ("reference_201.csv", "справочные значения", "table"),
-    ("missing_zero.csv", "compare actual and target", "grouped_column"),
+    ("missing_zero.csv", "compare actual and target", "table"),
     ("embedded_table.md", "сравнить регионы", "bar"),
 ])
 def test_all_seven_fixture_goals(filename, goal, expected):
@@ -69,6 +69,40 @@ def test_all_seven_fixture_goals(filename, goal, expected):
 ])
 def test_simple_author_goals(text, kind):
     assert parse_goal(text).kind == kind
+
+
+def test_appendix_instruction_keeps_each_dataset_own_analytical_choice():
+    brief = ('Итоги учебного пилота. Все значения синтетические. Сохрани единицы и период источника. '
+             'Отдели наблюдения от интерпретаций. Полный справочник вынеси в приложение.')
+    assert parse_goal(brief).kind == 'auto'
+    assert parse_goal(brief).text == brief
+    expected = {
+        'time_series.csv': 'line', 'category_shares.json': 'pie',
+        'distribution.csv': 'histogram', 'category_comparison.csv': 'grouped_column',
+        'reference_201.csv': 'table', 'missing_zero.csv': 'table', 'embedded_table.md': 'bar',
+    }
+    for filename, kind in expected.items():
+        plan = plan_table(fixture(filename), brief)
+        assert plan.selected_candidate.kind == kind, filename
+        assert plan.goal.text == brief
+
+
+@pytest.mark.parametrize('text,kind', [
+    ('Показать справочную таблицу', 'reference'),
+    ('Показать справочную таблицу в приложении', 'reference'),
+    ('Полный справочник — в приложении', 'auto'),
+    ('Move the reference table to the appendix.', 'auto'),
+    ('Покажи динамику, справочник вынеси в приложение.', 'trend'),
+    ('Покажи динамику. Сравни категории. Покажи доли.', 'auto'),
+    ('Show distribution and relationship between measures', 'auto'),
+    ('Сначала количество строк, затем динамика по месяцам', 'auto'),
+    ('Динамика продаж и рост выручки', 'trend'),
+])
+def test_goal_scope_and_mixed_briefs_do_not_use_regex_order(text, kind):
+    goal = parse_goal(text)
+    assert goal.kind == kind and goal.text == text
+    if kind == 'auto':
+        assert goal.aggregation == 'none'
 
 
 def test_goal_changes_ranking_without_changing_data_hash():
@@ -156,8 +190,9 @@ def test_missing_zero_and_actual_target_pair_are_not_summed_or_imputed():
     plan = plan_table(table, "compare actual and target")
     selected = plan.selected_candidate
     assert selected.measure_fields == ("actual_units", "planned_units")
-    assert selected.row_lines == (2, 5)
-    assert selected.excluded_row_lines == (3, 4)
+    assert selected.kind == "table"
+    assert selected.row_lines == (2, 3, 4, 5)
+    assert selected.excluded_row_lines == ()
     assert selected.aggregation == "none" and selected.value is None
     assert "No zero filling" in selected.reason
     assert any("temporal" in w for w in plan.warnings)

@@ -69,15 +69,16 @@ def test_bundle_persists_original_bytes_normalized_rows_profile_and_plan(client)
 def test_persisted_bundle_materializes_multiple_sources_and_reaches_deck_generation(client, monkeypatch):
     saved = bundle(client)
     response = materialize(client, saved)
-    assert [item["id"] for item in response["suggestions"]] == [f"s{i}" for i in range(1, 31)]
+    assert [item["id"] for item in response["suggestions"]] == [f"s{i}" for i in range(1, 32)]
     stored = store.load_insights(response["id"])
     assert stored["bundle_id"] == saved["id"]
     assert len(stored["analyses"]) == 2
-    reference = stored["suggestions"][1]
+    assert stored["suggestions"][1]["visual"] == "big_number"
+    reference = stored["suggestions"][2]
     assert reference["provenance"]["total_rows"] == 201
     assert len(reference["provenance"]["row_lines"]) == 201
     assert len(reference["provenance"]["displayed_row_lines"]) == 7
-    pages = stored["suggestions"][1:]
+    pages = stored["suggestions"][2:]
     assert len(pages) == 29
     assert [page["provenance"]["page_index"] for page in pages] == list(range(1, 30))
     assert all(page["provenance"]["page_count"] == 29 for page in pages)
@@ -155,7 +156,7 @@ def test_source_is_visible_in_pptx_html_and_saved_scene(client, tmp_path):
     spec = compose(intent, pattern, ds)
     scene = build_scene(spec, pattern, ds, package)
     source_element = next(el for el in scene.elements if el.id == "data-source")
-    assert intent.title == "Выручка: +36000 USD между 2026-01 и 2026-06"
+    assert intent.title == "Выручка: +36000 USD между 2026-01 и 2026-06 (+30.00%)"
     assert intent.chart.unit == "USD"
     assert "time_series.csv" in source_element.text
     assert "Охват: 6 из 6" in source_element.text
@@ -165,7 +166,7 @@ def test_source_is_visible_in_pptx_html_and_saved_scene(client, tmp_path):
     chart = next(shape.chart for shape in exported.shapes if shape.has_chart)
     assert chart.value_axis.tick_labels.number_format == "#,##0"
     assert chart.value_axis.tick_labels.number_format_is_linked is False
-    assert chart.value_axis.axis_title.text_frame.text == "USD"
+    assert chart.value_axis.axis_title.text_frame.text == "Выручка, USD"
     text = "\n".join(shape.text for shape in exported.shapes if shape.has_text_frame)
     assert source_element.text in text
     assert suggestion.provenance.source_sha256 in exported.notes_slide.notes_text_frame.text

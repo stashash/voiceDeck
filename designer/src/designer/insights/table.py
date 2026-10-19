@@ -16,7 +16,7 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 
 MAX_BYTES = 1024 * 1024
@@ -46,6 +46,8 @@ class Table:
     """Лист xlsx, с которого прочитана таблица; у csv пусто."""
     from_image: bool = False
     """Таблицу прочитала модель с картинки: числа надо сверить с оригиналом."""
+    context: tuple[str, ...] = ()
+    """Exact surrounding prose (source, period, units); never interpreted as cells."""
 
 
 _NUMBER = re.compile(r"^[+-]?(?:\d{1,3}(?:[   ]\d{3})+|\d+)(?:[.,]\d+)?$")
@@ -320,9 +322,11 @@ def _read_text_table(data: bytes, name: str) -> Table:
         reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
         blocks, block, start_line, blank = [], [], 1, False
         parsed = []
+        record_ends = {}
         try:
             for row in reader:
                 line, start_line = start_line, reader.line_num + 1
+                record_ends[line] = reader.line_num
                 if not any(cell.strip() for cell in row):
                     blank = True
                     continue
@@ -346,7 +350,10 @@ def _read_text_table(data: bytes, name: str) -> Table:
                 grid = [[] for _ in range(block[-1][0])]
                 for line, row in block:
                     grid[line - 1] = row
-                parsed.append(table_from_grid(name, grid))
+                table = table_from_grid(name, grid)
+                context = tuple(line.strip() for index, line in enumerate(physical)
+                                if (index < block[0][0] - 1 or index >= record_ends[block[-1][0]]) and line.strip())
+                parsed.append(replace(table, context=context))
             candidates.extend(parsed)
         except csv.Error as exc:
             errors.append(TableError(f"Строка {reader.line_num}: кавычка в значении не закрыта или стоит не на месте. "
@@ -356,7 +363,15 @@ def _read_text_table(data: bytes, name: str) -> Table:
     if len(candidates) > 1:
         raise TableError("Неоднозначный текст: найдено несколько таблиц или разделителей. Оставьте одну таблицу.")
     if candidates:
-        return candidates[0]
+        table = candidates[0]
+        # Row references include the start of multiline records. Preserve all prose
+        # outside the table block, rather than guessing dates/units from its values.
+        if markdown:
+            context = tuple(line.strip() for index, line in enumerate(physical)
+                            if index not in covered and line.strip())
+        else:
+            context = table.context
+        return replace(table, context=context)
     if errors:
         raise errors[0]
     raise TableError("Не нашёл таблицу: нужны шапка и хотя бы две строки данных с разделителем ; , TAB или Markdown.")

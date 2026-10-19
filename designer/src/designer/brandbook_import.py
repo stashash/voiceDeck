@@ -51,6 +51,8 @@ class BrandbookImportResult:
     raw_sha256: str
     assets: tuple[BrandbookAsset, ...] = ()
     warnings: tuple[str, ...] = ()
+    rules: dict | None = None
+    source: dict | None = None
 
 
 def _rgb(value: Any, *, normalized: bool = False) -> str | None:
@@ -69,6 +71,14 @@ def _rgb(value: Any, *, normalized: bool = False) -> str | None:
     return "".join(f"{round(x * 255 if normalized else x):02X}" for x in channels)
 
 
+def _validated_rules(root: dict) -> dict:
+    from designer.brandbook_rules import read_rules
+    try:
+        return read_rules(root)
+    except ValueError as exc:
+        raise BrandbookImportError(str(exc)) from exc
+
+
 def _json_tokens(raw: bytes) -> tuple[Tokens, str, tuple[str, ...]]:
     try:
         root = json.loads(raw)
@@ -76,6 +86,7 @@ def _json_tokens(raw: bytes) -> tuple[Tokens, str, tuple[str, ...]]:
         raise BrandbookImportError("Invalid brandbook JSON") from exc
     if not isinstance(root, dict):
         raise BrandbookImportError("Brandbook JSON must be an object")
+    root = {key: value for key, value in root.items() if key not in {"rules", "source"}}
     if "variables" not in root and not _has_typed_tokens(root):
         return parse_brand_tokens(root), "json", ()
     colors: list[dict[str, str]] = []
@@ -137,7 +148,7 @@ def _has_typed_tokens(root: dict[str, Any], depth: int = 0) -> bool:
     return any(_has_typed_tokens(v, depth + 1) for v in root.values() if isinstance(v, dict))
 
 
-def _pdf_tokens(raw: bytes) -> tuple[Tokens, tuple[str, ...]]:
+def _pdf_tokens(raw: bytes) -> tuple[Tokens, tuple[str, ...], dict, tuple[BrandbookAsset, ...]]:
     from pypdf import PdfReader
 
     try:
@@ -147,13 +158,37 @@ def _pdf_tokens(raw: bytes) -> tuple[Tokens, tuple[str, ...]]:
         if len(reader.pages) > MAX_PDF_PAGES:
             raise BrandbookImportError(f"PDF exceeds {MAX_PDF_PAGES} pages")
         parts: list[str] = []
+        pdf_colors: set[str] = set()
+        pdf_fonts: set[str] = set()
+        images: list[BrandbookAsset] = []
         text_size = 0
         for page in reader.pages:
-            text = page.extract_text() or ""
+            def operand(op, args, *_):
+                if op in (b"rg", b"RG") and len(args) == 3:
+                    color = _rgb(dict(zip(("r", "g", "b"), [float(v) for v in args])), normalized=True)
+                    if color:
+                        pdf_colors.add(color)
+            def visitor(_text, _cm, _tm, font, _size):
+                if font and font.get("/BaseFont"):
+                    family = re.sub(r"^[A-Z]{6}\+", "", str(font["/BaseFont"]).lstrip("/"))
+                    family = re.sub(r"-(Bold|Italic|Regular|Oblique).*", "", family)
+                    if family:
+                        pdf_fonts.add(family)
+            text = page.extract_text(visitor_operand_before=operand, visitor_text=visitor) or ""
             text_size += len(text)
             if text_size > MAX_TEXT_CHARS:
                 raise BrandbookImportError("PDF extracted text exceeds limit")
             parts.append(text)
+            if len(images) < 12:
+                for image in page.images:
+                    if len(image.data) <= MAX_ENTRY_BYTES and len(images) < 12:
+                        try:
+                            with Image.open(BytesIO(image.data)) as decoded:
+                                if decoded.width < 64 or decoded.height < 16:
+                                    continue
+                            images.append(_asset(f"pdf-image-{len(images) + 1}.png", _png_bytes(image.data)))
+                        except (OSError, BrandbookImportError):
+                            continue
         text = "\n".join(parts)
     except BrandbookImportError:
         raise
@@ -169,11 +204,46 @@ def _pdf_tokens(raw: bytes) -> tuple[Tokens, tuple[str, ...]]:
         family = match.group(1).strip().strip('"\'')
         if re.fullmatch(r"[\w][\w .+'’\-]{0,98}", family) and not family.isnumeric():
             families.add(family)
-    if not colors and not families:
+    if not colors:
+        colors = pdf_colors
+    if not families and (colors or images):
+        families = pdf_fonts
+    if not colors and not families and not images:
         raise BrandbookImportError("PDF has no explicit hex/RGB colors or labeled font families; OCR is unsupported")
-    tokens = parse_brand_tokens({"colors": [{"role": "other", "hex": c.upper()} for c in sorted(colors)],
-                                 "fonts": [{"role": "other", "family": f} for f in sorted(families)]})
-    return tokens, ("Recovered explicit text values only; roles, sizes, margins, images and visual layout were not inferred.",)
+    def role_of(color):
+        for role in ("background", "surface", "text_muted", "accent_alt", "text", "accent"):
+            if re.search(rf"(?im)^\s*{role}\s*[:=]\s*#?{color}\b", text):
+                return role
+        return "other"
+    payload = {"colors": [{"role": role_of(c), "hex": c.upper()} for c in sorted(colors)],
+               "fonts": [{"role": "heading" if re.search(rf"(?im)^heading\s+font\s*[:=]\s*{re.escape(f)}", text) else "body" if re.search(rf"(?im)^body\s+font\s*[:=]\s*{re.escape(f)}", text) else "other", "family": f} for f in sorted(families)]}
+    for role in ("heading", "body"):
+        match = re.search(rf"(?im)^\s*{role}\s+font\s*[:=]\s*([^\r\n]+)", text)
+        if match:
+            payload["fonts"].append({"role": role, "family": match[1].strip()[:100]})
+    sizes = [{"role": role, "size_pt": float(value)} for role, value in re.findall(r"(?im)^\s*(title|heading|body|caption)\s+size\s*[:=]\s*(\d+(?:\.\d+)?)", text)]
+    if sizes:
+        payload["type_scale"] = sizes
+    margin = re.search(r"(?im)^\s*margins\s*[:=]\s*([\d., ]+)", text)
+    if margin:
+        values = [float(value) for value in re.findall(r"\d+(?:\.\d+)?", margin[1])]
+        if len(values) == 4 and all(0 <= value <= 0.3 for value in values):
+            payload["margins"] = dict(zip(("left", "top", "right", "bottom"), values))
+    rules = {}
+    grid = re.search(r"(?im)^\s*grid columns\s*[:=]\s*(\d+)", text)
+    if grid and 1 <= int(grid[1]) <= 24:
+        rules["grid_columns"] = int(grid[1])
+    if images and re.search(r"logo|логотип", text, re.I):
+        rules["logo"] = images[0].name
+    tokens = parse_brand_tokens(payload) if colors or families else _asset_palette(tuple(images))
+    return tokens, ("PDF values recovered from text, embedded fonts, RGB operations and images; ambiguous typography/grid rules are not invented.",), rules, tuple(images)
+
+
+def _png_bytes(raw: bytes) -> bytes:
+    output = BytesIO()
+    with Image.open(BytesIO(raw)) as image:
+        image.convert("RGBA").save(output, format="PNG")
+    return output.getvalue()
 
 
 def _safe_zip_name(info: zipfile.ZipInfo) -> str:
@@ -219,7 +289,7 @@ def _asset(name: str, data: bytes) -> BrandbookAsset:
     return BrandbookAsset(name, data)
 
 
-def _zip_tokens(raw: bytes) -> tuple[Tokens, tuple[BrandbookAsset, ...], tuple[str, ...]]:
+def _zip_tokens(raw: bytes) -> tuple[Tokens, tuple[BrandbookAsset, ...], tuple[str, ...], dict]:
     try:
         with zipfile.ZipFile(BytesIO(raw)) as archive:
             infos = archive.infolist()
@@ -239,12 +309,21 @@ def _zip_tokens(raw: bytes) -> tuple[Tokens, tuple[BrandbookAsset, ...], tuple[s
                 if not info.is_dir():
                     files.append((name, info))
             jsons = [(name, info) for name, info in files if PurePosixPath(name).suffix.lower() == ".json"]
-            if len(jsons) != 1 or len(PurePosixPath(jsons[0][0]).parts) > 2:
-                raise BrandbookImportError("ZIP requires exactly one root or near-root tokens JSON")
+            if len(jsons) > 1 or (jsons and len(PurePosixPath(jsons[0][0]).parts) > 2):
+                raise BrandbookImportError("ZIP requires at most one root or near-root tokens JSON")
+            if not jsons:
+                assets = tuple(_asset(name, archive.read(info)) for name, info in files)
+                if not assets:
+                    raise BrandbookImportError("ZIP contains no brand materials")
+                tokens = _asset_palette(assets)
+                logos = [a.name for a in assets if re.search(r"logo|логотип", a.name, re.I)]
+                return tokens, assets, ("Palette recovered from images; typography falls back to the template.",), ({"logo": logos[0]} if logos else {})
             json_name, json_info = jsons[0]
-            tokens, inner_format, notes = _json_tokens(archive.read(json_info))
+            token_raw = archive.read(json_info)
+            tokens, inner_format, notes = _json_tokens(token_raw)
+            rules = _validated_rules(json.loads(token_raw))
             assets = tuple(_asset(name, archive.read(info)) for name, info in files if name != json_name)
-            return tokens, assets, notes + (f"Token JSON format: {inner_format}.",)
+            return tokens, assets, notes + (f"Token JSON format: {inner_format}.",), rules
     except BrandbookImportError:
         raise
     except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError, EOFError, zlib.error) as exc:
@@ -262,16 +341,48 @@ def parse_brandbook_source(raw: bytes, filename: str) -> BrandbookImportResult:
         raise BrandbookImportError("Source must be nonempty bytes within the 20 MiB limit")
     suffix = PurePosixPath(filename).suffix.lower()
     assets: tuple[BrandbookAsset, ...] = ()
+    rules: dict = {}
     if suffix == ".fig":
         raise BrandbookImportError("Native .fig binaries are unsupported; export Variables/tokens JSON")
     if suffix == ".json":
         tokens, source_format, notes = _json_tokens(raw)
+        rules = _validated_rules(json.loads(raw))
     elif suffix == ".pdf":
-        tokens, notes = _pdf_tokens(raw)
+        tokens, notes, rules, assets = _pdf_tokens(raw)
         source_format = "pdf"
     elif suffix == ".zip":
-        tokens, assets, notes = _zip_tokens(raw)
+        tokens, assets, notes, rules = _zip_tokens(raw)
         source_format = "zip"
     else:
         raise BrandbookImportError("Unsupported brandbook source; use JSON, PDF or ZIP")
-    return BrandbookImportResult(tokens, source_format, hashlib.sha256(raw).hexdigest(), assets, notes)
+    from designer.brandbook_rules import apply_grid
+    try:
+        tokens = apply_grid(tokens, rules)
+    except ValueError as exc:
+        raise BrandbookImportError(str(exc)) from exc
+    source = json.loads(raw).get("source") if suffix == ".json" else None
+    if not isinstance(source, dict):
+        source = None
+    return BrandbookImportResult(tokens, source_format, hashlib.sha256(raw).hexdigest(), assets, notes, rules, source)
+
+
+def _asset_palette(assets: tuple[BrandbookAsset, ...]) -> Tokens:
+    from collections import Counter
+    from designer.contracts import ColorToken, Margins
+    import colorsys
+    counts = Counter()
+    for asset in assets:
+        with Image.open(BytesIO(asset.data)) as image:
+            image = image.convert("RGB")
+            image.thumbnail((160, 100))
+            quantized = image.quantize(colors=12)
+            palette = quantized.getpalette()
+            for count, index in quantized.getcolors(16000) or []:
+                rgb = palette[index * 3:index * 3 + 3]
+                counts[tuple(rgb)] += count
+    accents = [(rgb, n) for rgb, n in counts.items() if colorsys.rgb_to_hls(*(v / 255 for v in rgb))[2] >= 0.35]
+    accents.sort(key=lambda pair: pair[1], reverse=True)
+    colors = [ColorToken(hex="".join(f"{v:02X}" for v in rgb), role="accent" if i == 0 else "accent_alt" if i == 1 else "other", share=n / max(1, sum(counts.values())), source="usage") for i, (rgb, n) in enumerate(accents[:6])]
+    if not colors:
+        colors = [ColorToken(hex="".join(f"{v:02X}" for v in rgb), role="other", share=n / sum(counts.values()), source="usage") for rgb, n in counts.most_common(3)]
+    return Tokens(colors=colors, fonts=[], type_scale=[], margins=Margins(left=0, top=0, right=0, bottom=0))

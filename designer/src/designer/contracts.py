@@ -74,6 +74,13 @@ class Margins(BaseModel):
     bottom: float
 
 
+class ChartStyle(BaseModel):
+    label_size_pt: float | None = Field(default=None, ge=8, le=32)
+    gridline_color: str | None = Field(default=None, pattern=r"^[0-9A-Fa-f]{6}$")
+    gridline_width_pt: float | None = Field(default=None, ge=0.1, le=5)
+    legend_position: Literal["bottom", "top", "left", "right"] | None = None
+
+
 class Tokens(BaseModel):
     colors: list[ColorToken]
     fonts: list[FontToken]
@@ -81,6 +88,7 @@ class Tokens(BaseModel):
     margins: Margins
     guides_x: list[float] = Field(default_factory=list, description="частые левые края блоков, доли ширины")
     guides_y: list[float] = Field(default_factory=list, description="частые верхние края блоков, доли высоты")
+    chart_style: ChartStyle | None = None
 
 
 class Asset(BaseModel):
@@ -196,6 +204,15 @@ class DescribeStatus(BaseModel):
     error: str = ""
 
 
+class BrandRules(BaseModel):
+    logo_asset: str | None = None
+    logo_box: Box = (0.87, 0.035, 0.09, 0.06)
+    clear_space: float = Field(default=0.012, ge=0, le=0.1)
+    grid_columns: int | None = Field(default=None, ge=1, le=24)
+    grid_gutter: float = Field(default=0.02, ge=0, le=0.1)
+    color_overrides: dict[str, str] = Field(default_factory=dict)
+
+
 class DesignSystem(BaseModel):
     schema_version: str = SCHEMA_VERSION
     id: str
@@ -204,6 +221,7 @@ class DesignSystem(BaseModel):
     created_at: str = Field(default="", description="время импорта, ISO 8601")
     slide_size_emu: tuple[int, int]
     tokens: Tokens
+    brand_rules: BrandRules | None = None
     assets: list[Asset] = Field(default_factory=list)
     layouts: list[LayoutInfo] = Field(default_factory=list)
     patterns: list[Pattern] = Field(default_factory=list)

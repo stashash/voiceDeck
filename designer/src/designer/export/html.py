@@ -241,6 +241,7 @@ _SCRIPT = """(function () {
 
 def _build_css(ds: DesignSystem, aspect: float) -> str:
     root_vars = _root_vars(ds.tokens)
+    chart_size = ds.tokens.chart_style.label_size_pt if ds.tokens.chart_style and ds.tokens.chart_style.label_size_pt else 12
     return f"""
 :root {{
 {root_vars}
@@ -269,9 +270,9 @@ html, body {{ margin: 0; padding: 0; height: 100%; background: #1a1a1a; }}
 .el.table th, .el.table td {{ border: 1px solid var(--color-text-muted, #999999); padding: 0.3em 0.5em; }}
 .el.chart svg {{ width: 100%; height: 100%; }}
 .chart-label, .chart-legend, .chart-title, .chart-unit {{
-  font-size: 12px;
+  font-size: {chart_size}px;
   fill: var(--color-text, #111111);
-  font-family: sans-serif;
+  font-family: var(--font-body, sans-serif);
 }}
 @media print {{
   html, body {{ background: #ffffff; }}

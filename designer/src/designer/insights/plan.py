@@ -120,6 +120,12 @@ def _describe(table: Table, candidate: VisualizationCandidate) -> VisualizationC
                          f"{_decimal_text(values[-1])}{suffix} ({last}); изменение между крайними "
                          f"наблюдениями {number}{suffix}. Промежуточные значения могут колебаться.")
             formula = f"{metric}: последнее − первое = {_decimal_text(values[-1])} − {_decimal_text(values[0])} = {number}; без агрегации."
+            if values[0] > 0:
+                relative = change * 100 / values[0]
+                relative_text = ("+" if relative > 0 else "") + format(relative, ".2f")
+                headline += f" ({relative_text}%)"
+                statement += f" Относительно первого наблюдения: {relative_text}% (округлено до 2 знаков)."
+                formula += f" Относительное изменение = ({number}) / {_decimal_text(values[0])} × 100 = {relative_text}%."
         elif candidate.kind == "histogram":
             low, high = min(values), max(values)
             number = _decimal_text(high)
@@ -140,6 +146,10 @@ def _describe(table: Table, candidate: VisualizationCandidate) -> VisualizationC
                 statement = (f"Максимальная доля: {leader}, {number}{suffix} из {_decimal_text(denominator)}{suffix} "
                              f"({percentage}%, округлено до 2 знаков). Доли относятся только к показанным строкам.")
                 formula = f"{number} / {_decimal_text(denominator)} × 100 = {percentage}% (округлено до 2 знаков); знаменатель — сумма показанных значений."
+                composition = "; ".join(
+                    f"«{row[positions[candidate.dimension_fields[0]]]}»: {format(value * 100 / denominator, '.2f')}%"
+                    for row, value in zip(selected, values))
+                statement += f" Структура показанной суммы: {composition}."
                 number = percentage
             else:
                 headline = f"{label}: максимум {number}{suffix} — {leader}"
@@ -150,12 +160,36 @@ def _describe(table: Table, candidate: VisualizationCandidate) -> VisualizationC
 
 
 def parse_goal(text: str) -> AnalyticalGoal:
-    if re.search(r"count\s+(?:the\s+)?rows|row\s+count|количество\s+строк|число\s+строк", text, re.I):
-        return AnalyticalGoal("kpi", text, aggregation="count_rows")
+    """Recognize analytical intent without treating appendix placement as analysis.
+
+    A mixed-content brief can contain several legitimate analytical tasks. Its
+    datasets need their own profile-based choices instead of the first regex win.
+    Raw wording remains attached to the goal for provenance and other constraints.
+    """
+    count_rows = bool(re.search(r"count\s+(?:the\s+)?rows|row\s+count|количество\s+строк|число\s+строк", text, re.I))
+    kinds = {"kpi"} if count_rows else set()
     for kind, pattern in _GOALS:
-        if re.search(pattern, text, re.I):
-            return AnalyticalGoal(kind, text)
-    if re.search(r"\bkpi\b|ключев.*показател|итого|total", text, re.I):
+        for match in re.finditer(pattern, text, re.I):
+            if kind == "reference":
+                # Scope the mention to its sentence/clause. "Move the reference
+                # table to the appendix" is a layout constraint, not a request
+                # to replace every analytical view with a reference table.
+                left = max((text.rfind(mark, 0, match.start()) for mark in ".!?;\n"), default=-1) + 1
+                right = min((position for mark in ".!?;\n"
+                             if (position := text.find(mark, match.end())) != -1), default=len(text))
+                clause = text[left:right]
+                appendix = re.search(r"приложени|appendix|appendices", clause, re.I)
+                placement = re.search(r"вынес|вынеси|перенес|перенеси|помест|размест|постав|остав|отнес|\bmove\b|\bput\b|\bplace\b|relegat", clause, re.I)
+                display = re.search(r"покаж|показ|show|анализ|найд|найт|lookup|рассмотр", clause, re.I)
+                if appendix and (placement or not display):
+                    continue
+            kinds.add(kind)
+    if re.search(r"\bkpi\b|ключев.*показател", text, re.I):
+        kinds.add("kpi")
+    if len(kinds) == 1:
+        kind = next(iter(kinds))
+        return AnalyticalGoal(kind, text, aggregation="count_rows" if kind == "kpi" and count_rows else "none")
+    if not kinds and re.search(r"итого|\btotal\b", text, re.I):
         return AnalyticalGoal("kpi", text)
     return AnalyticalGoal(text=text)
 
@@ -176,7 +210,7 @@ def _content_hash(table: Table, profile: DatasetProfile) -> str:
             unit = re.search(r"(?:₽|руб\.?|р\.|\$|€|%)\s*$", value, re.I)
             return ["number", _decimal_text(number), unit.group().strip() if unit else ""]
         return ["text", value]
-    payload = [table.headers, [[cell(i, value) for i, value in enumerate(row)] for row in table.rows]]
+    payload = [table.headers, [[cell(i, value) for i, value in enumerate(row)] for row in table.rows], table.context]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -328,7 +362,7 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
                 len(complete((denom_field,))) == len(table.rows) and
                 set(numbers(denom_field, list(range(len(table.rows))))) == {total})
             if len(indices) <= 6 and all(v >= 0 for v in values) and total > 0 and declared_ok:
-                add("pie", 55, ("shares",), f"'{metric}' has {len(indices)} nonnegative categories in '{category}'; denominator is the observed sum {_decimal_text(total)}.",
+                add("pie", 95 if denom_field else 55, ("shares",), f"'{metric}' has {len(indices)} nonnegative categories in '{category}'; denominator is the observed sum {_decimal_text(total)}.",
                     (category,), (metric,), indices,
                     ("Shares refer to observed rows only; mutual exclusivity and completeness of the population are not established.",),
                     denominator=total, denominator_field=denom_field, aggregation="share_of_observed_sum")
@@ -345,7 +379,16 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         if pairs:
             pair = pairs[0]
             indices = complete((category, *pair))
-            if len(indices) >= 2 and len({table.rows[i][positions[category]] for i in indices}) == len(indices):
+            # A paired chart drops known single-series values if either partner is
+            # missing. Prefer a readable all-row table; never turn absence into zero.
+            incomplete_pair = len(indices) < len(table.rows)
+            if incomplete_pair and goal.kind in {"auto", "comparison"}:
+                warnings.append("Incomplete paired measures: use the reference table to preserve every known value and every missing cell. No zero filling.")
+                add("table", 200, (), "Paired comparison has missing cells; the table preserves all rows and each available series value.",
+                    dims=tuple(n for n in table.headers if n not in profile.numeric_candidates),
+                    metrics=profile.numeric_candidates, required_fields=tuple(table.headers),
+                    indices=list(range(len(table.rows))))
+            elif not incomplete_pair and len(indices) >= 2 and len({table.rows[i][positions[category]] for i in indices}) == len(indices):
                 add("grouped_column", 85, ("comparison",), f"Matched actual/target fields '{pair[0]}' and '{pair[1]}' share '{category}'; compare complete pairs without summing them.",
                     (category,), pair, indices, ("Compare paired measures without summing them; verify units before interpretation.",))
 
@@ -395,11 +438,12 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
     if goal.kind in families and not any(c.kind in families[goal.kind] for c in candidates):
         warnings.append(f"Requested '{goal.kind}' is not supported by the detected selected fields; alternatives are shown without inventing data.")
 
-    add("table", 100 if not measures or goal.kind == "reference" else 10, ("reference",),
-        f"Reference view of {len(table.rows)} rows and {len(table.headers)} columns; original values are retained, without aggregation.",
-        dims=tuple(n for n in table.headers if n not in profile.numeric_candidates), metrics=profile.numeric_candidates,
-        required_fields=tuple(table.headers), indices=list(range(len(table.rows))),
-        limits=("Paginate the reference table before rendering; never squeeze all rows onto one slide.",) if len(table.rows) > 20 else ())
+    if not any(c.kind == "table" for c in candidates):
+        add("table", 100 if not measures or goal.kind == "reference" else 10, ("reference",),
+            f"Reference view of {len(table.rows)} rows and {len(table.headers)} columns; original values are retained, without aggregation.",
+            dims=tuple(n for n in table.headers if n not in profile.numeric_candidates), metrics=profile.numeric_candidates,
+            required_fields=tuple(table.headers), indices=list(range(len(table.rows))),
+            limits=("Paginate the reference table before rendering; never squeeze all rows onto one slide.",) if len(table.rows) > 20 else ())
     best = max(candidates, key=lambda c: c.score)
     # High-cardinality text is not a categorical axis in the conservative profile.
     # An explicit comparison must not silently become a histogram in that case.

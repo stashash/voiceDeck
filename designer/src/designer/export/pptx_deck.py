@@ -666,6 +666,7 @@ def export_pptx(specs: list[SlideSpec], ds: DesignSystem, package_dir: Path, out
             raise KeyError(f"в дизайн-системе нет паттерна {spec.pattern_id}")
         slide = clone_slide(prs, pattern.source_slide - 1)
         _fill_slide(slide, spec, pattern, ds)
+        _apply_brand(slide, spec, pattern, ds, package_dir)
         scene_key = (spec.pattern_id, _title_text(spec, pattern))
         _set_transition(slide, morph=bool(scene_key[1]) and scene_key == previous)
         previous = scene_key
@@ -676,3 +677,46 @@ def export_pptx(specs: list[SlideSpec], ds: DesignSystem, package_dir: Path, out
     prs.save(str(out_path))
     Presentation(str(out_path))  # файл обязан открываться заново
     return out_path
+
+
+def _apply_brand(slide, spec, pattern, ds, package_dir):
+    from pptx.dml.color import RGBColor
+    from designer.layout.brand import apply_brand
+    if spec.background_color or (ds.brand_rules and pattern.background_color):
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = RGBColor.from_string(spec.background_color or pattern.background_color)
+    rules = ds.brand_rules
+    if rules is None:
+        return
+    from designer.parse.patterns import _theme_of
+    theme = _theme_of(slide.slide_layout.slide_master)
+    for element in slide._element.iter():
+        if element.tag == qn("a:srgbClr") and element.get("val") in rules.color_overrides:
+            element.set("val", rules.color_overrides[element.get("val")])
+        elif element.tag == qn("a:schemeClr"):
+            original = theme.colors.get(element.get("val"))
+            if original in rules.color_overrides:
+                element.tag = qn("a:srgbClr")
+                element.set("val", rules.color_overrides[original])
+    logos = apply_brand([], ds)
+    logo = next((element for element in logos if element.role == "brand_logo"), None)
+    sw, sh = ds.slide_size_emu
+    for shape in list(slide.shapes):
+        if not shape.has_text_frame:
+            continue
+        role = "heading" if shape.top / sh < .25 else "body"
+        family = next((font.family for font in ds.tokens.fonts if font.role == role), None)
+        if family:
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    run.font.name = family
+        if logo:
+            x, y, w, h = logo.box
+            if shape.top / sh < y + h + rules.clear_space and (shape.top + shape.height) / sh > y - rules.clear_space and shape.left / sw < x < (shape.left + shape.width) / sw:
+                shape.width = int(max(.05, x - rules.clear_space - shape.left / sw) * sw)
+    if logo:
+        asset = next(asset for asset in ds.assets if asset.id == logo.asset)
+        path = Path(package_dir) / asset.path
+        if path.is_file():
+            x, y, w, h = logo.box
+            slide.shapes.add_picture(str(path), int(x * sw), int(y * sh), int(w * sw), int(h * sh))

@@ -1,0 +1,45 @@
+{
+  "tokens": {
+    "colors": {
+      "background": "F8FAFC",
+      "surface": "EEF2F7",
+      "text": "162032",
+      "text_muted": "A7B0BF",
+      "accent": "713CDA",
+      "accent_alt": "14B8A6"
+    },
+    "fonts": {
+      "heading": "Play",
+      "body": "Play"
+    },
+    "type_scale": {
+      "title": 30,
+      "heading": 24,
+      "body": 16,
+      "caption": 10
+    },
+    "margins": {
+      "left": 0.06,
+      "top": 0.06,
+      "right": 0.06,
+      "bottom": 0.1
+    },
+    "chart_style": {
+      "label_size_pt": 12,
+      "gridline_color": "DDE3EB",
+      "gridline_width_pt": 0.5,
+      "legend_position": "bottom"
+    }
+  },
+  "rules": {
+    "grid_columns": 12,
+    "grid_gutter": 0.018,
+    "logo_box": [
+      0.86,
+      0.035,
+      0.1,
+      0.06
+    ],
+    "clear_space": 0.015
+  }
+}

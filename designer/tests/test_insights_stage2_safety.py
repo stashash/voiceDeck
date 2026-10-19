@@ -123,7 +123,9 @@ def test_large_categorical_charts_fall_back_without_silent_truncation(client, go
         {"dataset_id": dataset["dataset_id"], "candidate_kind": "table", "required_fields": headers.split(",")}
     ])})
     assert response.status_code == 200, response.text
-    pages = store.load_insights(response.json()["id"])["suggestions"]
+    suggestions = store.load_insights(response.json()["id"])["suggestions"]
+    assert suggestions[0]["visual"] == "big_number"
+    pages = suggestions[1:]
     assert len(pages) == 3
     assert [row for page in pages for row in page["table"]["rows"]] == table(text).rows
     assert [line for page in pages for line in page["provenance"]["displayed_row_lines"]] == list(range(2, 22))
@@ -142,7 +144,9 @@ def test_high_cardinality_comparison_uses_paginated_reference_instead_of_unrelat
         {"dataset_id": dataset["dataset_id"], "candidate_kind": "table", "required_fields": ["category", "value"]}
     ])})
     assert response.status_code == 200, response.text
-    pages = store.load_insights(response.json()["id"])["suggestions"]
+    suggestions = store.load_insights(response.json()["id"])["suggestions"]
+    assert suggestions[0]["visual"] == "big_number"
+    pages = suggestions[1:]
     assert len(pages) == 4
     assert [row for page in pages for row in page["table"]["rows"]] == table(text).rows
     assert [line for page in pages for line in page["provenance"]["displayed_row_lines"]] == list(range(2, 27))

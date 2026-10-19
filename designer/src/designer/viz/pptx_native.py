@@ -135,6 +135,8 @@ def add_chart(
     if family:
         chart.font.name = family
     label_size = _label_size_pt(tokens, box, slide_size_emu, CHART_LABEL_ROWS)
+    if tokens.chart_style and tokens.chart_style.label_size_pt:
+        label_size = tokens.chart_style.label_size_pt
     if label_size:
         chart.font.size = Pt(label_size)
 
@@ -169,6 +171,10 @@ def add_chart(
             for idx, series_obj in enumerate(chart.series):
                 series_obj.format.fill.solid()
                 series_obj.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+                if spec.type == "line":
+                    # Line charts draw their stroke, not their solid fill. Without
+                    # this PowerPoint/LibreOffice silently uses the theme default.
+                    series_obj.format.line.color.rgb = RGBColor.from_string(colors[idx % len(colors)])
                 if spec.type == "scatter":
                     series_obj.marker.format.fill.solid()
                     series_obj.marker.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
@@ -186,9 +192,13 @@ def add_chart(
                 title_run = value_axis.axis_title.text_frame.paragraphs[0].runs[0]
                 title_run.font.color.rgb = RGBColor.from_string(text_hex)
         gridline_color = palette.muted_gridline_color(tokens, theme) if theme == "dark" else _color_by_role(tokens, "text_muted")
+        if tokens.chart_style and tokens.chart_style.gridline_color:
+            gridline_color = tokens.chart_style.gridline_color
         if gridline_color:
             chart.value_axis.has_major_gridlines = True
             chart.value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(gridline_color)
+            if tokens.chart_style and tokens.chart_style.gridline_width_pt:
+                chart.value_axis.major_gridlines.format.line.width = Pt(tokens.chart_style.gridline_width_pt)
         if label_size:
             # Подписи делений наследуют кегль не всегда: у них свой, и без этого они мельчают.
             chart.value_axis.tick_labels.font.size = Pt(label_size)
@@ -197,9 +207,16 @@ def add_chart(
             chart.value_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
             chart.category_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
 
-    if len(spec.series) >= 2:
-        chart.has_legend = True
+    chart.has_legend = is_pie or len(spec.series) >= 2 or bool(tokens.chart_style and tokens.chart_style.legend_position)
+    if chart.has_legend:
         chart.legend.position = XL_LEGEND_POSITION.RIGHT
+        if tokens.chart_style and tokens.chart_style.legend_position:
+            chart.legend.position = {"bottom": XL_LEGEND_POSITION.BOTTOM, "top": XL_LEGEND_POSITION.TOP,
+                                     "left": XL_LEGEND_POSITION.LEFT, "right": XL_LEGEND_POSITION.RIGHT}[tokens.chart_style.legend_position]
+        if family:
+            chart.legend.font.name = family
+        if label_size:
+            chart.legend.font.size = Pt(label_size)
         chart.legend.include_in_layout = False
         if text_hex:
             chart.legend.font.color.rgb = RGBColor.from_string(text_hex)

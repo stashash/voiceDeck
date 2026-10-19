@@ -2,7 +2,7 @@
 
 Confidence is the matching fraction of nonempty cells, not a calibrated probability.
 Only empty/whitespace cells are missing: zero, 'NA' and literal 'null' are data.
-Roles are candidates; no hierarchy, relationship or aggregation safety is inferred.
+Roles and category dependencies are candidates, never proof of aggregation safety.
 """
 from __future__ import annotations
 
@@ -27,6 +27,17 @@ class ColumnProfile:
 
 
 @dataclass(frozen=True)
+class HierarchyCandidate:
+    """Observed child -> parent dependency, not a confirmed business hierarchy."""
+    parent: str
+    child: str
+    parent_count: int
+    child_count: int
+    row_lines: tuple[int, ...]
+    evidence: str = "Every repeated child maps to exactly one parent; no missing pairs."
+
+
+@dataclass(frozen=True)
 class DatasetProfile:
     source_name: str
     source_sheet: str
@@ -38,6 +49,10 @@ class DatasetProfile:
     datetime_candidates: tuple[str, ...]
     identifier_candidates: tuple[str, ...]
     likely_time_axis: str | None
+    hierarchy_candidates: tuple[HierarchyCandidate, ...] = ()
+    dimension_count: int = 0
+    metric_count: int = 0
+    hierarchy_count: int = 0
 
 
 _ID = re.compile(r"(?:^|[\W_])(?:id|uuid|guid|code|sku|zip|postcode|phone|ид|код|артикул|инн|снилс|телефон|индекс|номер)(?:$|[\W_])", re.I)
@@ -148,6 +163,27 @@ def profile_table(table: Table) -> DatasetProfile:
     def candidates(role: str) -> tuple[str, ...]:
         return tuple(column.name for column in columns if role in column.role_candidates)
 
+    hierarchies = []
+    for parent in candidates("category"):
+        for child in candidates("category"):
+            if parent == child:
+                continue
+            pi, ci = table.headers.index(parent), table.headers.index(child)
+            pairs = [(row[pi].strip(), row[ci].strip()) for row in table.rows]
+            if not pairs or any(not p or not c for p, c in pairs):
+                continue
+            parents, children, counts = set(), {}, {}
+            for p, c in pairs:
+                parents.add(p)
+                children.setdefault(c, set()).add(p)
+                counts[c] = counts.get(c, 0) + 1
+            # Unique labels make any functional dependency vacuously true. Require
+            # repeat observations and genuine nesting, rejecting one-to-one aliases.
+            if (2 <= len(parents) < len(children) and all(len(ps) == 1 for ps in children.values())
+                    and all(n >= 2 for n in counts.values())):
+                hierarchies.append(HierarchyCandidate(parent, child, len(parents), len(children), tuple(table.lines)))
     return DatasetProfile(table.name, table.sheet, len(table.rows), len(table.headers), tuple(columns),
                           candidates("numeric"), candidates("category"), candidates("datetime"),
-                          candidates("identifier"), axes[0] if len(axes) == 1 else None)
+                          candidates("identifier"), axes[0] if len(axes) == 1 else None,
+                          tuple(hierarchies), len(candidates("category")) + len(candidates("datetime")),
+                          len(candidates("numeric")), len(hierarchies))

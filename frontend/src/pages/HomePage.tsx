@@ -146,7 +146,7 @@ export default function HomePage() {
           <X size={18} strokeWidth={1.5}/></button></div>}
       <TableChip state={table} onRetry={() => void retryTable()}/>
       <InsightsList state={table} brief={brief} onRetry={() => void retryTable()}/>
-      <SemanticDataPlan onCreate={ready ? createFromMeaning : undefined} creating={busy}/>
+      <SemanticDataPlan brief={brief} onCreate={ready ? createFromMeaning : undefined} creating={busy}/>
       <div className="brief-row">
         {ready ? <div className="brief-pickers">
           <AttachTableButton onPick={file => void attachTable(file)}/>

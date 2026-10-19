@@ -55,13 +55,33 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
 
   useEffect(() => {
     setState(null); setEvents([]); setStopped(false); setError('');
-    getDeckState(deckId).then(setState).catch(e => setError(errorText(e)));
+    let disposed = false, loading = false, pending = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      timer = undefined;
+      if (disposed || loading) return;
+      loading = true; pending = false;
+      getDeckState(deckId).then(next => { if (!disposed) { setState(next); setError(''); } })
+        .catch(e => { if (!disposed) setError(errorText(e)); })
+        .finally(() => {
+          loading = false;
+          if (pending && !disposed) timer = setTimeout(load, 300);
+        });
+    };
+    const refresh = () => {
+      pending = true;
+      if (!loading && timer === undefined) timer = setTimeout(load, 300);
+    };
+    load();
     const source = watchDeckEvents(deckId, e => {
+      if (disposed) return;
       setEvents(prev => [...prev, e]);
-      getDeckState(deckId).then(setState).catch(() => {});
+      // A generation emits hundreds of events. Coalesce state reads instead of
+      // flooding the browser's connection pool and blocking the editor route.
+      refresh();
       if (e.step === 'done' && e.variant === null) source.close();
     });
-    return () => source.close();
+    return () => { disposed = true; if (timer !== undefined) clearTimeout(timer); source.close(); };
   }, [deckId]);
 
   const active = state?.variants[variant];

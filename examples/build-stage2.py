@@ -96,7 +96,14 @@ def wait_for_deck(base: str, deck_id: str, timeout: float, poll: float,
     deadline = time.monotonic() + timeout
     path = f"/decks/{quote(deck_id, safe='')}"
     while time.monotonic() < deadline:
-        state = json_request(base, path, timeout=min(30, timeout))
+        try:
+            state = json_request(base, path, timeout=min(30, timeout))
+        except DemoError as exc:
+            if "timed out" not in str(exc).lower():
+                raise
+            print(f"State request timed out; retrying existing job {deck_id}", flush=True)
+            time.sleep(min(poll, max(0, deadline-time.monotonic())))
+            continue
         variants = state.get("variants") or {}
         if state.get("status") == "error" or any(v.get("status") == "error" for v in variants.values()):
             errors = {k: v.get("error") for k, v in variants.items() if v.get("status") == "error"}
@@ -140,7 +147,10 @@ def make_contact_sheet(images: list[Path], destination: Path) -> None:
 def run(args: argparse.Namespace) -> Path:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    fixtures = [FIXTURE_DIR / name for name in FIXTURES]
+    fixtures = (sorted(path for path in args.content_dir.iterdir() if path.suffix.lower() in {".csv", ".xlsx", ".json", ".txt", ".md"} and path.name != "README.md")
+                if args.content_dir else [FIXTURE_DIR / name for name in FIXTURES])
+    if not 5 <= len(fixtures) <= 7:
+        raise DemoError("Supply five to seven datasets")
     missing = [str(path) for path in fixtures if not path.is_file()]
     if missing:
         raise DemoError("Missing committed fixtures: " + ", ".join(missing))
@@ -187,69 +197,100 @@ def run(args: argparse.Namespace) -> Path:
     manifest["selected_candidates"] = selections
     manifest["materialized_insights_id"] = materialized["id"]
 
-    for template in templates:
-        boundary = "----VoiceDeckTemplate" + hashlib.sha256(os.urandom(32)).hexdigest()
-        body = multipart({}, [("file", template)], boundary)
-        raw, _ = request(args.base_url, "/design-systems", method="POST", body=body,
-                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=args.request_timeout)
-        try:
-            design_system = json.loads(raw)
-            design_id = design_system["id"]
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            raise DemoError(f"Template upload did not return design-system id: {template}") from exc
-        item = {"template": str(template), "design_system_id": design_id, "decks": []}
-        manifest["templates"].append(item)
-        payload = {"design_system_id": design_id, "brief": BRIEF, "purpose": PURPOSE,
-                   "audience": AUDIENCE, "variants": list(VARIANTS), "insights_id": materialized["id"],
-                   "insight_ids": [suggestion["id"] for suggestion in materialized["suggestions"]]}
-        created = json_request(args.base_url, "/decks", method="POST", payload=payload, timeout=args.request_timeout)
-        deck_id = created.get("deck_id")
+    for template_index, template in enumerate(templates):
+        if template_index < len(args.resume_deck):
+            deck_id = args.resume_deck[template_index]
+            existing = json_request(args.base_url, f"/decks/{quote(deck_id,safe='')}", timeout=args.request_timeout)
+            design_id = existing["design_system_id"]
+            design_system = json_request(args.base_url, f"/design-systems/{quote(design_id,safe='')}", timeout=args.request_timeout)
+            if design_system["source_file"] != template.name or not existing.get("brief", "").startswith(BRIEF):
+                raise DemoError("Existing job does not match this template and brief")
+            item = {"template": str(template), "design_system_id": design_id, "decks": [], "resumed_deck": deck_id}
+            manifest["templates"].append(item)
+            print(f"Resuming A/B/C: {design_id} / {deck_id}", flush=True)
+        else:
+            deck_id = ""
         if not deck_id:
-            raise DemoError("POST /decks returned no deck_id")
+            deck_id, design_id, item = start_template_run(args, template, manifest, materialized)
+        write_json(output / "run-manifest.json", manifest)
         state = wait_for_deck(args.base_url, deck_id, args.generation_timeout, args.poll_interval)
-        run_raw, _ = request(args.base_url, f"/decks/{quote(deck_id, safe='')}/run", timeout=args.request_timeout)
-        try:
-            run_manifest = json.loads(run_raw)
-        except json.JSONDecodeError as exc:
-            raise DemoError(f"Run endpoint returned invalid JSON for deck {deck_id}") from exc
-        template_run_manifest = output / design_id / "run.json"
-        write_json(template_run_manifest, run_manifest)
-        for variant in VARIANTS:
-            variant_state = (state.get("variants") or {}).get(variant, {})
-            run_path = f"/decks/{quote(deck_id, safe='')}/{variant}/files/"
-            run_dir = output / design_id / variant
-            run_dir.mkdir(parents=True, exist_ok=True)
-            downloaded: list[str] = []
-            for filename in ("deck.pdf", "deck.pptx", "deck.html"):
-                try:
-                    data, _ = request(args.base_url, run_path + filename, timeout=args.request_timeout)
-                except DemoError as exc:
-                    if filename == "deck.pdf":
-                        raise
-                    manifest.setdefault("optional_download_errors", []).append(str(exc))
-                    continue
-                (run_dir / filename).write_bytes(data)
+        collect_template_run(args, output, manifest, item, deck_id, design_id, state)
+        write_json(output / "run-manifest.json", manifest)
+    return finish_run(args, output, manifest, materialized)
+
+
+def start_template_run(args, template, manifest, materialized):
+    print(f"Importing template: {template.name}", flush=True)
+    boundary = "----VoiceDeckTemplate" + hashlib.sha256(os.urandom(32)).hexdigest()
+    body = multipart({}, [("file", template)], boundary)
+    raw, _ = request(args.base_url, "/design-systems", method="POST", body=body,
+                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=args.request_timeout)
+    try:
+        design_system = json.loads(raw)
+        design_id = design_system["id"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise DemoError(f"Template upload did not return design-system id: {template}") from exc
+    item = {"template": str(template), "design_system_id": design_id, "decks": []}
+    manifest["templates"].append(item)
+    payload = {"design_system_id": design_id, "brief": BRIEF, "purpose": PURPOSE,
+               "audience": AUDIENCE, "variants": list(VARIANTS), "insights_id": materialized["id"],
+               "insight_ids": [suggestion["id"] for suggestion in materialized["suggestions"]]}
+    created = json_request(args.base_url, "/decks", method="POST", payload=payload, timeout=args.request_timeout)
+    deck_id = created.get("deck_id")
+    if not deck_id:
+        raise DemoError("POST /decks returned no deck_id")
+    print(f"Generating A/B/C: {design_id} / {deck_id}", flush=True)
+    item["deck_id"] = deck_id
+    return deck_id, design_id, item
+
+
+def collect_template_run(args, output, manifest, item, deck_id, design_id, state):
+    run_raw, _ = request(args.base_url, f"/decks/{quote(deck_id, safe='')}/run", timeout=args.request_timeout)
+    try:
+        run_manifest = json.loads(run_raw)
+    except json.JSONDecodeError as exc:
+        raise DemoError(f"Run endpoint returned invalid JSON for deck {deck_id}") from exc
+    template_run_manifest = output / design_id / "run.json"
+    write_json(template_run_manifest, run_manifest)
+    for variant in VARIANTS:
+        variant_state = (state.get("variants") or {}).get(variant, {})
+        run_path = f"/decks/{quote(deck_id, safe='')}/{variant}/files/"
+        run_dir = output / design_id / variant
+        run_dir.mkdir(parents=True, exist_ok=True)
+        downloaded: list[str] = []
+        for filename in ("deck.pdf", "deck.pptx", "deck.html"):
+            try:
+                data, _ = request(args.base_url, run_path + filename, timeout=args.request_timeout)
+            except DemoError as exc:
                 if filename == "deck.pdf":
-                    downloaded.append(filename)
-            if "deck.pdf" not in downloaded:
-                raise DemoError(f"PDF missing for {design_id}/{variant}")
-            # API state includes image paths; retrieve each generated PNG to make a local contact sheet.
-            local_slides = []
-            for index, image_url in enumerate(variant_state.get("slide_images", []), start=1):
-                path = image_url.split("?", 1)[0]
-                data, _ = request(args.base_url, path, timeout=args.request_timeout)
-                image_path = run_dir / "slides" / f"slide-{index:03d}.png"
-                image_path.parent.mkdir(parents=True, exist_ok=True)
-                image_path.write_bytes(data)
-                local_slides.append(image_path)
-            if not local_slides:
-                raise DemoError(f"No slide images in completed state for {design_id}/{variant}")
-            make_contact_sheet(local_slides, run_dir / "contact-sheet.png")
-            record = {"deck_id": deck_id, "variant": variant, "status": variant_state.get("status"),
-                      "output_dir": str(run_dir), "files": downloaded, "slide_count": len(local_slides),
-                      "contact_sheet": str(run_dir / "contact-sheet.png"), "run_manifest": str(template_run_manifest)}
-            item["decks"].append(record)
-            manifest["runs"].append(record)
+                    raise
+                manifest.setdefault("optional_download_errors", []).append(str(exc))
+                continue
+            (run_dir / filename).write_bytes(data)
+            if filename == "deck.pdf":
+                downloaded.append(filename)
+        if "deck.pdf" not in downloaded:
+            raise DemoError(f"PDF missing for {design_id}/{variant}")
+        # API state includes image paths; retrieve each generated PNG to make a local contact sheet.
+        local_slides = []
+        for index, image_url in enumerate(variant_state.get("slide_images", []), start=1):
+            path = image_url.split("?", 1)[0]
+            data, _ = request(args.base_url, path, timeout=args.request_timeout)
+            image_path = run_dir / "slides" / f"slide-{index:03d}.png"
+            image_path.parent.mkdir(parents=True, exist_ok=True)
+            image_path.write_bytes(data)
+            local_slides.append(image_path)
+        if not local_slides:
+            raise DemoError(f"No slide images in completed state for {design_id}/{variant}")
+        make_contact_sheet(local_slides, run_dir / "contact-sheet.png")
+        record = {"deck_id": deck_id, "variant": variant, "status": variant_state.get("status"),
+                  "output_dir": str(run_dir), "files": downloaded, "slide_count": len(local_slides),
+                  "contact_sheet": str(run_dir / "contact-sheet.png"), "run_manifest": str(template_run_manifest)}
+        item["decks"].append(record)
+        manifest["runs"].append(record)
+
+
+def finish_run(args, output, manifest, materialized):
     pdfs = list(output.rglob("deck.pdf"))
     if len(manifest["runs"]) != 9 or len(pdfs) != 9:
         raise DemoError(f"Expected exactly 9 successful runs and PDFs, got {len(manifest['runs'])} runs / {len(pdfs)} PDFs")
@@ -378,6 +419,8 @@ def main() -> int:
     parser.add_argument("--base-url", default=os.environ.get("DESIGNER_BASE_URL", "http://127.0.0.1:8000"))
     parser.add_argument("--template", action="append", type=Path, help="PPTX template path; pass exactly three times for challenge runs")
     parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--content-dir", type=Path, help="Optional directory of five to seven CSV/XLSX/JSON/text datasets")
+    parser.add_argument("--resume-deck", action="append", default=[], help="Existing job ID for the corresponding template; repeat in template order to resume without regeneration")
     parser.add_argument("--request-timeout", type=float, default=90)
     parser.add_argument("--generation-timeout", type=float, default=1800)
     parser.add_argument("--poll-interval", type=float, default=3)
