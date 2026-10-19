@@ -5,6 +5,8 @@ import html
 import math
 
 from designer.contracts import ChartSpec, Tokens
+from designer.viz.validation import validate_chart_data
+from designer.viz.palette import series_colors
 
 _VIEW_W = 600.0
 _VIEW_H = 360.0
@@ -18,24 +20,8 @@ _FALLBACK_COLORS = ["4C6EF5", "F76707", "2F9E44", "E8590C", "1098AD", "AE3EC9"]
 
 
 def chart_colors(tokens: Tokens) -> list[str]:
-    """Цвета рядов: accent, accent_alt, затем остальные токены по убыванию доли."""
-    by_role: dict[str, str] = {}
-    for color in tokens.colors:
-        by_role.setdefault(color.role, color.hex)
-    ordered: list[str] = []
-    if "accent" in by_role:
-        ordered.append(by_role["accent"])
-    if "accent_alt" in by_role:
-        ordered.append(by_role["accent_alt"])
-    rest = sorted(
-        (c for c in tokens.colors if c.role not in ("accent", "accent_alt")),
-        key=lambda c: c.share,
-        reverse=True,
-    )
-    for color in rest:
-        if color.hex not in ordered:
-            ordered.append(color.hex)
-    return ordered or list(_FALLBACK_COLORS)
+    """Use the same semantic series palette as native PPTX; never use background/text."""
+    return series_colors(tokens) or list(_FALLBACK_COLORS)
 
 
 def _color(colors: list[str], i: int) -> str:
@@ -98,6 +84,13 @@ def _y_ticks(low: float, high: float, plot_h: float) -> str:
     )
 
 
+def _axis_titles(spec: ChartSpec, plot_h: float, plot_w: float) -> str:
+    return (
+        f'<text class="chart-label chart-axis-title" x="{_PAD_LEFT + plot_w / 2:.1f}" y="{_PAD_TOP + plot_h + 38:.1f}" text-anchor="middle">{html.escape(spec.x_axis_title)}</text>'
+        f'<text class="chart-label chart-axis-title" transform="translate(12 {_PAD_TOP + plot_h / 2:.1f}) rotate(-90)" text-anchor="middle">{html.escape(spec.y_axis_title)}</text>'
+    )
+
+
 def _render_columns(spec: ChartSpec, colors: list[str]) -> str:
     n_cat = len(spec.categories)
     n_series = len(spec.series)
@@ -136,7 +129,7 @@ def _render_columns(spec: ChartSpec, colors: list[str]) -> str:
         )
     baseline = _PAD_TOP + (1 - _fraction(0, low, high)) * plot_h
     axis = f'<line class="chart-axis" x1="{_PAD_LEFT}" x2="{_VIEW_W - _PAD_RIGHT}" y1="{baseline:.1f}" y2="{baseline:.1f}" stroke="currentColor"/>'
-    return _svg_wrap(axis + _y_ticks(low, high, plot_h) + "".join(bars) + "".join(labels), spec.type, spec, legend)
+    return _svg_wrap(axis + _y_ticks(low, high, plot_h) + "".join(bars) + "".join(labels) + _axis_titles(spec, plot_h, plot_w), spec.type, spec, legend)
 
 
 def _render_scatter(spec: ChartSpec, colors: list[str]) -> str:
@@ -164,7 +157,7 @@ def _render_scatter(spec: ChartSpec, colors: list[str]) -> str:
 def _render_bars(spec: ChartSpec, colors: list[str]) -> str:
     n_cat = len(spec.categories)
     n_series = len(spec.series)
-    max_v = _max_value(spec)
+    low, high = _domain([v for s in spec.series for v in s.values] or [0], zero=True)
     has_legend = n_series >= 2
     legend = _legend_items([s.name for s in spec.series], colors, _VIEW_H - _LEGEND_H + 8) if has_legend else ""
     plot_h = _VIEW_H - _PAD_TOP - _PAD_BOTTOM - (_LEGEND_H if has_legend else 0)
@@ -177,23 +170,29 @@ def _render_bars(spec: ChartSpec, colors: list[str]) -> str:
         group_y = _PAD_TOP + ci * group_h + group_h * 0.15
         for si, series in enumerate(spec.series):
             value = series.values[ci] if ci < len(series.values) else 0.0
-            length = (value / max_v) * plot_w if max_v else 0.0
+            baseline = _PAD_LEFT + _fraction(0, low, high) * plot_w
+            endpoint = _PAD_LEFT + _fraction(value, low, high) * plot_w
+            length = abs(endpoint - baseline)
             y = group_y + si * bar_h
             bars.append(
-                f'<rect class="chart-bar" x="{_PAD_LEFT:.1f}" y="{y:.1f}" '
-                f'width="{length:.1f}" height="{bar_h * 0.85:.1f}" fill="{_color(colors, si)}"/>'
+                f'<rect class="chart-bar" x="{min(baseline, endpoint):.1f}" y="{y:.1f}" '
+                f'width="{length:.1f}" height="{bar_h * 0.85:.1f}" fill="{_color(colors, si)}">'
+                f'<title>{html.escape(series.name)} · {html.escape(category)}: {value:g}</title></rect>'
             )
         labels.append(
             f'<text x="{_PAD_LEFT - 6:.1f}" y="{group_y + group_h * 0.35:.1f}" '
             f'class="chart-label" text-anchor="end">{html.escape(category)}</text>'
         )
-    return _svg_wrap("".join(bars) + "".join(labels), "bar", spec, legend)
+    baseline = _PAD_LEFT + _fraction(0, low, high) * plot_w
+    axis = f'<line class="chart-axis" x1="{baseline:.1f}" x2="{baseline:.1f}" y1="{_PAD_TOP}" y2="{_PAD_TOP + plot_h}" stroke="currentColor"/>'
+    ticks = "".join(f'<text class="chart-label" x="{_PAD_LEFT + plot_w * i / 4:.1f}" y="{_PAD_TOP + plot_h + 16:.1f}" text-anchor="middle">{low * (1 - i / 4) + high * (i / 4):.4g}</text>' for i in range(5))
+    return _svg_wrap(axis + ticks + "".join(bars) + "".join(labels) + _axis_titles(spec, plot_h, plot_w), "bar", spec, legend)
 
 
 def _render_line(spec: ChartSpec, colors: list[str]) -> str:
     n_cat = len(spec.categories)
     n_series = len(spec.series)
-    max_v = _max_value(spec)
+    low, high = _domain([v for s in spec.series for v in s.values] or [0], zero=True)
     has_legend = n_series >= 2
     legend = _legend_items([s.name for s in spec.series], colors, _VIEW_H - _LEGEND_H + 8) if has_legend else ""
     plot_h = _VIEW_H - _PAD_TOP - _PAD_BOTTOM - (_LEGEND_H if has_legend else 0)
@@ -206,7 +205,7 @@ def _render_line(spec: ChartSpec, colors: list[str]) -> str:
         for ci in range(n_cat):
             value = series.values[ci] if ci < len(series.values) else 0.0
             x = _PAD_LEFT + ci * step_x
-            y = _PAD_TOP + plot_h - (value / max_v) * plot_h if max_v else _PAD_TOP + plot_h
+            y = _PAD_TOP + (1 - _fraction(value, low, high)) * plot_h
             points.append((x, y))
         d = "M " + " L ".join(f"{x:.1f} {y:.1f}" for x, y in points)
         color = _color(colors, si)
@@ -218,7 +217,9 @@ def _render_line(spec: ChartSpec, colors: list[str]) -> str:
         f'class="chart-label" text-anchor="middle">{html.escape(category)}</text>'
         for ci, category in enumerate(spec.categories)
     ]
-    return _svg_wrap("".join(paths) + "".join(dots) + "".join(labels), "line", spec, legend)
+    baseline = _PAD_TOP + (1 - _fraction(0, low, high)) * plot_h
+    axis = f'<line class="chart-axis" x1="{_PAD_LEFT}" x2="{_VIEW_W - _PAD_RIGHT}" y1="{baseline:.1f}" y2="{baseline:.1f}" stroke="currentColor"/>'
+    return _svg_wrap(axis + _y_ticks(low, high, plot_h) + "".join(paths) + "".join(dots) + "".join(labels) + _axis_titles(spec, plot_h, plot_w), "line", spec, legend)
 
 
 def _render_pie(spec: ChartSpec, colors: list[str], donut: bool) -> str:
@@ -230,6 +231,16 @@ def _render_pie(spec: ChartSpec, colors: list[str], donut: bool) -> str:
     slices: list[str] = []
     angle = -math.pi / 2
     for i, value in enumerate(values):
+        if value == total:
+            # A single 360-degree SVG arc has identical endpoints and vanishes.
+            # Keep the full observed share visible, including [positive, zero].
+            color = _color(colors, i)
+            if donut:
+                slices.append(f'<circle class="chart-slice" cx="{cx:.1f}" cy="{cy:.1f}" r="{(r + inner_r) / 2:.1f}" fill="none" stroke="{color}" stroke-width="{r - inner_r:.1f}"/>')
+            else:
+                slices.append(f'<circle class="chart-slice" cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}" fill="{color}"/>')
+            angle += 2 * math.pi
+            continue
         frac = value / total
         sweep = frac * 2 * math.pi
         x0, y0 = cx + r * math.cos(angle), cy + r * math.sin(angle)
@@ -256,6 +267,7 @@ def _render_pie(spec: ChartSpec, colors: list[str], donut: bool) -> str:
 
 def render_chart(spec: ChartSpec, colors: list[str]) -> str:
     """Возвращает встраиваемый <svg>...</svg> для диаграммы spec.type."""
+    validate_chart_data(spec)
     if not colors:
         colors = list(_FALLBACK_COLORS)
     if spec.type in {"column", "grouped_column", "stacked_column"}:

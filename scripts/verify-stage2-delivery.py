@@ -65,6 +65,15 @@ for record in records:
         files.append({"path":str(path.relative_to(ROOT)),"bytes":path.stat().st_size,"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
     prs=Presentation(directory/"deck.pptx")
     assert len(prs.slides)==len(slides)==len(state["slide_images"])
+    for native_slide, scene in zip(prs.slides, state["scenes"]):
+        bar_specs=[e["chart"] for e in scene["elements"] if e.get("chart",{} ) and e["chart"]["type"]=="bar"]
+        bar_charts=[sh.chart for sh in native_slide.shapes if sh.has_chart and sh.chart.chart_type==XL_CHART_TYPE.BAR_CLUSTERED]
+        assert len(bar_specs)==len(bar_charts)
+        for chart, spec in zip(bar_charts,bar_specs):
+            assert chart.category_axis.axis_title.text_frame.text==spec["y_axis_title"], "Horizontal category/Y axis title mismatch"
+            assert chart.value_axis.axis_title.text_frame.text==(spec["x_axis_title"] or spec["unit"]), "Horizontal value/X axis title mismatch"
+            assert [str(c.label) for c in chart.plots[0].categories]==spec["categories"]
+            assert [list(series.values) for series in chart.series]==[series["values"] for series in spec["series"]]
     native_charts=[sh.chart for sl in prs.slides for sh in sl.shapes if sh.has_chart]
     assert len(native_charts)>=5,"Expected editable native charts"
     dsid=state["design_system_id"]

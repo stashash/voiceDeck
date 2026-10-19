@@ -719,3 +719,29 @@ def test_live_draft_puts_spoken_words_on_template_without_model(client, template
 
     assert response.status_code == 200
     assert "3 месяца" in response.json()["html"]
+
+
+def test_slide_thumbnail_is_small_and_invalidated_after_render(client):
+    from PIL import Image
+    from io import BytesIO
+    path = store.deck_variant_slide_path("thumbnail-test", "a", "1")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (1600,900), "red").save(path)
+    response=client.get("/decks/thumbnail-test/a/slides/1.png?thumb=true")
+    assert response.status_code==200 and response.headers["content-type"]=="image/webp"
+    with Image.open(BytesIO(response.content)) as image:
+        assert image.width==320 and image.height==180
+        assert image.getpixel((0,0))[0]>200
+    Image.new("RGB", (1600,900), "blue").save(path)
+    updated=client.get("/decks/thumbnail-test/a/slides/1.png?thumb=true")
+    assert updated.content!=response.content
+    assert client.get("/decks/thumbnail-test/a/slides/1.png").headers["content-type"]=="image/png"
+
+
+@pytest.mark.parametrize("status,expected", [(200,True),(401,False),(403,False),(404,False),(500,False)])
+def test_model_health_rejects_http_errors(monkeypatch,status,expected):
+    from importlib import import_module
+    module=import_module("designer.api.app")
+    original=httpx.Client
+    monkeypatch.setattr(module.httpx,"Client",lambda **kwargs: original(transport=httpx.MockTransport(lambda request:httpx.Response(status))))
+    assert module._model_available("http://test/v1") is expected

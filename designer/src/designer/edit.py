@@ -13,6 +13,7 @@ agent_hook._client_for("deck") — тот же приём, что и в pipeline
 from __future__ import annotations
 
 import math
+import json
 import re
 import uuid
 from pathlib import Path
@@ -129,8 +130,38 @@ def _checks(state: _State, touched: set[str] | None = None, drop_ids: set[str] |
     return run_checks(state.scenes, state.ds) + kept
 
 
+_EDITED_DATA_WARNING = "Содержимое слайда изменено после расчёта. Источник сохранён, но вывод и значения требуют повторной сверки с данными."
+
+
+def _mark_edited_evidence(state: _State, findings: list[Finding]) -> None:
+    """Keep source identity, but never present manually changed content as verified."""
+    originals = {s["id"]: s for s in state.raw.get("plan", {}).get("slides", [])}
+    old_scenes = {s["slide_id"]: s for s in state.raw.get("scenes", [])}
+
+    def contents(elements):
+        return sorted((e.get("id", ""), e.get("text", ""),
+                       json.dumps(e.get("chart"), sort_keys=True), json.dumps(e.get("table"), sort_keys=True)) for e in elements)
+
+    for slide, scene in zip(state.plan.slides, state.scenes):
+        if slide.provenance is None:
+            continue
+        old = originals.get(slide.id)
+        before = old_scenes.get(slide.id)
+        semantic_fields = ("title", "key_message", "items", "chart", "table", "source_note")
+        changed = old is not None and any(old.get(k) != slide.model_dump().get(k) for k in semantic_fields)
+        changed = changed or (before is not None and contents(before["elements"]) != contents(
+            [e.model_dump(mode="json") for e in scene.elements]))
+        if changed and _EDITED_DATA_WARNING not in slide.provenance.warnings:
+            slide.provenance.warnings.append(_EDITED_DATA_WARNING)
+        if _EDITED_DATA_WARNING in slide.provenance.warnings:
+            findings.append(Finding(id=f"source-edited-{slide.id}", slide_id=slide.id,
+                check_id="data_source_edited", kind="deterministic", severity="warning",
+                message=_EDITED_DATA_WARNING, fix_hint="Сверьте правки с исходным файлом или отмените изменение."))
+
+
 def _persist(state: _State, findings: list[Finding]) -> None:
     """Commit the document immediately; derived files are exported separately."""
+    _mark_edited_evidence(state, findings)
     deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
                 plan=state.plan, specs=state.specs, scenes=state.scenes)
     store.save_deck_result(state.deck_id, deck, findings, variant=state.variant)

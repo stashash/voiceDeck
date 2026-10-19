@@ -22,8 +22,8 @@ def test_chart_colors_order_accent_first_then_share():
     colors = chart_colors(_tokens_with_colors())
     assert colors[0] == "AABBCC"
     assert colors[1] == "334455"
-    # остальные токены по убыванию доли: background(0.4), text(0.3), other(0.15)
-    assert colors[2:] == ["112233", "556677", "778899"]
+    # Match native PPTX; background/text colors cannot become data series.
+    assert colors[2:] == ["778899"]
 
 
 def test_chart_colors_fallback_when_no_tokens():

@@ -89,12 +89,14 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
   useEffect(()=>{
     if(!scene)return;
     setPreviewError('');
+    // Current PNG needs no competing live HTML request.
+    if(active?.slide_images?.[index]&&(!active.revision||active.images_revision===active.revision))return;
     const controller=new AbortController();
     fetch(absoluteUrl(`/decks/${deckId}/${variant}/slides/${index+1}/live?v=${previewVersion}`),{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(10000)])})
       .then(r=>{if(!r.ok)throw Error('Не удалось загрузить живой слайд');return r.text();})
       .then(html=>{if(!controller.signal.aborted)setLivePreview({key:previewRequestKey,html});}).catch(e=>{if(!controller.signal.aborted)setPreviewError('Живой предпросмотр не загрузился. Показана последняя сохранённая картинка.');});
     return()=>controller.abort();
-  },[previewKey,previewVersion,index]);
+  },[previewKey,previewVersion,index,active?.revision,active?.images_revision]);
   const deckTitle = active?.plan?.title ?? state?.plan?.title ?? '';
   // Картинка pptx точнее HTML-предпросмотра (значки, логотип, фоны образца). HTML нужен только, пока
   // картинки после правки ещё рисуются; готовы картинки этой правки — показываем их.
@@ -376,7 +378,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
             href={`#slide-${i + 1}`} onClick={e => { e.preventDefault(); manualChange();setActiveEl(null);setIndex(i); }}>
             <span className="edit-thumb-num">{i + 1}</span>
             <span className="edit-thumb-wrap">
-              {active?.slide_images?.[i] ? <img className="edit-thumb" src={freshImage(active.slide_images[i])} alt=""/> : <div className="edit-thumb"/>}
+              {active?.slide_images?.[i] ? <img className="edit-thumb" loading="lazy" decoding="async" fetchPriority="low" src={`${freshImage(active.slide_images[i])}&thumb=true`} alt=""/> : <div className="edit-thumb"/>}
               {fs.length > 0 && <span className={`edit-thumb-badge ${hasError ? 'error' : ''}`}>
                 {hasError && <AlertTriangle size={12} strokeWidth={1.5}/>}{fs.length}
               </span>}
@@ -391,7 +393,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
       <div className="edit-canvas">
         <div className="edit-slide-stage">
           {(imageFresh||previewLoaded!==previewRequestKey)&&<div style={{position:'absolute',inset:0}}>
-            {active?.slide_images?.[index]?<img className="edit-slide-img" src={absoluteUrl(active.slide_images[index])} alt={`Слайд ${index+1}: сохранённый предпросмотр`}/>:<div role="status">Загружаю слайд…</div>}
+            {active?.slide_images?.[index]?<img className="edit-slide-img" fetchPriority="high" src={freshImage(active.slide_images[index])} alt={`Слайд ${index+1}: сохранённый предпросмотр`}/>:<div role="status">Загружаю слайд…</div>}
           </div>}
           {!imageFresh&&livePreview?.key===previewRequestKey&&<iframe key={previewRequestKey} title="Живой слайд" className="edit-slide-img" sandbox="" onLoad={()=>setPreviewLoaded(previewRequestKey)} style={{position:'absolute',inset:0,width:'100%',height:'100%',border:0,pointerEvents:'none',visibility:previewLoaded===previewRequestKey?'visible':'hidden'}} srcDoc={livePreview.html}/>}
           {selectable(scene).map((el,elementIndex) => {
@@ -442,7 +444,7 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
             {patterns.map((p, patternIndex) => <button key={p.pattern_id} type="button" className={`pattern-item ${p.current ? 'active' : ''}`}
               aria-pressed={p.current} aria-label={`Образец: ${kindLabel(p.kind)}`} disabled={busy}
               onClick={() => !p.current && guard(() => setSlidePattern(deckId, variant, index + 1, p.pattern_id))}>
-              {p.preview ? <img src={absoluteUrl(p.preview)} alt=""/> : <div style={{ width: 148, height: 83, background: 'var(--surface-2)', borderRadius: 6 }}/>}
+              {p.preview ? <img loading="lazy" decoding="async" src={absoluteUrl(p.preview)} alt=""/> : <div style={{ width: 148, height: 83, background: 'var(--surface-2)', borderRadius: 6 }}/>}
               <span>{patternIndex+1}. {p.current ? `Текущий: ${kindLabel(p.kind).toLowerCase()}` : kindLabel(p.kind)}</span>
             </button>)}
           </div>

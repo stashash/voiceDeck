@@ -5,8 +5,9 @@
 import re
 
 from designer.contracts import DesignSystem, Element, Finding, Scene
+from designer.viz.validation import chart_data_errors
 
-_WORD_PLACEHOLDERS = ("xxx", "todo", "текст", "заголовок")
+_WORD_PLACEHOLDERS = ("xxx", "todo")
 _PHRASE_PLACEHOLDERS = ("lorem ipsum", "вставьте текст")
 _TITLE_ROLES = {"title", "heading"}
 
@@ -16,6 +17,8 @@ def _is_placeholder(text: str) -> bool:
     if not normalized:
         return False
     if any(phrase in normalized for phrase in _PHRASE_PLACEHOLDERS):
+        return True
+    if normalized in {"текст", "заголовок"}:
         return True
     return any(re.search(rf"\b{re.escape(word)}\b", normalized) for word in _WORD_PLACEHOLDERS)
 
@@ -85,6 +88,22 @@ def check_chart_labels(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
                 findings.append(Finding(
                     id="", slide_id=scene.slide_id, check_id="integrity.chart_labels", kind="deterministic",
                     severity="warning", message=f"У диаграммы нет {', '.join(missing)}",
+                    element_ids=[el.id], box=el.box, fixable=False,
+                ))
+    return findings
+
+
+def check_chart_data(scenes: list[Scene], ds: DesignSystem) -> list[Finding]:
+    findings = []
+    for scene in scenes:
+        for el in scene.elements:
+            if el.type != "chart" or el.chart is None:
+                continue
+            errors = chart_data_errors(el.chart)
+            if errors:
+                findings.append(Finding(
+                    id="", slide_id=scene.slide_id, check_id="integrity.chart_data", kind="deterministic",
+                    severity="error", message="Некорректные данные диаграммы: " + "; ".join(errors),
                     element_ids=[el.id], box=el.box, fixable=False,
                 ))
     return findings

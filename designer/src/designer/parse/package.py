@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -123,7 +124,18 @@ def build_package(pptx_path: Path, out_dir: Path) -> DesignSystem:
 
 def load_package(package_dir: Path) -> DesignSystem:
     manifest_path = Path(package_dir) / "manifest.json"
-    ds = DesignSystem.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    # Windows scanners/readers can briefly lock a just-replaced manifest.
+    # Retry only access conflicts, with a fixed 140 ms upper wait bound;
+    # malformed JSON and missing files remain immediate errors.
+    for attempt in range(4):
+        try:
+            manifest = manifest_path.read_text(encoding="utf-8")
+            break
+        except PermissionError:
+            if attempt == 3:
+                raise
+            time.sleep(.02 * 2 ** attempt)
+    ds = DesignSystem.model_validate_json(manifest)
     # Фигуры по одной у каждого блока ряда едут вместе с блоком; уже разобранные шаблоны не переразбираются.
     return ds.model_copy(update={"patterns": [attach_unit_decor(p) for p in ds.patterns]})
 

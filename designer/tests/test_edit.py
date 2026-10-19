@@ -68,3 +68,25 @@ def test_text_edit_is_written_to_the_slide_intent():
     assert intent.title == "Своё название"
     assert intent.items[0].heading == "Новый пункт"
     assert intent.items[0].body == "Новый текст"
+
+
+def test_source_edit_warning_survives_later_geometry_changes():
+    from types import SimpleNamespace
+    from designer.contracts import SlideIntent, SlideKind, DataProvenance, Scene, Element
+    provenance = DataProvenance.model_construct(warnings=[])
+    slide = SlideIntent.model_construct(id="s1", kind=SlideKind.chart, title="Рост 20%", provenance=provenance)
+    scene = Scene(slide_id="s1", pattern_id="p1", elements=[Element(id="t", type="text", box=(0,0,.5,.2), text="Рост 20%")])
+    state = SimpleNamespace(plan=SimpleNamespace(slides=[slide]), scenes=[scene], raw={"plan":{"slides":[slide.model_dump()]}, "scenes":[scene.model_dump()]})
+    # Geometry and formatting are not changes to the evidence.
+    scene.elements[0].box=(.1,.1,.5,.2)
+    findings=[]
+    edit._mark_edited_evidence(state,findings)
+    assert not findings and not provenance.warnings
+    scene.elements[0].text="Рост 200%"
+    edit._mark_edited_evidence(state,findings)
+    assert findings[0].check_id=="data_source_edited"
+    assert len(provenance.warnings)==1
+    state.raw={"plan":{"slides":[slide.model_dump()]},"scenes":[scene.model_dump()]}
+    findings=[]
+    edit._mark_edited_evidence(state,findings)
+    assert len(findings)==1 and len(provenance.warnings)==1

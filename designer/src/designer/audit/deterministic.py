@@ -211,6 +211,7 @@ CHECKS: list[CheckDef] = [
     CheckDef("integrity.placeholder_text", "integrity", "Остался текст-заглушка", checks_integrity.check_placeholder_text),
     CheckDef("integrity.empty", "integrity", "Пустой слайд", checks_integrity.check_empty),
     CheckDef("integrity.chart_labels", "integrity", "Диаграмме не хватает подписей", checks_integrity.check_chart_labels),
+    CheckDef("integrity.chart_data", "integrity", "Некорректные данные диаграммы", checks_integrity.check_chart_data),
     CheckDef("integrity.duplicate", "integrity", "Слайд дублирует другой", checks_integrity.check_duplicate),
     CheckDef("advice.three_seconds", "advice", "Слайд не читается за три секунды", advice.check_three_seconds),
     CheckDef("advice.same_view", "advice", "Третий слайд подряд одного вида", advice.check_same_view),

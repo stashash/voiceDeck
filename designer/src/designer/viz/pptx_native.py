@@ -10,6 +10,7 @@ from pptx.util import Emu, Pt
 
 from designer.contracts import Box, ChartSpec, TableSpec, Tokens
 from designer.viz import palette
+from designer.viz.validation import validate_chart_data
 
 _CHART_TYPES = {
     "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
@@ -104,6 +105,7 @@ def add_chart(
     """Добавляет на слайд python-pptx редактируемую диаграмму и возвращает её фигуру."""
     if len(spec.series) > 5:
         raise ValueError("не больше пяти рядов")
+    validate_chart_data(spec)
 
     values = [value for series in spec.series for value in [*series.values, *(series.x_values or [])]]
     span = max(values, default=0) - min(values, default=0)
@@ -179,15 +181,19 @@ def add_chart(
                     series_obj.marker.format.fill.solid()
                     series_obj.marker.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
                     series_obj.marker.format.line.color.rgb = RGBColor.from_string(colors[idx % len(colors)])
-        if spec.x_axis_title:
+        # ChartSpec uses physical X/Y axes. A horizontal bar's category axis
+        # is vertical, unlike columns/lines; native PowerPoint names axes by role.
+        category_title = spec.y_axis_title if spec.type == "bar" else spec.x_axis_title
+        value_title = (spec.x_axis_title if spec.type == "bar" else spec.y_axis_title) or spec.unit
+        if category_title:
             chart.category_axis.has_title = True
-            chart.category_axis.axis_title.text_frame.text = spec.x_axis_title
+            chart.category_axis.axis_title.text_frame.text = category_title
             if text_hex:
                 chart.category_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string(text_hex)
-        if spec.y_axis_title or spec.unit:
+        if value_title:
             value_axis = chart.value_axis
             value_axis.has_title = True
-            value_axis.axis_title.text_frame.text = spec.y_axis_title or spec.unit
+            value_axis.axis_title.text_frame.text = value_title
             if text_hex:
                 title_run = value_axis.axis_title.text_frame.paragraphs[0].runs[0]
                 title_run.font.color.rgb = RGBColor.from_string(text_hex)

@@ -115,11 +115,12 @@ def _describe(table: Table, candidate: VisualizationCandidate) -> VisualizationC
             first, last = (selected[i][positions[dimension]] for i in (0, -1))
             change = values[-1] - values[0]
             number = ("+" if change > 0 else "") + _decimal_text(change)
-            headline = f"{label}: {number}{suffix} между {first} и {last}"
+            change_suffix = " п. п." if unit == "%" else suffix
+            headline = f"{label}: {number}{change_suffix} между {first} и {last}"
             statement = (f"{label}: от {_decimal_text(values[0])}{suffix} ({first}) до "
                          f"{_decimal_text(values[-1])}{suffix} ({last}); изменение между крайними "
-                         f"наблюдениями {number}{suffix}. Промежуточные значения могут колебаться.")
-            formula = f"{metric}: последнее − первое = {_decimal_text(values[-1])} − {_decimal_text(values[0])} = {number}; без агрегации."
+                         f"наблюдениями {number}{change_suffix}. Промежуточные значения могут колебаться.")
+            formula = f"{metric}: последнее − первое = {_decimal_text(values[-1])} − {_decimal_text(values[0])} = {number}{change_suffix}; без агрегации."
             if values[0] > 0:
                 relative = change * 100 / values[0]
                 relative_text = ("+" if relative > 0 else "") + format(relative, ".2f")
@@ -316,8 +317,25 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             renderable = all(chart_number_supported(v) for v in exact)
             if kind == "stacked_column":
                 renderable = renderable and all(math.isfinite(sum(float(numbers(field, [i])[0]) for field in metrics)) for i in indices)
+            if kind == "pie":
+                renderable = renderable and math.isfinite(sum(float(v) for v in exact))
             if not renderable:
                 limits += ("Numeric precision/range exceeds the export format; choose the reference table.",)
+            if goal.measures and set(metrics) != set(goal.measures):
+                renderable = False
+                limits += ("This view omits explicitly selected measures; choose a view that preserves all selected fields.",)
+            # parse_number deliberately accepts suffixes, but stripping them is
+            # not a unit conversion. Preserve currency/rate cells in a table if
+            # the chart header cannot faithfully label every selected value.
+            aliases = {"$": "USD", "€": "EUR", "₽": "RUB", "руб": "RUB", "руб.": "RUB", "р.": "RUB"}
+            for field in metrics:
+                declared = field_label(field)[1]
+                declared = aliases.get(declared, declared)
+                suffixes = [match.group().strip().casefold() for i in indices
+                            if (match := re.search(r"(?:₽|руб\.?|р\.|\$|€|%)\s*$", table.rows[i][positions[field]], re.I))]
+                if any(aliases.get(suffix, suffix.upper()) != declared for suffix in suffixes):
+                    renderable = False
+                    limits += (f"'{field}' has cell units missing from or conflicting with its header; the reference table preserves the literal units without conversion.",)
         if kind in {"bar", "column", "grouped_column", "stacked_column"} and len(indices) > MAX_CATEGORY_POINTS:
             renderable = False
             limits += (f"More than {MAX_CATEGORY_POINTS} categories cannot be read safely on one slide; choose the paginated reference table. No categories are dropped or grouped.",)
@@ -361,13 +379,19 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             declared_ok = not denominator_fields or (denom_field is not None and
                 len(complete((denom_field,))) == len(table.rows) and
                 set(numbers(denom_field, list(range(len(table.rows))))) == {total})
-            if len(indices) <= 6 and all(v >= 0 for v in values) and total > 0 and declared_ok:
+            # Percent levels with an observed sum other than 100 are not a
+            # complete percentage composition; normalizing 20% and 30% into
+            # 40% and 60% silently changes their denominator.
+            percentage_ok = field_label(metric)[1] != "%" or total == 100
+            if len(indices) <= 6 and all(v >= 0 for v in values) and total > 0 and declared_ok and percentage_ok:
                 add("pie", 95 if denom_field else 55, ("shares",), f"'{metric}' has {len(indices)} nonnegative categories in '{category}'; denominator is the observed sum {_decimal_text(total)}.",
                     (category,), (metric,), indices,
                     ("Shares refer to observed rows only; mutual exclusivity and completeness of the population are not established.",),
                     denominator=total, denominator_field=denom_field, aggregation="share_of_observed_sum")
             elif goal.kind == "shares":
                 warnings.append(f"No pie for '{metric}': requires 2–6 categories, nonnegative values, positive sum and agreement with any declared total.")
+                if not percentage_ok:
+                    warnings.append("Percentage values do not sum to 100; their original denominator must not be replaced by normalization of the observed sum.")
         else:
             warnings.append(f"'{category}': repeated labels or fewer than two complete rows; choose an explicit grouping/aggregation before category charts.")
 

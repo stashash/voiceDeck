@@ -1047,7 +1047,7 @@ def get_live_slide(deck_id: str, variant: str, number: int):
 
 
 @app.get("/decks/{deck_id}/{variant}/slides/{number}.png")
-def get_deck_slide_image(deck_id: str, variant: str, number: str) -> FileResponse:
+def get_deck_slide_image(deck_id: str, variant: str, number: str, thumb: bool = False) -> Response:
     """Картинка слайда: ровно то, что откроется в PowerPoint."""
     try:
         path = store.deck_variant_slide_path(deck_id, variant, number)
@@ -1057,6 +1057,11 @@ def get_deck_slide_image(deck_id: str, variant: str, number: str) -> FileRespons
         raise HTTPException(400, "недопустимый путь")
     if not path.is_file():
         raise HTTPException(404, "картинка слайда не найдена")
+    if thumb:
+        from designer.thumbnails import slide_thumbnail
+        stamp = path.stat()
+        return Response(slide_thumbnail(str(path), stamp.st_mtime_ns, stamp.st_size),
+                        media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
     return FileResponse(str(path), media_type="image/png")
 
 
@@ -1352,7 +1357,7 @@ def _model_available(base_url: str) -> bool:
     try:
         with httpx.Client(timeout=3.0, headers=auth_headers(base_url)) as probe:
             response = probe.get(f"{base_url}/models")
-        return response.status_code < 500
+        return response.is_success
     except httpx.HTTPError:
         return False
 
