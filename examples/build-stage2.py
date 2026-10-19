@@ -214,6 +214,12 @@ def run(args: argparse.Namespace) -> Path:
             deck_id, design_id, item = start_template_run(args, template, manifest, materialized)
         write_json(output / "run-manifest.json", manifest)
         state = wait_for_deck(args.base_url, deck_id, args.generation_timeout, args.poll_interval)
+        if template_index < len(args.resume_deck):
+            expected_sources = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in fixtures}
+            observed_sources = {s["provenance"]["file_name"]: s["provenance"]["source_sha256"]
+                                for s in (state.get("plan") or {}).get("slides", []) if s.get("provenance")}
+            if observed_sources != expected_sources:
+                raise DemoError("Existing job does not match the input file hashes; regenerate instead of resuming")
         collect_template_run(args, output, manifest, item, deck_id, design_id, state)
         write_json(output / "run-manifest.json", manifest)
     return finish_run(args, output, manifest, materialized)

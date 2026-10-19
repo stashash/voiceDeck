@@ -1018,7 +1018,7 @@ def get_deck_file(deck_id: str, name: str) -> FileResponse:
     ensure_export(deck_id, "a")
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
-    return FileResponse(str(path))
+    return FileResponse(str(path), filename=path.name)
 
 
 @app.get("/decks/{deck_id}/{variant}/files/{name}")
@@ -1035,7 +1035,7 @@ def get_deck_variant_file(deck_id: str, variant: str, name: str) -> FileResponse
         raise HTTPException(503, "Не удалось подготовить актуальный экспорт. Повторите скачивание.") from exc
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
-    return FileResponse(str(path))
+    return FileResponse(str(path), filename=path.name)
 
 
 @app.get("/decks/{deck_id}/{variant}/slides/{number}/live", response_class=HTMLResponse)

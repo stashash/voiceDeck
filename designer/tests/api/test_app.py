@@ -194,11 +194,13 @@ def test_create_deck_with_variants_and_old_paths_still_respond(client, templates
     for variant in ("a", "b", "c"):
         response = client.get(f"/decks/{deck_id}/{variant}/files/deck.pptx")
         assert response.status_code == 200
+        assert response.headers["content-disposition"] == 'attachment; filename="deck.pptx"'
 
     # прежний путь без варианта отвечает тем же файлом, что и вариант a
     old = client.get(f"/decks/{deck_id}/files/deck.pptx")
     new_a = client.get(f"/decks/{deck_id}/a/files/deck.pptx")
     assert old.status_code == 200
+    assert old.headers["content-disposition"] == 'attachment; filename="deck.pptx"'
     assert old.content == new_a.content
 
 
