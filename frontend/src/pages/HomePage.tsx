@@ -127,7 +127,7 @@ export default function HomePage() {
       const materialized = await materializeDatasetBundle(bundle.id, selections);
       const presentationBrief = brief.trim() || `Покажите смысл выбранных данных: ${bundle.goal || 'общий обзор'}. Источники: ${bundle.datasets.filter(item => selections.some(selected => selected.dataset_id === item.dataset_id)).map(item => item.table_name).join(', ')}.`;
       const { deck_id } = await createDeck({
-        design_system_id: dsId, brief: presentationBrief, variants: ['a'],
+        design_system_id: dsId, brief: presentationBrief, variants: ['a', 'b', 'c'],
         insights_id: materialized.id, insight_ids: materialized.suggestions.map(item => item.id),
       });
       window.location.hash = `#/decks/${deck_id}`;

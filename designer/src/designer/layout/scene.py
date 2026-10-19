@@ -366,7 +366,7 @@ def build_scene(spec: SlideSpec, pattern: Pattern, ds: DesignSystem, package_dir
         pattern_id=pattern.id,
         variant=spec.variant,
         theme=pattern.theme,
-        background_asset=pattern.background_asset,
-        background_color=pattern.background_color,
+        background_asset=None if spec.suppress_background_asset else pattern.background_asset,
+        background_color=spec.background_color or pattern.background_color,
         elements=elements,
     )

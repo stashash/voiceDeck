@@ -156,7 +156,7 @@ function BrandbookPanel({ id, onApplied }: { id: string; onApplied: (ds: DesignS
 
   async function importFile(file?: File) {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.json')) { setError('Загрузите файл токенов .json.'); return; }
+    if (!/\.(json|pdf|zip)$/i.test(file.name)) { setError('Поддерживаются JSON с токенами, PDF-гайдлайн и ZIP с JSON-токенами и растровыми материалами.'); return; }
     setBusy(true); setError('');
     try {
       const next = await uploadBrandbook(id, file, priority);
@@ -189,18 +189,18 @@ function BrandbookPanel({ id, onApplied }: { id: string; onApplied: (ds: DesignS
 
   return <section className="card tight" aria-label="Брендбук" style={{ marginBottom: 20 }}>
     <h2>Брендбук и токены</h2>
-    <p className="muted">Загрузите локальный JSON с цветами, шрифтами, кеглями и полями. Аналитика не меняется, меняется только оформление.</p>
+    <p className="muted">Импортируйте JSON-токены, PDF-гайдлайн с явно подписанными цветами и шрифтами или ZIP: JSON-токены и растровые материалы (PNG/JPEG/WEBP/GIF). Figma Variables поддерживается в экспортированном JSON; нативный .fig пока не поддержан.</p>
     <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
       <label className="button" style={{ cursor: busy ? 'wait' : 'pointer' }}>
-        <Upload size={16} strokeWidth={1.5}/>{busy ? 'Применяем…' : state?.file_name ? 'Заменить JSON' : 'Загрузить JSON'}
-        <input type="file" accept=".json,application/json" disabled={busy} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} style={{ display: 'none' }}/>
+        <Upload size={16} strokeWidth={1.5}/>{busy ? 'Разбираем…' : state?.file_name ? 'Заменить файл' : 'Импортировать'}
+        <input type="file" accept=".json,.pdf,.zip,application/json,application/pdf,application/zip" disabled={busy} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} style={{ display: 'none' }}/>
       </label>
       <label>Приоритет <select value={priority} disabled={busy} onChange={event => void changePriority(event.target.value as 'brand' | 'template')}>
         <option value="brand">Брендбук</option><option value="template">Шаблон</option>
       </select></label>
       {state?.file_name && <button type="button" className="button" disabled={busy} onClick={() => void clear()}>Убрать брендбук</button>}
     </div>
-    {state?.file_name && <p className="muted" role="status">{state.file_name} · приоритет: {state.priority === 'brand' ? 'брендбук' : 'шаблон'} · применены: {state.applied_fields.join(', ') || 'нет токенов'}</p>}
+    {state?.file_name && <div className="muted" role="status"><p>{state.file_name} · формат: {state.source_format || 'json'} · приоритет: {state.priority === 'brand' ? 'брендбук' : 'шаблон'} · применены: {state.applied_fields.join(', ') || 'нет токенов'}</p>{Boolean(state.assets?.length) && <p>Сохранено растровых материалов: {state.assets!.length} (пока не размещаются автоматически на слайдах).</p>}{state.warnings?.map((warning, i) => <p key={i}>{warning}</p>)}</div>}
     {error && <p className="notice" role="alert">{error}</p>}
   </section>;
 }

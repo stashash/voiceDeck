@@ -69,20 +69,20 @@ def test_bundle_persists_original_bytes_normalized_rows_profile_and_plan(client)
 def test_persisted_bundle_materializes_multiple_sources_and_reaches_deck_generation(client, monkeypatch):
     saved = bundle(client)
     response = materialize(client, saved)
-    assert [item["id"] for item in response["suggestions"]] == [f"s{i}" for i in range(1, 13)]
+    assert [item["id"] for item in response["suggestions"]] == [f"s{i}" for i in range(1, 31)]
     stored = store.load_insights(response["id"])
     assert stored["bundle_id"] == saved["id"]
     assert len(stored["analyses"]) == 2
     reference = stored["suggestions"][1]
     assert reference["provenance"]["total_rows"] == 201
     assert len(reference["provenance"]["row_lines"]) == 201
-    assert len(reference["provenance"]["displayed_row_lines"]) == 20
+    assert len(reference["provenance"]["displayed_row_lines"]) == 7
     pages = stored["suggestions"][1:]
-    assert len(pages) == 11
-    assert [page["provenance"]["page_index"] for page in pages] == list(range(1, 12))
-    assert all(page["provenance"]["page_count"] == 11 for page in pages)
+    assert len(pages) == 29
+    assert [page["provenance"]["page_index"] for page in pages] == list(range(1, 30))
+    assert all(page["provenance"]["page_count"] == 29 for page in pages)
     assert sorted(line for page in pages for line in page["provenance"]["displayed_row_lines"]) == list(range(2, 203))
-    assert pages[-1]["provenance"]["displayed_row_lines"] == [202]
+    assert pages[-1]["provenance"]["displayed_row_lines"] == [198, 199, 200, 201, 202]
     captured = {}
     monkeypatch.setattr(pipeline, "generate_deck", lambda *a, **kw: captured.update(kw))
     app.dependency_overrides[get_llm_client] = lambda: object()
@@ -155,7 +155,7 @@ def test_source_is_visible_in_pptx_html_and_saved_scene(client, tmp_path):
     spec = compose(intent, pattern, ds)
     scene = build_scene(spec, pattern, ds, package)
     source_element = next(el for el in scene.elements if el.id == "data-source")
-    assert intent.title == "Выручка: динамика"
+    assert intent.title == "Выручка: +36000 USD между 2026-01 и 2026-06"
     assert intent.chart.unit == "USD"
     assert "time_series.csv" in source_element.text
     assert "Охват: 6 из 6" in source_element.text

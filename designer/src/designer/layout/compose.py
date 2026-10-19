@@ -299,6 +299,13 @@ def _viz_place(
 
     Картинка макета со слайда не уходит, поэтому свободная рамка обходит и её.
     """
+    margins = ds.tokens.margins
+    # Some image-only PPTX templates yield sentinel margins (for example right=1.0)
+    # and a full-slide raster sample. That is a visual reference, not usable content space.
+    image_only = not pattern.slots and (margins.left + margins.right >= 0.75
+                                        or margins.top + margins.bottom >= 0.75)
+    if image_only:
+        return None, (0.07, 0.24, 0.86, 0.62)
     layout = next((item for item in ds.layouts if item.name == pattern.layout_name), None)
     pictures = list(layout.pictures) if layout is not None else []
     frame = free_box(content_region(pattern, ds.tokens.margins), [*busy, *pictures])
@@ -568,6 +575,24 @@ def repeats(message: str, title: str) -> bool:
 def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpec:
     """Инструкция сборки слайда: какой слот чем заполнить, где диаграмма и что со слайда убрать."""
     spec = SlideSpec(slide_id=intent.id, pattern_id=pattern.id, notes=intent.notes)
+    margins = ds.tokens.margins
+    image_only = not pattern.slots and (margins.left + margins.right >= 0.75
+                                        or margins.top + margins.bottom >= 0.75)
+    fallback_shapes: list[int] = []
+    if image_only:
+        spec.suppress_background_asset = True
+        spec.background_color = pattern.background_color or "FFFFFF"
+        fallback_shapes = [a.shape_id for a in pattern.areas
+                           if a.shape_id is not None and a.kind == "image"
+                           and a.box[2] >= 0.85 and a.box[3] >= 0.85]
+        from designer.contracts import Element, TextStyle
+        title_color = next((c.hex for c in ds.tokens.colors if c.role in ("text", "primary")), "202124")
+        title_font = next((f.family for f in ds.tokens.fonts if f.role in ("heading", "title")), None)
+        spec.added_elements.append(Element(
+            id="fallback-title", type="text", role="title", box=(0.07, 0.06, 0.86, 0.14),
+            text=intent.title, z=100,
+            style=TextStyle(family=title_font, size_pt=28, bold=True, color=title_color, align="left"),
+        ))
     texts = {slot.id: "" for slot in pattern.slots}
     # Слот-подсказка под картинку содержанием не заполняется: без своей картинки он и его
     # плашка уходят со слайда, иначе на нём остаётся пустой квадрат с мелкой надписью.
@@ -647,6 +672,26 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
         spec.chart, spec.table = intent.chart, intent.table
         busy = [slot.box for slot in pattern.slots if texts.get(slot.id)]
         spec.viz_area_id, spec.viz_box = _viz_place(pattern, ds, want, busy)
+        if image_only:
+            if intent.key_message:
+                spec.added_elements.append(Element(
+                    id="fallback-takeaway", type="text", role="subtitle", box=(0.07, 0.205, 0.86, 0.065),
+                    text=intent.key_message, z=101,
+                    style=TextStyle(family=title_font, size_pt=13, color=title_color, align="left"),
+                ))
+            spec.viz_box = (0.07, 0.30, 0.86, 0.58)
+    elif image_only and intent.items:
+        available = 0.62
+        row_h = min(0.13, available / max(1, len(intent.items)))
+        for index, item in enumerate(intent.items):
+            label = " — ".join(part for part in (item.heading, item.body) if part)
+            if item.number:
+                label = f"{item.number}  {label}".strip()
+            spec.added_elements.append(Element(
+                id=f"fallback-item-{index + 1}", type="text", role="body",
+                box=(0.10, 0.24 + index * row_h, 0.80, row_h * 0.9), text=label, z=101 + index,
+                style=TextStyle(family=title_font, size_pt=16, color=title_color, align="left"),
+            ))
 
     if intent.image is not None and intent.image.path:
         hero = hero_area(pattern)
@@ -658,7 +703,7 @@ def compose(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> SlideSpe
     _room_fix(pattern, spec, texts, spec.fitted_size_pt, ds, n)
     cleared = _head_fix(pattern, title, texts, spec.fitted_size_pt, ds)
     plates = set(hints.values()) | {s.shape_id for s in pattern.slots if s.id in hints}
-    spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared | plates)
+    spec.remove_shape_ids = sorted(set(_removed(pattern, spec, texts, n)) | cleared | plates | set(fallback_shapes))
     if intent.source_note:
         from designer.layout.source_note import add_source_note
         add_source_note(spec, intent.source_note, pattern, ds)

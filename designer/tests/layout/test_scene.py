@@ -292,19 +292,20 @@ def test_left_text_does_not_run_to_the_slide_edge(decks):
 
 def test_no_slide_stands_on_a_pattern_that_holds_on_photos(decks):
     for name, _, deck in decks:
-        for intent, pattern, _, _ in deck:
+        for intent, pattern, spec, _ in deck:
             assert not pattern.needs_images, f"{name}, слайд {intent.id}"
 
 
 def test_title_and_final_stand_on_patterns_without_blocks_and_samples(decks):
     for name, _, deck in decks:
-        for intent, pattern, _, _ in deck:
+        for intent, pattern, spec, _ in deck:
             if intent.kind not in (SlideKind.title, SlideKind.thanks):
                 continue
             assert not pattern.groups, f"{name}, слайд {intent.id}: блоки образца"
             samples = [area.kind for area in pattern.areas
                        if area.kind in ("chart", "table")
-                       or (area.kind == "image" and geo.area(area.box) >= SAMPLE_MIN)]
+                       or (not spec.suppress_background_asset and area.kind == "image"
+                           and geo.area(area.box) >= SAMPLE_MIN)]
             assert not samples, f"{name}, слайд {intent.id}: {samples}"
 
 
@@ -318,9 +319,13 @@ def test_chart_and_table_get_a_big_clean_frame(decks):
             assert box is not None, where
             assert geo.area(box) >= _VIZ_MIN, f"{where}: рамка {geo.area(box):.2f}"
             margins = ds.tokens.margins
-            assert box[0] >= margins.left - 1e-6 and box[1] >= margins.top - 1e-6, where
-            assert geo.right(box) <= 1 - margins.right + 1e-6, where
-            assert geo.bottom(box) <= 1 - margins.bottom + 1e-6, where
+            if spec.suppress_background_asset:
+                assert box[0] >= 0.05 and box[1] >= 0.20, where
+                assert geo.right(box) <= 0.95 and geo.bottom(box) <= 0.90, where
+            else:
+                assert box[0] >= margins.left - 1e-6 and box[1] >= margins.top - 1e-6, where
+                assert geo.right(box) <= 1 - margins.right + 1e-6, where
+                assert geo.bottom(box) <= 1 - margins.bottom + 1e-6, where
             viz = [el for el in scene.elements if el.type in ("chart", "table")]
             assert len(viz) == 1 and geo.overlap(viz[0].box, box) > 0.99, where
             under = [el.text for el in scene.elements

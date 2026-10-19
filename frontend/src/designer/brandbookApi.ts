@@ -6,6 +6,9 @@ export type BrandbookState = {
   file_name: string;
   sha256: string;
   priority: 'brand' | 'template';
+  source_format?: 'json' | 'figma_json' | 'pdf' | 'zip';
+  warnings?: string[];
+  assets?: Array<{ name: string; size: number; sha256: string }>;
   brand_fields: string[];
   applied_fields: string[];
 };

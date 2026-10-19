@@ -1,10 +1,14 @@
 import json
+from io import BytesIO
+import zipfile
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from designer import store
 from designer.api.app import app
+from designer.api.app import _reference_pages
 from designer.contracts import ColorToken, DesignSystem, FontToken, Margins, Tokens, TypeStep
 
 
@@ -76,3 +80,50 @@ def test_brandbook_rejects_invalid_and_oversized_inputs(client):
         "file": ("large.json", json.dumps({"extra": "x" * 270_000}).encode(), "application/json"),
     })
     assert oversized.status_code == 413
+
+
+def test_brandbook_imports_figma_variables_json_and_reports_skipped_values(client):
+    response = client.post("/design-systems/demo/brandbook", files={
+        "file": ("variables.json", json.dumps({"variables": [
+            {"resolvedType": "COLOR", "valuesByMode": {"light": {"r": 1, "g": 0, "b": 0}}},
+            {"resolvedType": "COLOR", "valuesByMode": {"light": {"r": .1, "g": .2, "b": .3}, "dark": {"r": .2, "g": .2, "b": .3}}},
+        ]}).encode(), "application/json"),
+    })
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["source_format"] == "figma_json"
+    assert result["design_system"]["tokens"]["colors"][0]["hex"] == "FF0000"
+    assert result["warnings"]
+
+
+def test_brandbook_zip_assets_are_retained_and_removed_safely(client, tmp_path):
+    image = BytesIO()
+    Image.new("RGB", (8, 8), "red").save(image, format="PNG")
+    archive = BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr("tokens.json", b'{"colors":{"accent":"AABBCC"}}')
+        bundle.writestr("brand/logo.png", image.getvalue())
+    response = client.post("/design-systems/demo/brandbook", files={
+        "file": ("brand.zip", archive.getvalue(), "application/zip"),
+    })
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["source_format"] == "zip"
+    assert result["assets"][0]["name"] == "brand/logo.png"
+    assets_path = store.design_system_dir("demo") / "brandbook-assets" / "brand" / "logo.png"
+    assert assets_path.is_file() and assets_path.read_bytes() == image.getvalue()
+    removed = client.delete("/design-systems/demo/brandbook")
+    assert removed.status_code == 200
+    assert not (store.design_system_dir("demo") / "brandbook-assets").exists()
+
+
+def test_large_reference_table_materializes_as_readable_complete_pages():
+    rows = [[f"REF-{index:03d}", f"Reference item {index:03d}"] for index in range(1, 202)]
+    lines = list(range(2, 203))
+    suggestion = {"visual": "table", "headline": "Reference", "table": {}, "provenance": {}}
+    pages = _reference_pages(suggestion, {"table": {"headers": ["id", "label"], "rows": rows, "row_lines": lines}})
+    assert len(pages) == 29
+    assert all(1 <= len(page["table"]["rows"]) <= 7 for page in pages)
+    assert sum(len(page["table"]["rows"]) for page in pages) == 201
+    assert pages[0]["provenance"]["page_count"] == 29
+    assert pages[-1]["provenance"]["displayed_row_lines"] == [198, 199, 200, 201, 202]

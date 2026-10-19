@@ -64,10 +64,11 @@ from designer.api.schemas import (
 )
 from designer.contracts import ChartSpec, DataProvenance, DesignSystem, RunManifest, Series, TableSpec
 from designer.contracts import Tokens
-from designer.brandbook_json import BrandTokenError, parse_brand_tokens, resolve_tokens
+from designer.brandbook_json import BrandTokenError, resolve_tokens
+from designer.brandbook_import import MAX_SOURCE_BYTES, parse_brandbook_source
 from designer.export import convert
 from designer.insights import source as insights_source
-from designer.insights.plan import plan_table
+from designer.insights.plan import chart_number_supported, plan_table
 from designer.insights.profile import profile_table
 from designer.insights.provenance import persist_source
 from designer.insights.labels import field_label
@@ -181,8 +182,9 @@ def get_design_system(ds_id: str) -> DesignSystem:
         raise _not_found(True)
 
 
-_MAX_BRANDBOOK_BYTES = 256 * 1024
+_MAX_BRANDBOOK_BYTES = MAX_SOURCE_BYTES
 _BRANDBOOK_STATE = "brandbook-state.json"
+_BRANDBOOK_ASSETS = "brandbook-assets"
 
 
 def _brandbook_paths(ds_id: str):
@@ -202,6 +204,9 @@ def _brandbook_response(ds: DesignSystem, state: dict) -> dict:
         "file_name": state["file_name"],
         "sha256": state["sha256"],
         "priority": state["priority"],
+        "source_format": state.get("source_format", "json"),
+        "warnings": state.get("warnings", []),
+        "assets": state.get("assets", []),
         "brand_fields": state["brand_fields"],
         "applied_fields": [name for name in state["brand_fields"] if name in {"colors", "fonts", "type_scale", "margins"}],
     }
@@ -223,7 +228,7 @@ def get_brandbook(ds_id: str) -> dict:
 
 @app.post("/design-systems/{ds_id}/brandbook")
 async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), priority: str = Form("brand")) -> dict:
-    """Import a bounded local JSON token file, or change priority using the saved token set."""
+    """Import bounded JSON/PDF/ZIP brandbooks, or change priority using saved tokens."""
     try:
         package, state_path = _brandbook_paths(ds_id)
         ds = load_package(package)
@@ -234,7 +239,7 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise HTTPException(500, "Состояние брендбука повреждено; повторно загрузите JSON.") from exc
+            raise HTTPException(500, "Состояние брендбука повреждено; повторно загрузите исходный файл.") from exc
     if priority not in {"brand", "template"}:
         raise HTTPException(422, "Приоритет должен быть brand или template.")
     if file is not None:
@@ -243,9 +248,12 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         finally:
             await file.close()
         if len(raw) > _MAX_BRANDBOOK_BYTES:
-            raise HTTPException(413, "Файл токенов больше 256 КиБ.")
+            raise HTTPException(413, "Файл брендбука больше 20 МиБ.")
+        if (file.filename or "").lower().endswith(".json") and len(raw) > 256 * 1024:
+            raise HTTPException(413, "JSON с токенами больше 256 КиБ.")
         try:
-            brand = parse_brand_tokens(raw)
+            imported = await run_in_threadpool(parse_brandbook_source, raw, file.filename or "brandbook.json")
+            brand = imported.tokens
         except BrandTokenError as exc:
             raise HTTPException(422, str(exc)) from exc
         try:
@@ -253,7 +261,7 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         except (KeyError, ValueError) as exc:
             raise HTTPException(500, "Сохранённые исходные токены повреждены.") from exc
         filename = insights_table.file_name(file.filename or "brandbook.json")
-        source_hash = hashlib.sha256(raw).hexdigest()
+        source_hash = imported.raw_sha256
         brand_fields = [name for name, values in (("colors", brand.colors), ("fonts", brand.fonts),
                                                    ("type_scale", brand.type_scale)) if values]
         if any(getattr(brand.margins, side) != 0 for side in ("left", "top", "right", "bottom")):
@@ -267,12 +275,29 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         except (KeyError, ValueError) as exc:
             raise HTTPException(500, "Сохранённые токены брендбука повреждены.") from exc
         filename, source_hash, brand_fields = state["file_name"], state["sha256"], state["brand_fields"]
+        imported = None
     resolved = _resolved_brandbook_tokens(template, brand, priority)
     updated = ds.model_copy(update={"tokens": resolved})
     store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
     new_state = {"schema_version": 1, "file_name": filename, "sha256": source_hash, "priority": priority,
                  "brand_fields": brand_fields, "template_tokens": template.model_dump(mode="json"),
-                 "brand_tokens": brand.model_dump(mode="json")}
+                 "brand_tokens": brand.model_dump(mode="json"),
+                 "source_format": imported.source_format if imported else state.get("source_format", "json"),
+                 "warnings": list(imported.warnings) if imported else state.get("warnings", []),
+                 "assets": state.get("assets", []) if state else []}
+    if imported is not None:
+        asset_dir = package / _BRANDBOOK_ASSETS
+        if asset_dir.exists():
+            import shutil
+            shutil.rmtree(asset_dir)
+        saved_assets = []
+        for asset in imported.assets:
+            destination = asset_dir.joinpath(*asset.name.split("/"))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(asset.data)
+            saved_assets.append({"name": asset.name, "size": len(asset.data),
+                                 "sha256": hashlib.sha256(asset.data).hexdigest()})
+        new_state["assets"] = saved_assets
     store.write_text_atomic(state_path, json.dumps(new_state, ensure_ascii=False, indent=2))
     return _brandbook_response(updated, new_state)
 
@@ -295,6 +320,8 @@ def remove_brandbook(ds_id: str) -> dict:
     updated = ds.model_copy(update={"tokens": template})
     store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
     state_path.unlink(missing_ok=True)
+    import shutil
+    shutil.rmtree(package / _BRANDBOOK_ASSETS, ignore_errors=True)
     return {"design_system": updated.model_dump(mode="json"), "removed": True}
 
 
@@ -393,8 +420,8 @@ async def table_preview(file: UploadFile = File(...)) -> TablePreview:
 _MAX_PLAN_FILES = 7
 _MAX_PLAN_TABLES = 21
 _MAX_PLAN_TOTAL_BYTES = insights_table.MAX_BYTES * _MAX_PLAN_FILES
-_REFERENCE_PAGE_ROWS = 20
-_MAX_REFERENCE_PAGES = 20
+_REFERENCE_PAGE_ROWS = 7  # native PPTX table renderer limits readable tables to seven rows
+_MAX_REFERENCE_PAGES = 30  # 201 source rows need 29 slides at this page size
 _MAX_BUNDLE_SLIDES = 60
 
 
@@ -560,7 +587,7 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         values = sorted(exact_values)
         assert all(value is not None for value in values)
         numeric_values = [value for value in values if value is not None]
-        if any(not math.isfinite(float(value)) or Decimal(str(float(value))) != value for value in numeric_values):
+        if any(not chart_number_supported(value) for value in numeric_values):
             raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
         count = len(numeric_values)
 
@@ -605,7 +632,7 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         numeric = {}
         for field in candidate.measure_fields:
             exact = [insights_table.parse_number(row[positions[field]]) for row in source_rows]
-            if not exact or any(v is None or not math.isfinite(float(v)) or Decimal(str(float(v))) != v for v in exact):
+            if not exact or any(v is None or not chart_number_supported(v) for v in exact):
                 raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
             numeric[field] = [float(v) for v in exact]
         visual = candidate.kind
@@ -634,6 +661,8 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         exact_values = [insights_table.parse_number(row[positions[measure]]) for row in source_rows]
         if not categories or any(value is None for value in exact_values):
             raise HTTPException(422, "В выбранных исходных строках есть пропуски или нечисловые значения.")
+        if any(not chart_number_supported(value) for value in exact_values):
+            raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
         values = [float(value) for value in exact_values]
         if any(not math.isfinite(value) for value in values):
             raise HTTPException(422, "Значения слишком велики для диаграммы; используйте таблицу.")
@@ -645,23 +674,31 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         formula = (f"Сумма показанных долей: {candidate.denominator}; охват — {len(categories)} наблюдений."
                    if candidate.denominator is not None else f"{len(categories)} исходных наблюдений; агрегация не выполнялась.")
     elif candidate.kind == "table":
-        preview = source_rows[:20]
+        # The native slide table has a hard seven-row limit. Keep the preview
+        # readable and state the omitted-row count; the complete file and its
+        # provenance remain retained separately, never squeezed onto one slide.
+        preview = source_rows[:7]
         table_spec = TableSpec(columns=table.headers, rows=preview)
         visual = "table"
-        statement = f"Справочные данные: {len(table.rows)} строк; на слайде показаны первые {len(preview)}."
+        statement = f"Справочные данные: {len(table.rows)} строк; показаны первые {len(preview)} из {len(table.rows)}."
         number, formula = str(len(table.rows)), "Количество строк источника; значения не агрегировались."
         if len(table.rows) > len(preview):
-            warnings = (warnings + " " if warnings else "") + f"Остальные {len(table.rows) - len(preview)} строк не помещены на слайд."
+            warnings = (warnings + " " if warnings else "") + f"Слайд показывает только первую страницу; ещё {len(table.rows) - len(preview)} строк сохранены в источнике и на этот слайд не помещены."
     else:
         number = format(candidate.value or Decimal(0), "f")
         statement = f"Количество исходных записей: {number}."
         formula = "Число строк источника, включая записи с пропусками; суммы мер не вычислялись."
 
+    if candidate.statement:
+        statement = candidate.statement
+        number = candidate.number
+        formula = candidate.formula + (" " + formula if candidate.kind in {"histogram", "grouped_column"} else "")
+
     source = insights_table.file_name(filename or "таблица")
     if table.sheet:
         source += f" · лист «{table.sheet}»"
     source += f" · {len(candidate.row_lines)} исходных строк"
-    displayed_lines = list(candidate.row_lines[:20] if candidate.kind == "table" else candidate.row_lines)
+    displayed_lines = list(candidate.row_lines[:7] if candidate.kind == "table" else candidate.row_lines)
     coverage = f"Охват: {len(candidate.row_lines)} из {len(table.rows)} строк; исключено: {len(candidate.excluded_row_lines)}."
     if candidate.kind == "table":
         coverage += f" На слайде: {len(displayed_lines)}; не показано: {len(candidate.row_lines) - len(displayed_lines)}."
@@ -677,7 +714,7 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         unit=measure_unit,
         denominator_field=candidate.denominator_field, warnings=list(candidate.warnings),
     )
-    headline = (f"Распределение: {measure_label}" if candidate.kind == "histogram" else
+    headline = candidate.headline or (f"Распределение: {measure_label}" if candidate.kind == "histogram" else
                 f"{measure_label}: динамика" if candidate.kind == "line" else
                 f"{measure_label} · {dimension_label}"
                 if candidate.measure_fields and candidate.dimension_fields else statement)

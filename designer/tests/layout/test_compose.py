@@ -243,6 +243,23 @@ def test_visualisation_frame_goes_around_the_filled_slot():
     assert spec.viz_box is not None and spec.viz_box[1] >= 0.44 - 1e-9
 
 
+def test_image_only_template_with_invalid_margins_gets_a_readable_data_layout():
+    pattern = _cards(areas=[Area(id="full-slide", kind="image", box=(0, 0, 1, 1), shape_id=900)])
+    pattern.slots = []
+    pattern.groups = []
+    pattern.areas[0].box = (0, 0, 1, 1)
+    pattern.background_asset = "flattened-sample"
+    ds = _ds()
+    ds.tokens.margins = Margins(left=0, top=0, right=1, bottom=1)
+    chart = ChartSpec(type="column", categories=["A", "B"], series=[Series(name="Выручка", values=[4, 7])])
+    spec = compose(_intent(kind=SlideKind.chart, items=[], chart=chart, title="Выручка выросла"), pattern, ds)
+    assert spec.suppress_background_asset
+    assert spec.viz_box == (0.07, 0.30, 0.86, 0.58)
+    assert 900 in spec.remove_shape_ids
+    title = next(element for element in spec.added_elements if element.id == "fallback-title")
+    assert title.text == "Выручка выросла"
+
+
 def test_fitted_size_steps_down_for_a_long_heading():
     items = [Item(heading="Причина, у которой очень длинное название", body="Коротко"), *_items(2)]
     spec = compose(_intent(items=items), _cards(), _ds())
