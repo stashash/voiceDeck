@@ -40,6 +40,32 @@ def _mock_llm(payload: dict) -> LlmClient:
     return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
 
 
+@pytest.mark.parametrize("language", [None, "ru", "en"])
+def test_creation_language_reaches_background_pipeline(client, monkeypatch, language):
+    captured = {}
+    def generate(*args, **kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("designer.pipeline.generate_deck", generate)
+    app.dependency_overrides[get_llm_client] = lambda: _mock_llm({})
+    payload = {"design_system_id": "ds", "brief": "A short brief"}
+    if language:
+        payload["language"] = language
+    response = client.post("/decks", json=payload)
+    assert response.status_code == 200
+    assert captured["language"] == (language or "ru")
+
+
+def test_existing_deck_locale_endpoint_is_ru_only_and_calls_supported_helper(client, monkeypatch):
+    captured = []
+    def migrate(*args):
+        captured.append(args)
+        return {"language": "ru", "numerical_evidence_unchanged": True}
+    monkeypatch.setattr("designer.localization.migrate_deck_locale", migrate)
+    response = client.post("/decks/example/a/locale", json={"language": "ru"})
+    assert response.status_code == 200 and captured == [("example", "a", "ru")]
+    assert client.post("/decks/example/a/locale", json={"language": "en"}).status_code == 422
+
+
 def _loading_llm() -> LlmClient:
     """Сервер модели, у которого модель грузится: LM Studio отвечает 400 «Failed to load model»."""
     def handler(request: httpx.Request) -> httpx.Response:

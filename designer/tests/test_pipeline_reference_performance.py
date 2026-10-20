@@ -78,7 +78,7 @@ def test_variant_checks_every_scene_and_records_actual_automatic_scope(tmp_path,
     ds = SimpleNamespace(tokens=SimpleNamespace(type_scale=[]))
     checked, contextual, saved = [], [], []
     monkeypatch.setattr(pipeline, 'choose_pattern', lambda *args: pattern)
-    monkeypatch.setattr(pipeline, '_fill_intent', lambda intent, *args: intent.model_copy(deep=True))
+    monkeypatch.setattr(pipeline, '_fill_intent', lambda intent, *args, **kwargs: intent.model_copy(deep=True))
     monkeypatch.setattr(pipeline, 'compose', lambda intent, pattern, ds: SlideSpec(slide_id=intent.id, pattern_id='p'))
     monkeypatch.setattr(pipeline, 'build_scene', lambda spec, *args: Scene(slide_id=spec.slide_id, pattern_id='p'))
     monkeypatch.setattr(pipeline, 'export_pptx', lambda specs, ds, package, path: path.write_bytes(b'pptx'))

@@ -15,6 +15,7 @@ export default function VoiceWorkspacePage() {
   const [variant, setVariant] = useState('a');
   const [view, setView] = useState<'deck' | 'new' | 'local' | 'trash' | 'full'>('deck');
   const [brief, setBrief] = useState('');
+  const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [design, setDesign] = useState('');
   const [count, setCount] = useState(8);
   const [busy, setBusy] = useState(false);
@@ -69,7 +70,7 @@ export default function VoiceWorkspacePage() {
   async function create(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError('');
     try {
-      const result = await createDeck({ design_system_id: design, brief: brief.trim(), slide_count: count, variants: ['a'] });
+      const result = await createDeck({ design_system_id: design, brief: brief.trim(), slide_count: count, variants: ['a'], language });
       await reload(); setSelected(result.deck_id); setVariant('a'); setView('deck'); setBrief('');
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
@@ -106,6 +107,10 @@ export default function VoiceWorkspacePage() {
           <label>О чём ваша презентация?<textarea aria-label="Тема и содержание" placeholder="Например: стратегия развития продукта на следующий год. Аудитория — команда. Добавьте цели, этапы и ожидаемые результаты." required value={brief} onChange={e => setBrief(e.target.value)} rows={5}/></label>
           <div className="vw-form-row"><label>Оформление<select aria-label="Дизайн-система новой презентации" required value={design} onChange={e => setDesign(e.target.value)}><option value="" disabled>Выберите дизайн-систему</option>{systems.map(s => <option key={s.id} value={s.id}>{s.name || s.id}</option>)}</select></label><label>Слайдов<input aria-label="Количество слайдов" type="number" min={1} max={30} required value={count} onChange={e => setCount(Number(e.target.value))}/></label></div>
           {!systems.length && <a href="#/design-systems">Добавить дизайн-систему</a>}
+          <label>Язык презентации<select aria-label="Язык презентации" value={language} disabled={busy}
+            onChange={e => setLanguage(e.target.value as 'ru' | 'en')}>
+            <option value="ru">Русский</option><option value="en">English</option>
+          </select></label>
           <button className="vw-create" disabled={busy || !design || !brief.trim()}><Plus size={18}/>{busy ? 'Запускаем создание…' : 'Создать презентацию'}</button><small className="vw-muted">После генерации редактор откроется автоматически.</small>
         </form></div>}
         {view === 'trash' && <section className="vw-trash"><h2>Удалённые презентации</h2><p className="vw-muted">Восстановите документ, чтобы продолжить работу.</p>{!trash.length && <div className="vw-empty"><Trash2 size={36}/><h3>Корзина пуста</h3><p>Удалённые презентации появятся здесь.</p></div>}{trash.map(d => <div className="vw-trash-row" key={d.id}><FileText size={22}/><strong>{d.title}</strong><button className="button" disabled={busy} onClick={() => void manage(d.id, 'restore')}><ArchiveRestore size={16}/>Восстановить</button></div>)}</section>}

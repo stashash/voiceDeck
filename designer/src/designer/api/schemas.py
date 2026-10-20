@@ -13,6 +13,7 @@ class DeckCreateRequest(BaseModel):
     brief: str
     purpose: str = ""
     audience: str = ""
+    language: Literal["ru", "en"] = "ru"
     slide_count: int | None = None
     variants: list[str] = Field(default_factory=lambda: ["a", "b", "c"], description="a, b, c — любое подмножество")
     insights_id: str | None = Field(default=None, description="ответ POST /insights: подсказки лежат на сервере")
@@ -21,6 +22,10 @@ class DeckCreateRequest(BaseModel):
 
 class DeckCreateResponse(BaseModel):
     deck_id: str
+
+
+class DeckLocaleRequest(BaseModel):
+    language: Literal["ru"] = "ru"
 
 
 class InsightView(BaseModel):

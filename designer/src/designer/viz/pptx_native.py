@@ -101,6 +101,7 @@ def add_chart(
     slide_size_emu: tuple[int, int],
     tokens: Tokens,
     theme: Literal["light", "dark"] = "light",
+    background: str | None = None,
 ):
     """Добавляет на слайд python-pptx редактируемую диаграмму и возвращает её фигуру."""
     if len(spec.series) > 5:
@@ -146,8 +147,9 @@ def add_chart(
     if text_hex:
         chart.font.color.rgb = RGBColor.from_string(text_hex)
 
-    colors = palette.series_colors(tokens)
     is_pie = spec.type in ("pie", "donut")
+    colors = palette.chart_series_colors(tokens, theme, background,
+                                         len(spec.categories) if is_pie else len(spec.series))
 
     if is_pie:
         series_obj = chart.series[0]
@@ -156,8 +158,15 @@ def add_chart(
             chart.plots[0].data_labels.font.color.rgb = RGBColor.from_string(text_hex)
         if colors:
             for idx, point in enumerate(series_obj.points):
+                point_color = colors[idx % len(colors)]
                 point.format.fill.solid()
-                point.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+                point.format.fill.fore_color.rgb = RGBColor.from_string(point_color)
+                # A newly darkened sector must not hide the unchanged numeric
+                # label. This overrides only the label's ink, never its value,
+                # position, font size, legend or axis formatting.
+                label_color = max(("000000", "FFFFFF"),
+                                  key=lambda c: palette.contrast_ratio(c, point_color))
+                point.data_label.font.color.rgb = RGBColor.from_string(label_color)
     else:
         # Localized PowerPoint can render the default General format as a literal
         # word (for example «Основной»). Use an explicit portable numeric format.

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from designer import icons, store
 from designer.contracts import Asset, Box, Deck, DesignSystem, Element, Scene, Tokens
-from designer.export.svg_chart import chart_colors, render_chart
+from designer.export.svg_chart import render_chart
 
 _IMAGE_MIME = {
     ".png": "image/png",
@@ -158,15 +158,15 @@ def _render_table(el: Element) -> str:
     return f'<table class="el table" style="{style}"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>'
 
 
-def _render_chart_el(el: Element, colors: list[str]) -> str:
+def _render_chart_el(el: Element, colors: list[str], background: str = "FFFFFF") -> str:
     style = _box_style(el.box, el.z)
     if el.chart is None:
         return f'<div class="el chart" style="{style}"></div>'
-    svg = render_chart(el.chart, colors)
+    svg = render_chart(el.chart, colors, background=background)
     return f'<div class="el chart" style="{style}">{svg}</div>'
 
 
-def _render_element(el: Element, ds: DesignSystem, package_dir: Path, colors: list[str]) -> str:
+def _render_element(el: Element, ds: DesignSystem, package_dir: Path, colors: list[str], background: str = "FFFFFF") -> str:
     if el.type == "text":
         return _render_text(el, ds)
     if el.type == "shape":
@@ -176,7 +176,7 @@ def _render_element(el: Element, ds: DesignSystem, package_dir: Path, colors: li
     if el.type == "table":
         return _render_table(el)
     if el.type == "chart":
-        return _render_chart_el(el, colors)
+        return _render_chart_el(el, colors, background)
     return ""
 
 
@@ -191,10 +191,13 @@ def _scene_background_style(scene: Scene, ds: DesignSystem, package_dir: Path) -
     return ""
 
 
-def _render_scene(index: int, scene: Scene, ds: DesignSystem, package_dir: Path, colors: list[str]) -> str:
+def _render_scene(index: int, scene: Scene, ds: DesignSystem, package_dir: Path) -> str:
     bg = _scene_background_style(scene, ds, package_dir)
+    from designer.viz.palette import chart_background, series_colors
+    background = chart_background(ds.tokens, scene.theme, scene.background_color)
+    colors = series_colors(ds.tokens)
     elements = "".join(
-        _render_element(el, ds, package_dir, colors) for el in sorted(scene.elements, key=lambda e: e.z)
+        _render_element(el, ds, package_dir, colors, background) for el in sorted(scene.elements, key=lambda e: e.z)
     )
     return (
         f'<section class="slide{" active" if index == 0 else ""}" id="slide-{index + 1}" data-index="{index}" '
@@ -293,11 +296,10 @@ html, body {{ margin: 0; padding: 0; height: 100%; background: #1a1a1a; }}
 def render_deck(deck: Deck, ds: DesignSystem, package_dir: Path) -> str:
     """Возвращает самодостаточный HTML: шрифты и картинки пакета встроены, слайды 16:9, печать в PDF по слайду на страницу."""
     package_dir = Path(package_dir)
-    colors = chart_colors(ds.tokens)
     width_emu, height_emu = ds.slide_size_emu
     aspect = (width_emu / height_emu) if height_emu else 16 / 9
     sections = "".join(
-        _render_scene(i, scene, ds, package_dir, colors) for i, scene in enumerate(deck.scenes)
+        _render_scene(i, scene, ds, package_dir) for i, scene in enumerate(deck.scenes)
     )
     css = _build_css(ds, aspect)
     fonts_css = _font_faces(ds, package_dir)

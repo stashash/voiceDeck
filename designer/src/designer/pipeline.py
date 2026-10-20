@@ -451,7 +451,7 @@ def _append_reference_pages(plan) -> None:
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
                    client: LlmClient | None = None, variants: list[str] | None = None,
-                   insights: list[Suggestion] | None = None, table_name: str = "") -> Deck:
+                   insights: list[Suggestion] | None = None, table_name: str = "", language: str = "ru") -> Deck:
     """Бриф -> план -> слайды -> аудит -> файлы. Пишет deck.json, run.json и файлы в хранилище.
 
     variants — какие варианты вёрстки собрать (по умолчанию только `a`). План строится один
@@ -463,6 +463,8 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
     insights — отмеченные автором подсказки по таблице. Их слайды собирает код из данных таблицы,
     план строится вокруг них, аудит сверяет числа с брифом, к которому добавлены данные таблицы.
     """
+    from designer.localization import localize_plan, validate_language
+    validate_language(language)
     variant_codes = _clean_variants(variants)
     first_variant = variant_codes[0]
     deck_id = deck_id or store.new_deck_id()
@@ -480,11 +482,12 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
             if insights:
                 plan_brief = brief_with_insights(brief, table_name, insights, with_data=False)
                 rest = max(4, (slide_count or _INSIGHTS_DECK_SIZE) - len(insights))
-                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True)
+                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True, language=language)
                 insert_insight_slides(plan, insights, brief)
                 _append_reference_pages(plan)
             else:
-                plan = make_plan(brief, purpose, audience, slide_count, client)
+                plan = make_plan(brief, purpose, audience, slide_count, client, language=language)
+            plan = localize_plan(plan, language)
         recorder.use_skill(load_skill(_PLAN_SKILL))
         if insights:
             recorder.use_skill(load_skill(_SUGGEST_SKILL))
@@ -538,7 +541,8 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     def _fill(job: tuple[int, SlideIntent, Pattern]) -> SlideIntent:
         index, intent, pattern = job
         _emit(on_event, "slide", index, variant_code)
-        return _fill_intent(intent, pattern, client, on_event, index, variant_code, ds.tokens.type_scale)
+        return _fill_intent(intent, pattern, client, on_event, index, variant_code, ds.tokens.type_scale,
+                            language=variant_plan.language)
 
     with recorder.stage(f"{variant_code}-fill-slots"):
         with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
@@ -578,6 +582,8 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     _emit(on_event, "audit", None, variant_code)
     with recorder.stage(f"{variant_code}-audit"):
         findings = run_checks(scenes, ds)
+        from designer.localization import language_findings
+        findings += language_findings(scenes, variant_plan.language)
 
     deck = Deck(id=deck_id, design_system_id=ds_id, variant=variant_code,
                 plan=variant_plan, specs=specs, scenes=scenes)
@@ -684,7 +690,7 @@ def _llm_parallel() -> int:
 
 
 def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_event: OnEvent,
-                  index: int, variant: str = "a", scale: list | None = None) -> SlideIntent:
+                  index: int, variant: str = "a", scale: list | None = None, language: str = "ru") -> SlideIntent:
     """Текст слайда под лимиты выбранного паттерна.
 
     Сбой модели на этом слайде не пробрасывается дальше: слайд собирается из текста
@@ -698,7 +704,7 @@ def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_ev
     n_units = unit_count(group, len(intent.items)) if group is not None else 0
     try:
         limits, unit_limits = _role_limits(pattern, intent, n_units, scale)
-        filled = fill_slots(intent, limits, unit_limits, n_units, client)
+        filled = fill_slots(intent, limits, unit_limits, n_units, client, language=language)
         if n_units == 0 and intent.items:
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
             # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.

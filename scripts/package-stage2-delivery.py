@@ -28,6 +28,8 @@ for item in verification["files"]:
 commit=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip()
 dirty=bool(subprocess.check_output(["git","status","--porcelain","--untracked-files=no"],cwd=ROOT,text=True).strip())
 final_tests=OUT/"presubmission-backend-final.xml"
+if (OUT/"russian-localization-final-tests.xml").exists():
+    final_tests=OUT/"russian-localization-final-tests.xml"
 if final_tests.exists():
     suites=list(ET.parse(final_tests).getroot().iter("testsuite"))
     assert suites and all(int(s.get("failures",0))==int(s.get("errors",0))==0 for s in suites), "Latest presubmission tests failed"
@@ -63,6 +65,13 @@ for name in ["presubmission-backend-final.xml","presubmission-runtime-checks.jso
     if (OUT/name).exists():add(OUT/name,"verification/"+name)
 for name in ["presubmission-audit-2026-10-19.md","presubmission-data-audit.md"]:
     if (ROOT/"docs"/name).exists():add(ROOT/"docs"/name,"verification/"+name)
+for name in ["russian-slide-language-audit.md","chart-contrast-audit.md"]:
+    if (ROOT/"docs"/name).exists():add(ROOT/"docs"/name,"verification/"+name)
+for name in ["russian-localization-final-tests.xml","russian-localization-evidence-check.json",
+             "russian-localization-export-language.json","russian-localization-actual-chart-contrast.json",
+             "russian-localization-pdf-geometry.json","russian-localization-browser.json",
+             "russian-localization-english-generation.json"]:
+    if (OUT/name).exists():add(OUT/name,"verification/"+name)
 add(OUT/"final-v3/run-manifest.json","verification/run-manifest.json")
 add(ROOT/"docs/stage2-implementation-and-verification.md","verification/implementation.md")
 readme=f"""# VoiceDeck — вторая ступень\n\nДата сборки: {datetime.now(timezone.utc).isoformat()}\nБазовый коммит: `{commit}`. Незакоммиченные изменения: `{dirty}`; фактические Python-исходники контейнера перечислены в runtime-verification.json.\n\n- `challenge/`: 9 презентаций — A/B/C × Education/VK Tech/WorkSpace, по три формата и контрольный лист.\n- `unknown-template/VoiceDeck-stage2-screencast.mp4`: реальный скринкаст с локальной озвучкой, {edit['duration']:.1f} с. Долгое ожидание модели ускорено и подписано; без подмены сетевых ответов.\n- `unknown-template/deck.*`: результат на стороннем общедоступном шаблоне с брендбуком.\n- `content/`: семь синтетических источников. Это учебные числа, не результаты реальной компании.\n- `brandbooks/`: JSON, PDF, бинарный Figma и ZIP-примеры.\n- `verification/`: проверка файлов, источников, всех 201 строк, тесты и фактический runtime.\n\nРедактор текущего локального сервиса: http://localhost:8088/#/decks/{capture['deckId']}/edit/a\n\nСторонний шаблон: Templates by ppttemplate.ai (CC BY 4.0), https://ppttemplate.ai/templates/90s-consulting-strategy-slides . Исходник и атрибуция в sources/.\n\nГраницы импорта и аудита описаны в verification/implementation.md. Аудио прошло техническую проверку и локальную ASR-сверку; это не человеческая оценка дикторской работы. Полная исходная экранная запись сохранена рядом с роликом в рабочем каталоге сервиса.\n"""

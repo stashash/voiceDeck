@@ -21,8 +21,11 @@ def _tokens_with_colors() -> Tokens:
 def test_chart_colors_order_accent_first_then_share():
     colors = chart_colors(_tokens_with_colors())
     assert colors[0] == "AABBCC"
-    assert colors[1] == "334455"
-    # Match native PPTX; background/text colors cannot become data series.
+    # This accent_alt is almost the dark background; replace it, preserving
+    # the other readable original accents in their original slots.
+    from designer.viz.palette import contrast_ratio
+    assert colors[1] != "334455"
+    assert all(contrast_ratio(color, "112233") >= 3 for color in colors)
     assert colors[2:] == ["778899"]
 
 

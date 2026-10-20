@@ -74,8 +74,9 @@ def test_embedded_period_units_source_and_original_lines_survive(client):
     suggestion = materialize(client, data, "embedded_table.md", "compare")
     assert "Source: synthetic test data." in suggestion["source"]
     assert "counts for April 2026" in suggestion["source"]
-    assert suggestion["chart"]["x_axis_title"] == "Requests, шт."
-    assert suggestion["chart"]["y_axis_title"] == "Region"
+    assert suggestion["chart"]["x_axis_title"] == "Запросы, шт."
+    assert suggestion["chart"]["y_axis_title"] == "Регион"
+    assert suggestion["provenance"]["columns"] == ["Region", "Requests"]
     assert suggestion["provenance"]["row_lines"] == [5, 6, 7]
     assert suggestion["provenance"]["unit"] == "шт."
     changed = data.replace(b"April 2026", b"May 2026")

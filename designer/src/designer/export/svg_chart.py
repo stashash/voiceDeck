@@ -6,7 +6,7 @@ import math
 
 from designer.contracts import ChartSpec, Tokens
 from designer.viz.validation import validate_chart_data
-from designer.viz.palette import series_colors
+from designer.viz.palette import chart_series_colors, contrasting_chart_colors
 
 _VIEW_W = 600.0
 _VIEW_H = 360.0
@@ -16,12 +16,10 @@ _PAD_TOP = 20.0
 _PAD_BOTTOM = 50.0
 _LEGEND_H = 24.0
 
-_FALLBACK_COLORS = ["4C6EF5", "F76707", "2F9E44", "E8590C", "1098AD", "AE3EC9"]
-
-
-def chart_colors(tokens: Tokens) -> list[str]:
+def chart_colors(tokens: Tokens, theme: str = "light", background: str | None = None,
+                 count: int | None = None) -> list[str]:
     """Use the same semantic series palette as native PPTX; never use background/text."""
-    return series_colors(tokens) or list(_FALLBACK_COLORS)
+    return chart_series_colors(tokens, theme, background, count)
 
 
 def _color(colors: list[str], i: int) -> str:
@@ -265,11 +263,11 @@ def _render_pie(spec: ChartSpec, colors: list[str], donut: bool) -> str:
     return _svg_wrap("".join(slices), "donut" if donut else "pie", spec, legend)
 
 
-def render_chart(spec: ChartSpec, colors: list[str]) -> str:
+def render_chart(spec: ChartSpec, colors: list[str], *, background: str = "FFFFFF") -> str:
     """Возвращает встраиваемый <svg>...</svg> для диаграммы spec.type."""
     validate_chart_data(spec)
-    if not colors:
-        colors = list(_FALLBACK_COLORS)
+    colors = contrasting_chart_colors(colors, background,
+                                      len(spec.categories) if spec.type in {"pie", "donut"} else len(spec.series))
     if spec.type in {"column", "grouped_column", "stacked_column"}:
         return _render_columns(spec, colors)
     if spec.type == "bar":

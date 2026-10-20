@@ -39,6 +39,7 @@ from designer.api.schemas import (
     DeckRewriteRequest,
     DeckStateResponse,
     DeckVariantState,
+    DeckLocaleRequest,
     DatasetBundlePlanResponse,
     DatasetTablePlan,
     DesignSystemListResponse,
@@ -940,7 +941,7 @@ def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
             pipeline.generate_deck(
                 payload.design_system_id, payload.brief, payload.purpose, payload.audience,
                 payload.slide_count, _on_event, deck_id=deck_id, client=client,
-                variants=variant_codes, insights=insights, table_name=table_name,
+                variants=variant_codes, insights=insights, table_name=table_name, language=payload.language,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed
@@ -1147,6 +1148,15 @@ def get_slide_patterns(deck_id: str, variant: str, number: int) -> SlidePatterns
     except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
         raise _edit_error(exc)
     return SlidePatternsResponse(items=items)
+
+
+@app.post("/decks/{deck_id}/{variant}/locale")
+def post_deck_locale(deck_id: str, variant: str, payload: DeckLocaleRequest) -> dict:
+    from designer.localization import migrate_deck_locale
+    try:
+        return migrate_deck_locale(deck_id, variant, payload.language)
+    except (*_EDIT_NOT_FOUND, ValueError) as exc:
+        raise _edit_error(exc)
 
 
 @app.post("/decks/{deck_id}/{variant}/slides/{number}/ask", response_model=DeckVariantState)

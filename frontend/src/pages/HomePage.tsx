@@ -17,6 +17,7 @@ const RECENT_LIMIT = 8;
 
 export default function HomePage() {
   const [brief, setBrief] = useState('');
+  const [language, setLanguage] = useState<'ru' | 'en'>('ru');
   const [designSystems, setDesignSystems] = useState<DesignSystemListItem[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [dsId, setDsId] = useState<string>('');
@@ -111,7 +112,7 @@ export default function HomePage() {
       await syncAgent(agentId);
       const text = brief.trim() || `Итоги по таблице «${table.result!.table_name}»`;
       const { deck_id } = await createDeck({
-        design_system_id: dsId, brief: text, variants: ['a', 'b', 'c'],
+        design_system_id: dsId, brief: text, variants: ['a', 'b', 'c'], language,
         insights_id: fromTable ? table.result!.id : null, insight_ids: fromTable ? table.chosen : [],
       });
       window.location.hash = `#/decks/${deck_id}`;
@@ -127,7 +128,7 @@ export default function HomePage() {
       const materialized = await materializeDatasetBundle(bundle.id, selections);
       const presentationBrief = brief.trim() || `Покажите смысл выбранных данных: ${bundle.goal || 'общий обзор'}. Источники: ${bundle.datasets.filter(item => selections.some(selected => selected.dataset_id === item.dataset_id)).map(item => item.table_name).join(', ')}.`;
       const { deck_id } = await createDeck({
-        design_system_id: dsId, brief: presentationBrief, variants: ['a', 'b', 'c'],
+        design_system_id: dsId, brief: presentationBrief, variants: ['a', 'b', 'c'], language,
         insights_id: materialized.id, insight_ids: materialized.suggestions.map(item => item.id),
       });
       window.location.hash = `#/decks/${deck_id}`;
@@ -148,6 +149,10 @@ export default function HomePage() {
       <InsightsList state={table} brief={brief} onRetry={() => void retryTable()}/>
       <SemanticDataPlan brief={brief} onCreate={ready ? createFromMeaning : undefined} creating={busy}/>
       <div className="brief-row">
+        <label>Язык презентации <select aria-label="Язык презентации" value={language}
+          onChange={e => setLanguage(e.target.value as 'ru' | 'en')} disabled={busy}>
+          <option value="ru">Русский</option><option value="en">English</option>
+        </select></label>
         {ready ? <div className="brief-pickers">
           <AttachTableButton onPick={file => void attachTable(file)}/>
           <button type="button" className={`picker-btn ${open === 'ds' ? 'open' : ''}`} aria-haspopup="listbox"

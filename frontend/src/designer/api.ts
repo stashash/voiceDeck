@@ -255,7 +255,7 @@ export function tableInsights(file: File, brief: string, signal?: AbortSignal, u
 
 export function createDeck(payload: {
   design_system_id: string; brief: string; purpose?: string; audience?: string;
-  slide_count?: number | null; variants?: string[]; insights_id?: string | null; insight_ids?: string[];
+  slide_count?: number | null; variants?: string[]; insights_id?: string | null; insight_ids?: string[]; language?: 'ru' | 'en';
 }): Promise<{ deck_id: string }> {
   return fetch(url('/decks'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -272,6 +272,12 @@ export function watchDeckEvents(deckId: string, onEvent: (e: DeckEvent) => void)
     }
   };
   return source;
+}
+
+export function localizeDeckLabels(deckId: string, variant: string): Promise<{ language: 'ru'; numerical_evidence_unchanged: boolean }> {
+  return fetch(url(`/decks/${deckId}/${variant}/locale`), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language: 'ru' }),
+  }, 6 * 60_000).then(r => asJson<{ language: 'ru'; numerical_evidence_unchanged: boolean }>(r));
 }
 
 export function getDeckState(deckId: string): Promise<DeckStateResponse> {

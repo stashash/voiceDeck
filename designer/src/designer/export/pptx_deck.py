@@ -360,7 +360,8 @@ def _fill_viz(slide, placed, spec: SlideSpec, pattern: Pattern, ds: DesignSystem
         if not item.dropped and _covered(item.box, box) >= VIZ_COVER:
             _drop(item)
     if spec.chart is not None:
-        add_chart(slide, spec.chart, box, ds.slide_size_emu, ds.tokens, theme=pattern.theme)
+        add_chart(slide, spec.chart, box, ds.slide_size_emu, ds.tokens, theme=pattern.theme,
+                  background=spec.background_color or pattern.background_color)
     else:
         add_table(slide, spec.table, box, ds.slide_size_emu, ds.tokens, theme=pattern.theme)
 

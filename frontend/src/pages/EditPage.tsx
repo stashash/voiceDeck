@@ -17,7 +17,7 @@ import {prepareEditorModel} from '../stage/editorModel';
 import { Mic, Square, Pencil, Undo2, Copy, Trash2, Plus, Download, Send, AlertTriangle, Lightbulb, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, AlignCenter, X, Check, TextCursorInput } from 'lucide-react';
 import {
   DeckStateResponse, Finding, SlidePatternOption, absoluteUrl, askSlide, fileUrl, fixFindings, getDeckState,
-  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation, commitVoiceBatch,
+  getSlidePatterns, patchNotes, patchSlideText, renameDeck, revertVariant, rewriteFinding, setSlidePattern, slidesAction, recoverEditor, rewriteDeckVoice, commitDeckDictation, commitVoiceBatch, localizeDeckLabels,
 } from '../designer/api';
 import { kindLabel } from '../designer/labels';
 
@@ -329,6 +329,9 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
         })}
       </div>
       <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
+        {active?.plan?.language !== 'en' && <button type="button" className="button" disabled={busy || waitingText || !active}
+          title="Локализовать известные подписи данных в этом варианте. Числа и исходники сохраняются; прежние файлы архивируются. Непереведённые названия отмечаются в проверке."
+          onClick={() => void guard(() => localizeDeckLabels(deckId, variant))}>Русские подписи</button>}
         <button type="button" className="button primary" aria-label="Скачать: pptx, pdf или html" onClick={() => setDownloadOpen(v => !v)}>
           <Download size={18} strokeWidth={1.5}/>Скачать
         </button>
