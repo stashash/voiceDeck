@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import colorsys
-from collections import defaultdict
+from collections import Counter, defaultdict
+from io import BytesIO
 from pathlib import Path
 
 from lxml import etree
+from PIL import Image
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
-from designer.contracts import ColorToken, FontToken, Margins, Tokens, TypeStep
+from designer.contracts import ChartStyle, ColorToken, FontToken, Margins, Tokens, TypeStep
 
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
@@ -422,10 +424,19 @@ def extract_tokens(pptx_path: Path) -> Tokens:
         if bg:
             acc.bg_counts[bg] += 1
 
-    tokens_colors = _build_color_tokens(acc, theme_cache)
-    tokens_fonts = _build_font_tokens(acc)
-    type_scale = _build_type_scale(acc.sizes)
     margins = _build_margins(acc, slide_w, slide_h)
+    tokens_colors = _build_color_tokens(acc, theme_cache)
+    if margins.left + margins.right >= 0.75 or margins.top + margins.bottom >= 0.75:
+        image_colors = _flattened_template_palette(prs)
+        if image_colors:
+            tokens_colors = image_colors
+    tokens_fonts = _build_font_tokens(acc)
+    if not tokens_fonts and theme_cache:
+        theme_fonts = next(iter(theme_cache.values()))[1]
+        tokens_fonts = [FontToken(family=theme_fonts[key], role=role, share=1.0)
+                        for key, role in (("+mj-lt", "heading"), ("+mn-lt", "body"))
+                        if theme_fonts.get(key)]
+    type_scale = _build_type_scale(acc.sizes)
     guides_x, guides_y = _build_guides(acc, slide_w, slide_h)
 
     return Tokens(
@@ -435,7 +446,90 @@ def extract_tokens(pptx_path: Path) -> Tokens:
         margins=margins,
         guides_x=guides_x,
         guides_y=guides_y,
+        chart_style=_chart_style(prs, tokens_colors),
     )
+
+
+def _chart_style(prs, colors) -> ChartStyle:
+    # The template's actual native chart is authoritative where present. With no
+    # sample chart, derive explicit axis/legend defaults from the extracted palette.
+    style = {"gridline_color": next((c.hex for c in colors if c.role == "text_muted"), "DADDE5"),
+             "gridline_width_pt": 0.6, "legend_position": "bottom"}
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not shape.has_chart:
+                continue
+            chart = shape.chart
+            try:
+                size = chart.font.size
+                if size and 8 <= size.pt <= 32:
+                    style["label_size_pt"] = size.pt
+                if chart.has_legend:
+                    name = chart.legend.position.name.lower()
+                    if name in {"bottom", "top", "left", "right"}:
+                        style["legend_position"] = name
+                if chart.value_axis.has_major_gridlines:
+                    line = chart.value_axis.major_gridlines.format.line
+                    if line.color.type and line.color.rgb:
+                        style["gridline_color"] = str(line.color.rgb)
+                    if line.width and 0.1 <= line.width.pt <= 5:
+                        style["gridline_width_pt"] = line.width.pt
+            except (AttributeError, ValueError, TypeError):
+                pass
+            return ChartStyle(**style)
+    return ChartStyle(**style)
+
+
+def _flattened_template_palette(prs) -> list[ColorToken]:
+    """Recover a usable palette when a template is flattened into full-slide images.
+
+    Such files have no editable fills or text styles, so the OOXML theme alone can be
+    unrelated to the visible design. Sample the actual rendered artwork as a fallback.
+    """
+    counts: Counter[str] = Counter()
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if (shape.shape_type != 13 or shape.width < prs.slide_width * 0.80
+                    or shape.height < prs.slide_height * 0.80):
+                continue
+            try:
+                image = Image.open(BytesIO(shape.image.blob)).convert("RGB")
+                image.thumbnail((192, 108))
+                quantized = image.quantize(colors=32, method=Image.Quantize.MEDIANCUT)
+                palette = quantized.getpalette() or []
+                for amount, index in quantized.getcolors(192 * 108) or []:
+                    offset = index * 3
+                    rgb = palette[offset:offset + 3]
+                    if len(rgb) == 3:
+                        counts["".join(f"{channel:02X}" for channel in rgb)] += amount
+            except (OSError, ValueError, AttributeError):
+                continue
+    if not counts:
+        return []
+    background = max((color for color in counts if _lightness(color) >= 0.90),
+                     key=counts.get, default=max(counts, key=counts.get))
+    text = max((color for color in counts if _lightness(color) <= 0.18),
+               key=counts.get, default="202124")
+    accents = [color for color in counts if color not in (background, text)
+               and _saturation(color) >= 0.35 and 0.18 < _lightness(color) < 0.88]
+    accents.sort(key=lambda color: (counts[color], _saturation(color)), reverse=True)
+    result = [ColorToken(hex=background, role="background", share=0.45, source="usage"),
+              ColorToken(hex=text, role="text", share=0.20, source="usage")]
+    if accents:
+        result.append(ColorToken(hex=accents[0], role="accent", share=0.18, source="usage"))
+    if len(accents) > 1:
+        result.append(ColorToken(hex=accents[1], role="accent_alt", share=0.12, source="usage"))
+    result.extend(ColorToken(hex=color, role="other", share=0.05 / max(1, len(accents[2:])), source="usage")
+                  for color in accents[2:5])
+    return result
+
+
+def _lightness(hexval: str) -> float:
+    try:
+        rgb = tuple(int(hexval[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        return 0.0
+    return colorsys.rgb_to_hls(*rgb)[1]
 
 
 def _build_color_tokens(acc: _Accumulator, theme_cache) -> list[ColorToken]:

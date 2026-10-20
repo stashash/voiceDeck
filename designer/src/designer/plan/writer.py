@@ -19,6 +19,7 @@ from designer import icons
 from designer.contracts import Item, SlideIntent, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
+from designer.localization import language_instruction, prose_language_violations
 from designer.plan.numerals import digits_from_speech
 
 _FILL_SKILL = "fill-slots"
@@ -42,24 +43,27 @@ _UNIT_LABELS = {"heading": "заголовок пункта", "body": "текс�
 
 
 def fill_slots(intent: SlideIntent, limits: dict[str, int], unit_limits: dict[str, int],
-                n_units: int, client: LlmClient) -> SlideIntent:
+                n_units: int, client: LlmClient, language: str = "ru") -> SlideIntent:
     """Переписывает title/key_message/items намерения под лимиты знаков и ровно n_units пунктов."""
     _check_roles(limits, unit_limits)
     skill = load_skill(_FILL_SKILL)
     schema = _fill_schema(limits, unit_limits, n_units)
     system = skill.render(kind=intent.kind.value, limits_text=_limits_text(limits, unit_limits),
                            n_units=str(n_units))
+    system += language_instruction(language)
     user = _intent_material(intent)
     allowed_numbers = _numbers_in_intent(intent)
     original_items = list(intent.items)
 
     data = client.complete_json(system=system, user=user, schema=schema, params=skill.params)
     draft = _apply_fill_response(intent, data, limits, unit_limits)
-    violations = _violations(draft, limits, unit_limits, n_units, allowed_numbers)
+    violations = _violations(draft, limits, unit_limits, n_units, allowed_numbers) + prose_language_violations([draft], language)
     if violations:
         retry_user = user + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
         data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
         draft = _apply_fill_response(intent, data, limits, unit_limits)
+        if prose_language_violations([draft], language):
+            raise ValueError(f"The model did not preserve presentation language: {language}")
 
     _fit_item_count(draft, original_items, n_units)
     _keep_icon_hints(draft, original_items)

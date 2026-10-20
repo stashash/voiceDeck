@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DatasetTablePlan, errorText, VisualizationCandidate } from './api';
 import { analyzePersistedBundle, candidateKey, DatasetSelection, PersistedBundle, selectedCandidates } from './datasetBundle';
 
@@ -21,6 +21,23 @@ const KIND_LABELS: Record<VisualizationCandidate['kind'], string> = {
   histogram: 'Распределение', scatter: 'Связь показателей', grouped_column: 'Факт и план', stacked_column: 'Состав с накоплением', kpi: 'Показатель',
 };
 
+function explain(candidate: VisualizationCandidate): string {
+  const fields = candidate.required_fields.join(', ');
+  const messages: Record<VisualizationCandidate['kind'], string> = {
+    line: 'В данных найдены упорядоченные периоды и числовой показатель. Линия раскрывает динамику.',
+    bar: 'Категории можно сравнить по величине показателя. Горизонтальные подписи остаются читаемыми.',
+    column: 'Столбцы позволяют сопоставить значения по категориям или периодам.',
+    pie: 'Показывает доли категорий относительно суммы выбранных наблюдений. Значения неотрицательны.',
+    histogram: 'Показывает частоту попадания числовых наблюдений в интервалы, включая выбросы.',
+    scatter: 'В каждой строке есть пара числовых показателей. Можно увидеть совместное изменение без вывода о причинности.',
+    grouped_column: 'Сопоставляет согласованные показатели внутри одной категории, например факт и план.',
+    stacked_column: 'Показывает явно запрошенный состав показателя. Суммируемость компонентов требует проверки автора.',
+    kpi: 'Выделяет один проверяемый итоговый показатель с указанным способом расчёта.',
+    table: 'Сохраняет исходные значения и пропуски. Большой справочник будет вынесен в приложение.',
+  };
+  return `${messages[candidate.kind]} Поля: ${fields || 'все исходные колонки'}.`;
+}
+
 function roleLabel(column: DatasetTablePlan['profile']['columns'][number]) {
   const roles = column.role_candidates.map(role => ({
     numeric: 'показатель', category: 'категория', datetime: 'время', identifier: 'идентификатор',
@@ -28,7 +45,11 @@ function roleLabel(column: DatasetTablePlan['profile']['columns'][number]) {
   return roles.length ? roles.join(', ') : column.type === 'empty' ? 'пусто' : column.type;
 }
 
-export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (bundle: PersistedBundle, selections: DatasetSelection[]) => Promise<void>; creating?: boolean }) {
+export function semanticAnalysisGoal(brief: string, explicitGoal: string): string {
+  return explicitGoal.trim() || brief.trim();
+}
+
+export function SemanticDataPlan({ brief = '', onCreate, creating = false }: { brief?: string; onCreate?: (bundle: PersistedBundle, selections: DatasetSelection[]) => Promise<void>; creating?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [goal, setGoal] = useState('');
@@ -38,6 +59,12 @@ export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (b
   const [included, setIncluded] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const context = JSON.stringify([brief, goal, files.map(file => [file.name, file.size, file.lastModified])]);
+  const currentContext = useRef(context);
+  currentContext.current = context;
+  useEffect(() => {
+    setResult(null); setSelected({}); setIncluded({}); setActiveDataset(0);
+  }, [brief, goal]);
 
   const dataset = result?.datasets[activeDataset];
   const selectedCandidate = useMemo(() => {
@@ -89,8 +116,10 @@ export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (b
     setBusy(true);
     setError('');
     setResult(null);
+    const requestedContext = currentContext.current;
     try {
-      const response = await analyzePersistedBundle(files, goal);
+      const response = await analyzePersistedBundle(files, semanticAnalysisGoal(brief, goal));
+      if (requestedContext !== currentContext.current) return;
       setResult(response);
       setActiveDataset(0);
       setSelected({}); setIncluded({});
@@ -122,6 +151,7 @@ export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (b
           {GOALS.map(([label, value]) => <option key={label} value={value}>{label}</option>)}
         </select>
       </label>
+      {!goal && brief.trim() && <small>Цель анализа берётся из текста презентации.</small>}
       <button type="button" className="button primary" disabled={!files.length || busy || creating} onClick={() => void analyze()}>
         {busy ? 'Анализирую…' : 'Проанализировать'}
       </button>
@@ -156,6 +186,11 @@ export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (b
           <div className="semantic-plan-profile-heading">
             <strong>Структура</strong><span>{dataset.rows} строк · {dataset.columns} столбца</span>
           </div>
+          <p>Измерения: {dataset.profile.dimension_count ?? dataset.profile.category_candidates.length + dataset.profile.datetime_candidates.length} · показатели: {dataset.profile.metric_count ?? dataset.profile.numeric_candidates.length} · кандидаты иерархий: {dataset.profile.hierarchy_count ?? 0}</p>
+          {dataset.profile.hierarchy_candidates?.map(hierarchy => <p key={`${hierarchy.parent}:${hierarchy.child}`}>
+            {hierarchy.parent} → {hierarchy.child}: {hierarchy.parent_count} родительских категорий, {hierarchy.child_count} дочерних.
+            {' '}Каждая повторяющаяся дочерняя категория связана с одним родителем; это наблюдаемая структура, без автоматического суммирования.
+          </p>)}
           <ul>{dataset.profile.columns.map(column => <li key={column.name}>
             <span>{column.name}</span><small>{roleLabel(column)}{column.missing_count ? ` · ${column.missing_count} пропусков` : ''}</small>
           </li>)}</ul>
@@ -166,12 +201,15 @@ export function SemanticDataPlan({ onCreate, creating = false }: { onCreate?: (b
             aria-pressed={selectedCandidate === candidate} className={selectedCandidate === candidate ? 'selected' : ''}
             disabled={creating} onClick={() => setSelected(current => ({ ...current, [dataset.dataset_id]: candidateKey(candidate) }))}>
             <strong>{KIND_LABELS[candidate.kind]}</strong>
-            <span>{candidate.reason}</span>
-            {!candidate.renderable && <small>Рендерер этого типа ещё не подключён</small>}
+            <span>{explain(candidate)}</span>
+            {!candidate.renderable && <small>Этот вариант нельзя безопасно показать; выберите таблицу или другой способ.</small>}
           </button>)}
         </div>
         {selectedCandidate && <div className="semantic-plan-detail">
-          <strong>Почему подходит</strong><p>{selectedCandidate.reason}</p>
+          <strong>Почему подходит</strong><p>{explain(selectedCandidate)}</p>
+          <details><summary>Техническое обоснование и ограничения</summary><p>{selectedCandidate.reason}</p></details>
+          {selectedCandidate.headline && <p><strong>{selectedCandidate.headline}</strong></p>}
+          {selectedCandidate.statement && <p>{selectedCandidate.statement}</p>}
           <p>Поля: {selectedCandidate.required_fields.join(', ') || 'все исходные поля без агрегации'}</p>
           {selectedCandidate.excluded_row_lines.length > 0 && <p>Строки с пропусками: {selectedCandidate.excluded_row_lines.join(', ')}</p>}
           {selectedCandidate.warnings.map(warning => <p key={warning} className="semantic-plan-warning">{warning}</p>)}

@@ -44,3 +44,6 @@ def test_type_scale_nonempty_and_descending(templates):
 def test_foreign_pptx_does_not_raise(foreign_pptx):
     tokens = extract_tokens(foreign_pptx)
     assert tokens.colors or tokens.fonts or tokens.type_scale
+    if tokens.margins.left + tokens.margins.right >= 0.75:
+        assert any(color.role == "accent" and color.source == "usage" for color in tokens.colors)
+        assert any(font.role == "heading" for font in tokens.fonts)

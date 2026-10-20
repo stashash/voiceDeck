@@ -10,6 +10,7 @@ from pptx.util import Emu, Pt
 
 from designer.contracts import Box, ChartSpec, TableSpec, Tokens
 from designer.viz import palette
+from designer.viz.validation import validate_chart_data
 
 _CHART_TYPES = {
     "column": XL_CHART_TYPE.COLUMN_CLUSTERED,
@@ -100,10 +101,12 @@ def add_chart(
     slide_size_emu: tuple[int, int],
     tokens: Tokens,
     theme: Literal["light", "dark"] = "light",
+    background: str | None = None,
 ):
     """Добавляет на слайд python-pptx редактируемую диаграмму и возвращает её фигуру."""
     if len(spec.series) > 5:
         raise ValueError("не больше пяти рядов")
+    validate_chart_data(spec)
 
     values = [value for series in spec.series for value in [*series.values, *(series.x_values or [])]]
     span = max(values, default=0) - min(values, default=0)
@@ -135,6 +138,8 @@ def add_chart(
     if family:
         chart.font.name = family
     label_size = _label_size_pt(tokens, box, slide_size_emu, CHART_LABEL_ROWS)
+    if tokens.chart_style and tokens.chart_style.label_size_pt:
+        label_size = tokens.chart_style.label_size_pt
     if label_size:
         chart.font.size = Pt(label_size)
 
@@ -142,8 +147,9 @@ def add_chart(
     if text_hex:
         chart.font.color.rgb = RGBColor.from_string(text_hex)
 
-    colors = palette.series_colors(tokens)
     is_pie = spec.type in ("pie", "donut")
+    colors = palette.chart_series_colors(tokens, theme, background,
+                                         len(spec.categories) if is_pie else len(spec.series))
 
     if is_pie:
         series_obj = chart.series[0]
@@ -152,8 +158,15 @@ def add_chart(
             chart.plots[0].data_labels.font.color.rgb = RGBColor.from_string(text_hex)
         if colors:
             for idx, point in enumerate(series_obj.points):
+                point_color = colors[idx % len(colors)]
                 point.format.fill.solid()
-                point.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+                point.format.fill.fore_color.rgb = RGBColor.from_string(point_color)
+                # A newly darkened sector must not hide the unchanged numeric
+                # label. This overrides only the label's ink, never its value,
+                # position, font size, legend or axis formatting.
+                label_color = max(("000000", "FFFFFF"),
+                                  key=lambda c: palette.contrast_ratio(c, point_color))
+                point.data_label.font.color.rgb = RGBColor.from_string(label_color)
     else:
         # Localized PowerPoint can render the default General format as a literal
         # word (for example «Основной»). Use an explicit portable numeric format.
@@ -169,26 +182,38 @@ def add_chart(
             for idx, series_obj in enumerate(chart.series):
                 series_obj.format.fill.solid()
                 series_obj.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
+                if spec.type == "line":
+                    # Line charts draw their stroke, not their solid fill. Without
+                    # this PowerPoint/LibreOffice silently uses the theme default.
+                    series_obj.format.line.color.rgb = RGBColor.from_string(colors[idx % len(colors)])
                 if spec.type == "scatter":
                     series_obj.marker.format.fill.solid()
                     series_obj.marker.format.fill.fore_color.rgb = RGBColor.from_string(colors[idx % len(colors)])
                     series_obj.marker.format.line.color.rgb = RGBColor.from_string(colors[idx % len(colors)])
-        if spec.x_axis_title:
+        # ChartSpec uses physical X/Y axes. A horizontal bar's category axis
+        # is vertical, unlike columns/lines; native PowerPoint names axes by role.
+        category_title = spec.y_axis_title if spec.type == "bar" else spec.x_axis_title
+        value_title = (spec.x_axis_title if spec.type == "bar" else spec.y_axis_title) or spec.unit
+        if category_title:
             chart.category_axis.has_title = True
-            chart.category_axis.axis_title.text_frame.text = spec.x_axis_title
+            chart.category_axis.axis_title.text_frame.text = category_title
             if text_hex:
                 chart.category_axis.axis_title.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string(text_hex)
-        if spec.y_axis_title or spec.unit:
+        if value_title:
             value_axis = chart.value_axis
             value_axis.has_title = True
-            value_axis.axis_title.text_frame.text = spec.y_axis_title or spec.unit
+            value_axis.axis_title.text_frame.text = value_title
             if text_hex:
                 title_run = value_axis.axis_title.text_frame.paragraphs[0].runs[0]
                 title_run.font.color.rgb = RGBColor.from_string(text_hex)
         gridline_color = palette.muted_gridline_color(tokens, theme) if theme == "dark" else _color_by_role(tokens, "text_muted")
+        if tokens.chart_style and tokens.chart_style.gridline_color:
+            gridline_color = tokens.chart_style.gridline_color
         if gridline_color:
             chart.value_axis.has_major_gridlines = True
             chart.value_axis.major_gridlines.format.line.color.rgb = RGBColor.from_string(gridline_color)
+            if tokens.chart_style and tokens.chart_style.gridline_width_pt:
+                chart.value_axis.major_gridlines.format.line.width = Pt(tokens.chart_style.gridline_width_pt)
         if label_size:
             # Подписи делений наследуют кегль не всегда: у них свой, и без этого они мельчают.
             chart.value_axis.tick_labels.font.size = Pt(label_size)
@@ -197,9 +222,16 @@ def add_chart(
             chart.value_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
             chart.category_axis.tick_labels.font.color.rgb = RGBColor.from_string(text_hex)
 
-    if len(spec.series) >= 2:
-        chart.has_legend = True
+    chart.has_legend = is_pie or len(spec.series) >= 2 or bool(tokens.chart_style and tokens.chart_style.legend_position)
+    if chart.has_legend:
         chart.legend.position = XL_LEGEND_POSITION.RIGHT
+        if tokens.chart_style and tokens.chart_style.legend_position:
+            chart.legend.position = {"bottom": XL_LEGEND_POSITION.BOTTOM, "top": XL_LEGEND_POSITION.TOP,
+                                     "left": XL_LEGEND_POSITION.LEFT, "right": XL_LEGEND_POSITION.RIGHT}[tokens.chart_style.legend_position]
+        if family:
+            chart.legend.font.name = family
+        if label_size:
+            chart.legend.font.size = Pt(label_size)
         chart.legend.include_in_layout = False
         if text_hex:
             chart.legend.font.color.rgb = RGBColor.from_string(text_hex)

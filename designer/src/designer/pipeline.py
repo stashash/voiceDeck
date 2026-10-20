@@ -18,6 +18,7 @@ run_contextual_audit по запросу человека, apply_fixes чини�
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -436,10 +437,21 @@ def _illustrate(plan: DeckPlan, ds: DesignSystem, client: LlmClient, deck_id: st
         engine.close()
 
 
+def _append_reference_pages(plan) -> None:
+    """Move deterministic reference pages after every main/message slide."""
+    def appendix(slide):
+        return (is_insight_slide(slide) and slide.table is not None and slide.provenance is not None
+                and (slide.provenance.page_count or 0) > 1)
+
+    plan.slides = [slide for slide in plan.slides if not appendix(slide)] + [slide for slide in plan.slides if appendix(slide)]
+    for index, slide in enumerate(plan.slides, start=1):
+        slide.id = f"s{index}"
+
+
 def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_count: int | None,
                    on_event: OnEvent, *, deck_id: str | None = None,
                    client: LlmClient | None = None, variants: list[str] | None = None,
-                   insights: list[Suggestion] | None = None, table_name: str = "") -> Deck:
+                   insights: list[Suggestion] | None = None, table_name: str = "", language: str = "ru") -> Deck:
     """Бриф -> план -> слайды -> аудит -> файлы. Пишет deck.json, run.json и файлы в хранилище.
 
     variants — какие варианты вёрстки собрать (по умолчанию только `a`). План строится один
@@ -451,6 +463,8 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
     insights — отмеченные автором подсказки по таблице. Их слайды собирает код из данных таблицы,
     план строится вокруг них, аудит сверяет числа с брифом, к которому добавлены данные таблицы.
     """
+    from designer.localization import localize_plan, validate_language
+    validate_language(language)
     variant_codes = _clean_variants(variants)
     first_variant = variant_codes[0]
     deck_id = deck_id or store.new_deck_id()
@@ -468,10 +482,12 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
             if insights:
                 plan_brief = brief_with_insights(brief, table_name, insights, with_data=False)
                 rest = max(4, (slide_count or _INSIGHTS_DECK_SIZE) - len(insights))
-                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True)
+                plan = make_plan(plan_brief, purpose, audience, rest, client, visuals_ready=True, language=language)
                 insert_insight_slides(plan, insights, brief)
+                _append_reference_pages(plan)
             else:
-                plan = make_plan(brief, purpose, audience, slide_count, client)
+                plan = make_plan(brief, purpose, audience, slide_count, client, language=language)
+            plan = localize_plan(plan, language)
         recorder.use_skill(load_skill(_PLAN_SKILL))
         if insights:
             recorder.use_skill(load_skill(_SUGGEST_SKILL))
@@ -525,12 +541,14 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     def _fill(job: tuple[int, SlideIntent, Pattern]) -> SlideIntent:
         index, intent, pattern = job
         _emit(on_event, "slide", index, variant_code)
-        return _fill_intent(intent, pattern, client, on_event, index, variant_code, ds.tokens.type_scale)
+        return _fill_intent(intent, pattern, client, on_event, index, variant_code, ds.tokens.type_scale,
+                            language=variant_plan.language)
 
     with recorder.stage(f"{variant_code}-fill-slots"):
         with ThreadPoolExecutor(max_workers=_llm_parallel()) as pool:
             filled = list(pool.map(_fill, [(i, intent, patterns[i]) for i, intent in enumerate(variant_plan.slides)]))
-    recorder.use_skill(load_skill(_FILL_SKILL))
+    if any(not is_insight_slide(intent) for intent in variant_plan.slides):
+        recorder.use_skill(load_skill(_FILL_SKILL))
 
     specs: list[SlideSpec] = []
     scenes: list[Scene] = []
@@ -564,6 +582,8 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
     _emit(on_event, "audit", None, variant_code)
     with recorder.stage(f"{variant_code}-audit"):
         findings = run_checks(scenes, ds)
+        from designer.localization import language_findings
+        findings += language_findings(scenes, variant_plan.language)
 
     deck = Deck(id=deck_id, design_system_id=ds_id, variant=variant_code,
                 plan=variant_plan, specs=specs, scenes=scenes)
@@ -586,10 +606,24 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
         _emit(on_event, "convert", None, variant_code)
         _emit(on_event, "slide-images-skipped", None, variant_code)
 
+    sampled_indices = _automatic_contextual_indices(variant_plan)
+    audited_indices = [i for i in sampled_indices if i < len(png_paths)] if with_contextual_audit else []
     if png_paths and with_contextual_audit:
         _emit(on_event, "audit-contextual", None, variant_code)
         with recorder.stage(f"{variant_code}-audit-contextual"):
-            findings = findings + _contextual_findings(scenes, png_paths, brief, client)
+            findings = findings + _contextual_findings(scenes, png_paths, brief, client, selected_indices=audited_indices)
+
+    audit_policy = {
+        "mode": "automatic", "contextual_policy": "all_main_and_first_last_reference_pages_per_dataset",
+        "deterministic_policy": "all_scenes", "deterministic_slide_ids": [scene.slide_id for scene in scenes],
+        "contextual_slide_ids": [scenes[i].slide_id for i in audited_indices],
+        "contextual_skipped_slide_ids": [scene.slide_id for i, scene in enumerate(scenes) if i not in audited_indices],
+        "deck_level_contextual_scope": "same_selected_slides", "manual_contextual_policy": "all_scenes",
+        "not_run_reason": None if audited_indices else "no_slide_images" if with_contextual_audit else "automatic_audit_only_first_requested_variant",
+    }
+    (files_dir / "contextual-audit-policy.json").write_text(json.dumps(audit_policy, ensure_ascii=False, indent=2), encoding="utf-8")
+    if variant_plan.slides:
+        variant_plan.slides[0].notes += "\nПолитика автоматического контекстного аудита: " + json.dumps(audit_policy, ensure_ascii=False)
 
     store.save_deck_result(deck_id, deck, findings, variant=variant_code)
     return deck
@@ -656,33 +690,50 @@ def _llm_parallel() -> int:
 
 
 def _fill_intent(intent: SlideIntent, pattern: Pattern, client: LlmClient, on_event: OnEvent,
-                  index: int, variant: str = "a", scale: list | None = None) -> SlideIntent:
+                  index: int, variant: str = "a", scale: list | None = None, language: str = "ru") -> SlideIntent:
     """Текст слайда под лимиты выбранного паттерна.
 
     Сбой модели на этом слайде не пробрасывается дальше: слайд собирается из текста
     плана без переписывания, событие slide-fallback сообщает об этом.
     """
+    if is_insight_slide(intent):
+        # Source facts and chart/table/provenance are already computed. Font fitting
+        # is deterministic downstream; no model should rewrite or inspect these rows.
+        return intent.model_copy(deep=True)
     group = main_group(pattern)
     n_units = unit_count(group, len(intent.items)) if group is not None else 0
     try:
         limits, unit_limits = _role_limits(pattern, intent, n_units, scale)
-        filled = fill_slots(intent, limits, unit_limits, n_units, client)
+        filled = fill_slots(intent, limits, unit_limits, n_units, client, language=language)
         if n_units == 0 and intent.items:
             # У паттерна нет повторяющегося блока под пункты: длину пунктов ограничит
             # подгонка кегля на сцене, а не скилл заполнения, исходный текст не теряем.
             filled.items = list(intent.items)
-        if is_insight_slide(intent):
-            # Текст слайда вывода отмечен автором и сверен с расчётом: подгонка под макет его не переписывает.
-            # Прогон 17.10: числа совпали, а «с I по IV квартал 2026 года» стало «в течение 2026 года».
-            filled.title, filled.key_message, filled.items = intent.title, intent.key_message, list(intent.items)
         return filled
     except Exception:
         _emit(on_event, "slide-fallback", index, variant)
         return intent
 
 
+def _automatic_contextual_indices(plan: DeckPlan) -> list[int]:
+    """Every main slide and the boundary pages of each source reference appendix."""
+    selected: set[int] = set()
+    appendices: dict[tuple[str, int], list[int]] = {}
+    for index, slide in enumerate(plan.slides):
+        provenance = slide.provenance
+        if (is_insight_slide(slide) and slide.table is not None and provenance is not None
+                and (provenance.page_count or 0) > 1):
+            appendices.setdefault((provenance.dataset_id, provenance.table_index), []).append(index)
+        else:
+            selected.add(index)
+    for indices in appendices.values():
+        ordered = sorted(indices, key=lambda i: (plan.slides[i].provenance.page_index or 0, i))
+        selected.update((ordered[0], ordered[-1]))
+    return sorted(selected)
+
+
 def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text: str,
-                          client: LlmClient) -> list[Finding]:
+                          client: LlmClient, *, selected_indices: list[int] | None = None) -> list[Finding]:
     def _one(job: tuple[Scene, Path]) -> list[Finding]:
         scene, png_path = job
         return audit_slide(scene, png_path.read_bytes(), source_text, client)
@@ -690,10 +741,15 @@ def _contextual_findings(scenes: list[Scene], png_paths: list[Path], source_text
     # Запросы с картинкой идут строго по одному, как при описании образцов: в несколько потоков сервер
     # модели отвечает на ту же картинку иначе (замер 22.09: needs_images true на одном потоке, false на четырёх).
     findings: list[Finding] = []
-    for job in zip(scenes, png_paths):
+    indices = selected_indices if selected_indices is not None else list(range(len(scenes)))
+    selected_scenes = [scenes[i] for i in indices]
+    for scene_index in indices:
+        if scene_index >= len(png_paths):
+            continue
+        job = scenes[scene_index], png_paths[scene_index]
         findings.extend(_one(job))
-    findings.extend(audit_deck(scenes, client))
-    findings.extend(advise_deck(scenes, client))
+    findings.extend(audit_deck(selected_scenes, client))
+    findings.extend(advise_deck(selected_scenes, client))
     return findings
 
 

@@ -38,6 +38,7 @@ services:
       DESIGNER_PUBLIC_URL: ${DESIGNER_PUBLIC_URL:-http://localhost:8090}
       DESIGNER_DESIGN_SYSTEM_ID: ${DESIGNER_DESIGN_SYSTEM_ID:-}
       ALLOWED_ORIGIN: http://localhost:${APP_PORT:-8088}
+      ALLOWED_ORIGINS: http://localhost:8087,${PUBLIC_DEMO_URL:-},${ALLOWED_ORIGINS:-}
     volumes: ["./models:/models:ro", "./native:/native:ro"]
     # Эмбеддинги в LM Studio на хосте. Docker Desktop знает это имя сам, Docker Engine на Linux нет.
     extra_hosts: ["host.docker.internal:host-gateway"]
@@ -65,7 +66,7 @@ services:
       DESIGNER_EDITOR_LLM_PROTOCOL: ${DESIGNER_EDITOR_LLM_PROTOCOL:-ollama}
       DESIGNER_EDITOR_DEADLINE_S: ${DESIGNER_EDITOR_DEADLINE_S:-20}
       DESIGNER_EDITOR_NUM_CTX: ${DESIGNER_EDITOR_NUM_CTX:-8192}
-      DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}}
+      DESIGNER_ALLOWED_ORIGINS: ${DESIGNER_ALLOWED_ORIGINS:-http://localhost:${APP_PORT:-8088}},http://localhost:8087,${PUBLIC_DEMO_URL:-}
       DESIGNER_AGENT_BRIDGE_URL: ${DESIGNER_AGENT_BRIDGE_URL:-http://host.docker.internal:8095}
       # Готовые дизайн-системы и презентации: копируются в хранилище при первом старте
       DESIGNER_DEMO_DIR: /app/demo

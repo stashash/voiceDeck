@@ -39,6 +39,7 @@ from designer.api.schemas import (
     DeckRewriteRequest,
     DeckStateResponse,
     DeckVariantState,
+    DeckLocaleRequest,
     DatasetBundlePlanResponse,
     DatasetTablePlan,
     DesignSystemListResponse,
@@ -64,10 +65,11 @@ from designer.api.schemas import (
 )
 from designer.contracts import ChartSpec, DataProvenance, DesignSystem, RunManifest, Series, TableSpec
 from designer.contracts import Tokens
-from designer.brandbook_json import BrandTokenError, parse_brand_tokens, resolve_tokens
+from designer.brandbook_json import BrandTokenError, resolve_tokens
+from designer.brandbook_import import MAX_SOURCE_BYTES, parse_brandbook_source
 from designer.export import convert
 from designer.insights import source as insights_source
-from designer.insights.plan import plan_table
+from designer.insights.plan import chart_number_supported, plan_table
 from designer.insights.profile import profile_table
 from designer.insights.provenance import persist_source
 from designer.insights.labels import field_label
@@ -181,8 +183,9 @@ def get_design_system(ds_id: str) -> DesignSystem:
         raise _not_found(True)
 
 
-_MAX_BRANDBOOK_BYTES = 256 * 1024
+_MAX_BRANDBOOK_BYTES = MAX_SOURCE_BYTES
 _BRANDBOOK_STATE = "brandbook-state.json"
+_BRANDBOOK_ASSETS = "brandbook-assets"
 
 
 def _brandbook_paths(ds_id: str):
@@ -202,8 +205,13 @@ def _brandbook_response(ds: DesignSystem, state: dict) -> dict:
         "file_name": state["file_name"],
         "sha256": state["sha256"],
         "priority": state["priority"],
+        "source_format": state.get("source_format", "json"),
+        "warnings": state.get("warnings", []),
+        "assets": state.get("assets", []),
+        "rules": state.get("brand_rules"),
+        "source": state.get("source"),
         "brand_fields": state["brand_fields"],
-        "applied_fields": [name for name in state["brand_fields"] if name in {"colors", "fonts", "type_scale", "margins"}],
+        "applied_fields": [name for name in state["brand_fields"] if name in {"colors", "fonts", "type_scale", "margins", "grid", "chart_style", "logo"}],
     }
 
 
@@ -223,7 +231,7 @@ def get_brandbook(ds_id: str) -> dict:
 
 @app.post("/design-systems/{ds_id}/brandbook")
 async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), priority: str = Form("brand")) -> dict:
-    """Import a bounded local JSON token file, or change priority using the saved token set."""
+    """Import bounded JSON/PDF/ZIP brandbooks, or change priority using saved tokens."""
     try:
         package, state_path = _brandbook_paths(ds_id)
         ds = load_package(package)
@@ -234,7 +242,7 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise HTTPException(500, "Состояние брендбука повреждено; повторно загрузите JSON.") from exc
+            raise HTTPException(500, "Состояние брендбука повреждено; повторно загрузите исходный файл.") from exc
     if priority not in {"brand", "template"}:
         raise HTTPException(422, "Приоритет должен быть brand или template.")
     if file is not None:
@@ -243,9 +251,12 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         finally:
             await file.close()
         if len(raw) > _MAX_BRANDBOOK_BYTES:
-            raise HTTPException(413, "Файл токенов больше 256 КиБ.")
+            raise HTTPException(413, "Файл брендбука больше 20 МиБ.")
+        if (file.filename or "").lower().endswith(".json") and len(raw) > 256 * 1024:
+            raise HTTPException(413, "JSON с токенами больше 256 КиБ.")
         try:
-            brand = parse_brand_tokens(raw)
+            imported = await run_in_threadpool(parse_brandbook_source, raw, file.filename or "brandbook.json")
+            brand = imported.tokens
         except BrandTokenError as exc:
             raise HTTPException(422, str(exc)) from exc
         try:
@@ -253,11 +264,17 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         except (KeyError, ValueError) as exc:
             raise HTTPException(500, "Сохранённые исходные токены повреждены.") from exc
         filename = insights_table.file_name(file.filename or "brandbook.json")
-        source_hash = hashlib.sha256(raw).hexdigest()
+        source_hash = imported.raw_sha256
         brand_fields = [name for name, values in (("colors", brand.colors), ("fonts", brand.fonts),
                                                    ("type_scale", brand.type_scale)) if values]
         if any(getattr(brand.margins, side) != 0 for side in ("left", "top", "right", "bottom")):
             brand_fields.append("margins")
+        if brand.guides_x or brand.guides_y:
+            brand_fields.append("grid")
+        if brand.chart_style:
+            brand_fields.append("chart_style")
+        if imported.rules and imported.rules.get("logo"):
+            brand_fields.append("logo")
     else:
         if state is None:
             raise HTTPException(422, "Сначала загрузите файл JSON с токенами.")
@@ -267,12 +284,59 @@ async def import_brandbook(ds_id: str, file: UploadFile | None = File(None), pri
         except (KeyError, ValueError) as exc:
             raise HTTPException(500, "Сохранённые токены брендбука повреждены.") from exc
         filename, source_hash, brand_fields = state["file_name"], state["sha256"], state["brand_fields"]
+        imported = None
     resolved = _resolved_brandbook_tokens(template, brand, priority)
-    updated = ds.model_copy(update={"tokens": resolved})
+    if priority == "brand" and any(color.role == "background" for color in brand.colors) and not any(color.role == "text" for color in brand.colors):
+        from designer.contracts import ColorToken
+        from designer.viz.palette import contrast_ratio
+        bg = next(color.hex for color in brand.colors if color.role == "background")
+        text = next((color.hex for color in resolved.colors if color.role == "text"), "202124")
+        if contrast_ratio(bg, text) < 4.5:
+            text = max(("FFFFFF", "162032"), key=lambda color: contrast_ratio(bg, color))
+            resolved.colors = [ColorToken(hex=text, role="text", share=1, source="usage")] + [color for color in resolved.colors if color.role != "text"]
+    from designer.brand_assets import save_brand_assets
+    from designer.contracts import BrandRules
+    original_rules = state.get("template_rules") if state else (ds.brand_rules.model_dump() if ds.brand_rules else None)
+    if imported is not None:
+        try:
+            brand_assets, imported_rules, saved_assets = save_brand_assets(package, imported)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        assets = [asset for asset in ds.assets if not asset.path.startswith("brandbook-assets/")] + brand_assets
+        brand_rules = imported_rules.model_dump() if imported_rules else None
+    else:
+        assets, saved_assets = ds.assets, state.get("assets", [])
+        brand_rules = state.get("brand_rules")
+    active_rules = brand_rules if priority == "brand" else original_rules
+    if priority == "brand" and brand.fonts and not active_rules:
+        active_rules = {"clear_space": .012}
+    if priority == "brand":
+        preferred_colors = {color.role: color.hex for color in reversed(resolved.colors) if color.role != "other"}
+        overrides = {color.hex: preferred_colors[color.role] for color in template.colors
+                     if color.role in preferred_colors and color.hex != preferred_colors[color.role]}
+        if overrides:
+            active_rules = {**(active_rules or {}), "color_overrides": overrides}
+    background = next((color.hex for color in resolved.colors if color.role == "background"), None)
+    from designer.contracts import Pattern
+    patterns = [Pattern.model_validate(pattern) for pattern in state["template_patterns"]] if state and state.get("template_patterns") else ds.patterns
+    if priority == "brand" and any(color.role == "background" for color in brand.colors) and background:
+        luminance = sum(weight * int(background[index:index + 2], 16) for weight, index in ((.2126, 0), (.7152, 2), (.0722, 4)))
+        patterns = [pattern.model_copy(update={"background_color": background, "theme": "dark" if luminance < 128 else "light"}) for pattern in ds.patterns]
+    from designer.brand_assets import embed_fonts
+    resolved = embed_fonts(package, resolved)
+    updated = ds.model_copy(update={"tokens": resolved, "assets": assets,
+                                    "patterns": patterns,
+                                    "brand_rules": BrandRules.model_validate(active_rules) if active_rules else None})
     store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
     new_state = {"schema_version": 1, "file_name": filename, "sha256": source_hash, "priority": priority,
                  "brand_fields": brand_fields, "template_tokens": template.model_dump(mode="json"),
-                 "brand_tokens": brand.model_dump(mode="json")}
+                 "brand_tokens": brand.model_dump(mode="json"),
+                 "template_rules": original_rules, "brand_rules": brand_rules,
+                 "template_patterns": state.get("template_patterns") if state else [pattern.model_dump(mode="json") for pattern in ds.patterns],
+                 "source": imported.source if imported is not None else state.get("source"),
+                 "source_format": imported.source_format if imported else state.get("source_format", "json"),
+                 "warnings": list(imported.warnings) if imported else state.get("warnings", []),
+                 "assets": saved_assets}
     store.write_text_atomic(state_path, json.dumps(new_state, ensure_ascii=False, indent=2))
     return _brandbook_response(updated, new_state)
 
@@ -292,9 +356,18 @@ def remove_brandbook(ds_id: str) -> dict:
         template = Tokens.model_validate(state["template_tokens"])
     except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
         raise HTTPException(500, "Сохранённые исходные токены повреждены.") from exc
-    updated = ds.model_copy(update={"tokens": template})
+    from designer.contracts import BrandRules
+    original_rules = state.get("template_rules")
+    updated = ds.model_copy(update={"tokens": template,
+        "assets": [asset for asset in ds.assets if not asset.path.startswith("brandbook-assets/")],
+        "brand_rules": BrandRules.model_validate(original_rules) if original_rules else None})
+    if state.get("template_patterns"):
+        from designer.contracts import Pattern
+        updated.patterns = [Pattern.model_validate(pattern) for pattern in state["template_patterns"]]
     store.write_text_atomic(package / "manifest.json", updated.model_dump_json(indent=2))
     state_path.unlink(missing_ok=True)
+    import shutil
+    shutil.rmtree(package / _BRANDBOOK_ASSETS, ignore_errors=True)
     return {"design_system": updated.model_dump(mode="json"), "removed": True}
 
 
@@ -393,8 +466,8 @@ async def table_preview(file: UploadFile = File(...)) -> TablePreview:
 _MAX_PLAN_FILES = 7
 _MAX_PLAN_TABLES = 21
 _MAX_PLAN_TOTAL_BYTES = insights_table.MAX_BYTES * _MAX_PLAN_FILES
-_REFERENCE_PAGE_ROWS = 20
-_MAX_REFERENCE_PAGES = 20
+_REFERENCE_PAGE_ROWS = 7  # native PPTX table renderer limits readable tables to seven rows
+_MAX_REFERENCE_PAGES = 30  # 201 source rows need 29 slides at this page size
 _MAX_BUNDLE_SLIDES = 60
 
 
@@ -425,6 +498,14 @@ def _reference_pages(suggestion: dict, snapshot: dict) -> list[dict]:
     if pages > _MAX_REFERENCE_PAGES:
         raise HTTPException(422, f"Таблица требует {pages} слайдов; предел {_MAX_REFERENCE_PAGES}. Отфильтруйте источник.")
     result = []
+    if pages > 1:
+        summary = dict(suggestion)
+        summary.update(visual="big_number", table=None, chart=None, number=str(len(rows)),
+                       headline=f"{len(rows)} строк справочника сохранены в приложении",
+                       statement=f"Полный справочник: {pages} страниц в приложении после основных выводов; исходные значения сохранены.",
+                       data_lines=[], coverage=f"Всего {len(rows)} строк; полный постраничный показ — в приложении.")
+        summary["provenance"] = dict(summary.get("provenance") or {}, displayed_row_lines=[])
+        result.append(summary)
     for page_index in range(pages):
         start = page_index * _REFERENCE_PAGE_ROWS
         end = min(len(rows), start + _REFERENCE_PAGE_ROWS)
@@ -432,7 +513,7 @@ def _reference_pages(suggestion: dict, snapshot: dict) -> list[dict]:
         page_rows = rows[start:end]
         page_lines = lines[start:end]
         page_count = pages
-        page["headline"] = f"Справочник · строки {start + 1}–{end} из {len(rows)}"
+        page["headline"] = f"{'Приложение · ' if pages > 1 else ''}Справочник · строки {start + 1}–{end} из {len(rows)}"
         page["statement"] = f"Справочная таблица: строки {start + 1}–{end} из {len(rows)}; страница {page_index + 1} из {page_count}."
         page["table"] = {"columns": headers, "rows": page_rows}
         page["coverage"] = (f"Охват: страница {page_index + 1}/{page_count}; строки источника "
@@ -551,6 +632,11 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
     visual, chart, table_spec = "big_number", None, None
     warnings = " ".join(candidate.warnings)
     measure_label, measure_unit = field_label(candidate.measure_fields[0]) if candidate.measure_fields else ("", "")
+    # Only a literal unit declaration can supply a missing unit. Surrounding
+    # prose remains on the source line, including the original period wording.
+    if not measure_unit and any("units:" in line.casefold() and "counts" in line.casefold().split()
+                                for line in table.context):
+        measure_unit = "шт."
     dimension_label = field_label(candidate.dimension_fields[0])[0] if candidate.dimension_fields else ""
     if candidate.kind == "histogram":
         metric = candidate.measure_fields[0]
@@ -560,7 +646,7 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         values = sorted(exact_values)
         assert all(value is not None for value in values)
         numeric_values = [value for value in values if value is not None]
-        if any(not math.isfinite(float(value)) or Decimal(str(float(value))) != value for value in numeric_values):
+        if any(not chart_number_supported(value) for value in numeric_values):
             raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
         count = len(numeric_values)
 
@@ -582,30 +668,35 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
             raise HTTPException(422, "Разброс данных слишком велик для шкалы диаграммы; выберите таблицу.")
         width = 2.0 * iqr_float / math.pow(count, 1 / 3) if iqr > 0 else 0
         bins = math.ceil(span_float / width) if width > 0 else math.ceil(math.log2(count) + 1)
-        bins = min(20, max(1, bins))
+        # Retain outliers without allowing FD to create unreadable narrow bins.
+        bins = min(8, math.ceil(math.sqrt(count)), max(1, bins))
         counts = [0] * bins
         for value in numeric_values:
             index = min(bins - 1, int((value - minimum) * bins / span))
             counts[index] += 1
+        edges = [minimum + span * index / bins for index in range(bins + 1)]
+        edge_labels = [format(float(edge), ".4g") for edge in edges]
+        if len(set(edge_labels)) != len(edge_labels):
+            edge_labels = [format(edge.normalize(), "f") for edge in edges]
         categories = []
         for index in range(bins):
-            low = minimum + span * index / bins
-            high = minimum + span * (index + 1) / bins
-            low_text, high_text = format(low.normalize(), "f"), format(high.normalize(), "f")
-            categories.append(f"{low_text}–{high_text}" + ("]" if index == bins - 1 else ")"))
+            low_text, high_text = edge_labels[index:index + 2]
+            categories.append(f"[{low_text}–{high_text}" + ("]" if index == bins - 1 else ")"))
         visual = "column"
         chart = ChartSpec(type="column", title=f"Распределение · {measure_label}" + (f", {measure_unit}" if measure_unit else ""),
                           unit="наблюдений", categories=categories,
+                          x_axis_title=measure_label + (f", {measure_unit}" if measure_unit else ""),
+                          y_axis_title="Число наблюдений",
                           series=[Series(name="Число наблюдений", values=[float(value) for value in counts])])
         statement = f"Распределение {metric}: частота по {bins} интервалам; учтены все {count} значений."
         number = str(count)
         rule = "Freedman–Diaconis" if iqr > 0 else "Sturges (IQR = 0)"
-        formula = f"{rule}; {bins} равных интервалов; сумма частот = {sum(counts)}; n = {count}."
+        formula = f"{rule}, ограничение читаемости min(8, ceil(sqrt(n))); {bins} равных интервалов; подписи границ до 4 значащих цифр, при совпадении — полная точность; сумма частот = {sum(counts)}; n = {count}."
     elif candidate.kind in {"scatter", "grouped_column", "stacked_column"}:
         numeric = {}
         for field in candidate.measure_fields:
             exact = [insights_table.parse_number(row[positions[field]]) for row in source_rows]
-            if not exact or any(v is None or not math.isfinite(float(v)) or Decimal(str(float(v))) != v for v in exact):
+            if not exact or any(v is None or not chart_number_supported(v) for v in exact):
                 raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
             numeric[field] = [float(v) for v in exact]
         visual = candidate.kind
@@ -623,6 +714,8 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
             dimension = candidate.dimension_fields[0]
             chart = ChartSpec(type=visual, title=f"{' · '.join(field_label(f)[0] for f in candidate.measure_fields)} · {dimension_label}",
                               categories=[row[positions[dimension]] for row in source_rows], unit=measure_unit,
+                              x_axis_title=dimension_label,
+                              y_axis_title=" · ".join(field_label(f)[0] for f in candidate.measure_fields) + (f", {measure_unit}" if measure_unit else ""),
                               series=[Series(name=field_label(f)[0], values=numeric[f]) for f in candidate.measure_fields])
             statement = f"{' и '.join(candidate.measure_fields)} по полю «{dimension}»; исходные значения полных строк."
             formula = ("Накопление исходных компонентов в каждой категории; без нормирования; аддитивность задана автором."
@@ -634,34 +727,48 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         exact_values = [insights_table.parse_number(row[positions[measure]]) for row in source_rows]
         if not categories or any(value is None for value in exact_values):
             raise HTTPException(422, "В выбранных исходных строках есть пропуски или нечисловые значения.")
+        if any(not chart_number_supported(value) for value in exact_values):
+            raise HTTPException(422, "Точность значений не поддерживается диаграммой; выберите таблицу.")
         values = [float(value) for value in exact_values]
         if any(not math.isfinite(value) for value in values):
             raise HTTPException(422, "Значения слишком велики для диаграммы; используйте таблицу.")
         visual = candidate.kind
         chart = ChartSpec(type=visual, title=f"{measure_label} · {dimension_label}", categories=categories,
+                          x_axis_title=(measure_label + (f", {measure_unit}" if measure_unit else "")) if visual == "bar" else dimension_label,
+                          y_axis_title=dimension_label if visual == "bar" else measure_label + (f", {measure_unit}" if measure_unit else ""),
                           unit=measure_unit, series=[Series(name=measure_label, values=values)])
         statement = f"{measure} по полю «{dimension}»; показаны исходные значения без группировки."
         number = format(candidate.denominator, "f") if candidate.denominator is not None else str(len(categories))
         formula = (f"Сумма показанных долей: {candidate.denominator}; охват — {len(categories)} наблюдений."
                    if candidate.denominator is not None else f"{len(categories)} исходных наблюдений; агрегация не выполнялась.")
     elif candidate.kind == "table":
-        preview = source_rows[:20]
+        # The native slide table has a hard seven-row limit. Keep the preview
+        # readable and state the omitted-row count; the complete file and its
+        # provenance remain retained separately, never squeezed onto one slide.
+        preview = source_rows[:7]
         table_spec = TableSpec(columns=table.headers, rows=preview)
         visual = "table"
-        statement = f"Справочные данные: {len(table.rows)} строк; на слайде показаны первые {len(preview)}."
+        statement = f"Справочные данные: {len(table.rows)} строк; показаны первые {len(preview)} из {len(table.rows)}."
         number, formula = str(len(table.rows)), "Количество строк источника; значения не агрегировались."
         if len(table.rows) > len(preview):
-            warnings = (warnings + " " if warnings else "") + f"Остальные {len(table.rows) - len(preview)} строк не помещены на слайд."
+            warnings = (warnings + " " if warnings else "") + f"Слайд показывает только первую страницу; ещё {len(table.rows) - len(preview)} строк сохранены в источнике и на этот слайд не помещены."
     else:
         number = format(candidate.value or Decimal(0), "f")
         statement = f"Количество исходных записей: {number}."
         formula = "Число строк источника, включая записи с пропусками; суммы мер не вычислялись."
 
+    if candidate.statement:
+        statement = candidate.statement
+        number = candidate.number
+        formula = candidate.formula + (" " + formula if candidate.kind in {"histogram", "grouped_column"} else "")
+
     source = insights_table.file_name(filename or "таблица")
     if table.sheet:
         source += f" · лист «{table.sheet}»"
+    if table.context:
+        source += " · " + " · ".join(table.context)
     source += f" · {len(candidate.row_lines)} исходных строк"
-    displayed_lines = list(candidate.row_lines[:20] if candidate.kind == "table" else candidate.row_lines)
+    displayed_lines = list(candidate.row_lines[:7] if candidate.kind == "table" else candidate.row_lines)
     coverage = f"Охват: {len(candidate.row_lines)} из {len(table.rows)} строк; исключено: {len(candidate.excluded_row_lines)}."
     if candidate.kind == "table":
         coverage += f" На слайде: {len(displayed_lines)}; не показано: {len(candidate.row_lines) - len(displayed_lines)}."
@@ -677,7 +784,7 @@ def _materialize_plan_candidate(data: bytes, filename: str, goal: str, table_ind
         unit=measure_unit,
         denominator_field=candidate.denominator_field, warnings=list(candidate.warnings),
     )
-    headline = (f"Распределение: {measure_label}" if candidate.kind == "histogram" else
+    headline = candidate.headline or (f"Распределение: {measure_label}" if candidate.kind == "histogram" else
                 f"{measure_label}: динамика" if candidate.kind == "line" else
                 f"{measure_label} · {dimension_label}"
                 if candidate.measure_fields and candidate.dimension_fields else statement)
@@ -834,13 +941,16 @@ def create_deck(payload: DeckCreateRequest, background_tasks: BackgroundTasks,
             pipeline.generate_deck(
                 payload.design_system_id, payload.brief, payload.purpose, payload.audience,
                 payload.slide_count, _on_event, deck_id=deck_id, client=client,
-                variants=variant_codes, insights=insights, table_name=table_name,
+                variants=variant_codes, insights=insights, table_name=table_name, language=payload.language,
             )
         except Exception:
             pass  # состояние ошибки уже записано pipeline.generate_deck в store.mark_deck_failed
         finally:
             _close(client)
 
+    # Persist the pending job before returning its identifier. A fast client can
+    # otherwise poll before the background worker reaches generate_deck/init_deck.
+    store.init_deck(deck_id, payload.design_system_id, variant_codes, brief=payload.brief)
     background_tasks.add_task(_run)
     return DeckCreateResponse(deck_id=deck_id)
 
@@ -909,7 +1019,7 @@ def get_deck_file(deck_id: str, name: str) -> FileResponse:
     ensure_export(deck_id, "a")
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
-    return FileResponse(str(path))
+    return FileResponse(str(path), filename=path.name)
 
 
 @app.get("/decks/{deck_id}/{variant}/files/{name}")
@@ -926,7 +1036,7 @@ def get_deck_variant_file(deck_id: str, variant: str, name: str) -> FileResponse
         raise HTTPException(503, "Не удалось подготовить актуальный экспорт. Повторите скачивание.") from exc
     if not path.is_file():
         raise HTTPException(404, "файл не найден")
-    return FileResponse(str(path))
+    return FileResponse(str(path), filename=path.name)
 
 
 @app.get("/decks/{deck_id}/{variant}/slides/{number}/live", response_class=HTMLResponse)
@@ -938,7 +1048,7 @@ def get_live_slide(deck_id: str, variant: str, number: int):
 
 
 @app.get("/decks/{deck_id}/{variant}/slides/{number}.png")
-def get_deck_slide_image(deck_id: str, variant: str, number: str) -> FileResponse:
+def get_deck_slide_image(deck_id: str, variant: str, number: str, thumb: bool = False) -> Response:
     """Картинка слайда: ровно то, что откроется в PowerPoint."""
     try:
         path = store.deck_variant_slide_path(deck_id, variant, number)
@@ -948,6 +1058,11 @@ def get_deck_slide_image(deck_id: str, variant: str, number: str) -> FileRespons
         raise HTTPException(400, "недопустимый путь")
     if not path.is_file():
         raise HTTPException(404, "картинка слайда не найдена")
+    if thumb:
+        from designer.thumbnails import slide_thumbnail
+        stamp = path.stat()
+        return Response(slide_thumbnail(str(path), stamp.st_mtime_ns, stamp.st_size),
+                        media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
     return FileResponse(str(path), media_type="image/png")
 
 
@@ -1033,6 +1148,15 @@ def get_slide_patterns(deck_id: str, variant: str, number: int) -> SlidePatterns
     except (*_EDIT_NOT_FOUND, edit.NoHistory, ValueError) as exc:
         raise _edit_error(exc)
     return SlidePatternsResponse(items=items)
+
+
+@app.post("/decks/{deck_id}/{variant}/locale")
+def post_deck_locale(deck_id: str, variant: str, payload: DeckLocaleRequest) -> dict:
+    from designer.localization import migrate_deck_locale
+    try:
+        return migrate_deck_locale(deck_id, variant, payload.language)
+    except (*_EDIT_NOT_FOUND, ValueError) as exc:
+        raise _edit_error(exc)
 
 
 @app.post("/decks/{deck_id}/{variant}/slides/{number}/ask", response_model=DeckVariantState)
@@ -1243,7 +1367,7 @@ def _model_available(base_url: str) -> bool:
     try:
         with httpx.Client(timeout=3.0, headers=auth_headers(base_url)) as probe:
             response = probe.get(f"{base_url}/models")
-        return response.status_code < 500
+        return response.is_success
     except httpx.HTTPError:
         return False
 

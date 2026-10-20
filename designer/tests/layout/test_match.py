@@ -110,6 +110,61 @@ def test_chart_intent_goes_to_pattern_with_chart_area():
     assert choose_pattern(intent, ds, []).id == "p004"
 
 
+@pytest.mark.parametrize('payload', ['chart', 'table'])
+@pytest.mark.parametrize('kind', [SlideKind.chart, SlideKind.title])
+def test_analytical_payload_never_uses_bookends_even_after_many_repeats(payload, kind):
+    from designer.contracts import TableSpec
+    values = {'chart': ChartSpec(type='line', categories=['Jan', 'Feb'], series=[Series(name='value', values=[1, 2])])} if payload == 'chart' else {
+        'table': TableSpec(columns=['name', 'value'], rows=[['A', '8'], ['B', '']])}
+    content = _cards('content')
+    covers = [_title('cover'), _title('section'), _title('end')]
+    covers[1].kind, covers[2].kind = SlideKind.section, SlideKind.thanks
+    intent = SlideIntent(id='analysis', kind=kind, title='Observed facts', **values)
+    assert choose_pattern(intent, _ds([*covers, content]), ['content'] * 100).id == 'content'
+
+
+def test_analytical_pattern_needs_upper_readable_heading_regardless_of_classification():
+    misclassified = _title('misclassified')
+    misclassified.kind = SlideKind.chart
+    content = _cards('content')
+    intent = SlideIntent(id='analysis', kind=SlideKind.chart, title='Observed facts',
+                         chart=ChartSpec(type='line', categories=['A', 'B'], series=[Series(name='value', values=[1, 2])]))
+    assert choose_pattern(intent, _ds([misclassified, content]), ['content'] * 100).id == 'content'
+    with pytest.raises(ValueError, match='контентного образца'):
+        choose_pattern(intent, _ds([_title(), misclassified]))
+
+
+def test_analytical_selection_fails_instead_of_using_unsafe_native_content_fallback():
+    intent = SlideIntent(id='analysis', kind=SlideKind.chart, title='Observed facts',
+                         chart=ChartSpec(type='line', categories=['A', 'B'], series=[Series(name='value', values=[1, 2])]))
+    pattern = _cards('content')
+    ds = _ds([pattern])
+    ds.tokens.margins = Margins(left=.4, right=.4, top=.4, bottom=.4)
+    with pytest.raises(ValueError, match='недостаточно свободного места'):
+        choose_pattern(intent, ds)
+
+
+def test_flattened_reference_keeps_explicit_clean_analytical_fallback():
+    pattern = _pattern('flattened', SlideKind.title, slots=[])
+    pattern.background_asset = 'full-slide-reference'
+    ds = _ds([pattern])
+    ds.tokens.margins = Margins(left=.4, right=.4, top=.4, bottom=.4)
+    intent = SlideIntent(id='analysis', kind=SlideKind.chart, title='Observed facts',
+                         chart=ChartSpec(type='line', categories=['A', 'B'], series=[Series(name='value', values=[1, 2])]))
+    assert choose_pattern(intent, ds).id == 'flattened'
+
+
+def test_removable_content_blocks_keep_readable_fallback_below_preferred_area():
+    from designer.contracts import TableSpec
+    content = _cards('content')
+    ds = _ds([_title('cover'), content])
+    # Header bottom .20 plus .02 gap; content .9 × .43 = .387.
+    ds.tokens.margins = Margins(left=.05, right=.05, top=.05, bottom=.35)
+    intent = SlideIntent(id='table', kind=SlideKind.table, title='Source values',
+                         table=TableSpec(columns=['category', 'value'], rows=[['A', '8'], ['B', '']]))
+    assert choose_pattern(intent, ds, ['content'] * 100).id == 'content'
+
+
 def test_same_input_gives_same_pattern_in_any_order():
     patterns = [_title(), _cards(), _steps(), _chart()]
     intent = SlideIntent(id="s1", kind=SlideKind.cards, title="Три причины", items=_items(3))

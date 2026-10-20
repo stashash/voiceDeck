@@ -3,10 +3,27 @@ import {
  BASE_URL,absoluteUrl,assetUrl,fileUrl,fixFindings,watchDeckEvents,
  uploadDesignSystem,patchDesignSystem,listDesignSystemItems,listDecks,
  listAgents,checkAgent,getAgentAssignments,setAgentAssignments,
- patchSlideText,slidesAction,
+ patchSlideText,slidesAction,createDeck,localizeDeckLabels,
 } from './api';
 
 afterEach(()=>{vi.unstubAllGlobals();});
+
+describe('язык презентации',()=>{
+ it.each(['ru','en'] as const)('передаёт выбранный язык %s без изменения брифа',async language=>{
+  const fetchMock=vi.fn().mockResolvedValue({ok:true,json:async()=>({deck_id:'d1'})});
+  vi.stubGlobal('fetch',fetchMock);
+  await createDeck({design_system_id:'ds',brief:'ACME: 12 USD',language});
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({design_system_id:'ds',brief:'ACME: 12 USD',language});
+ });
+ it('применяет русские подписи только к выбранному варианту',async()=>{
+  const fetchMock=vi.fn().mockResolvedValue({ok:true,json:async()=>({language:'ru',numerical_evidence_unchanged:true})});
+  vi.stubGlobal('fetch',fetchMock);
+  const report=await localizeDeckLabels('d1','c');
+  expect(fetchMock.mock.calls[0][0]).toBe(`${BASE_URL}/decks/d1/c/locale`);
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({language:'ru'});
+  expect(report.numerical_evidence_unchanged).toBe(true);
+ });
+});
 
 describe('адреса',()=>{
  it('assetUrl убирает префикс assets/ из пути пакета',()=>{

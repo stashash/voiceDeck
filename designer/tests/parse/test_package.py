@@ -82,3 +82,34 @@ def test_font_embedded_state_is_extracted_or_missing(templates, tmp_path):
                 assert font.embedded_state == "extracted", f"{path.name}: {font.family}"
             else:
                 assert font.embedded_state in ("embedded_not_extracted", "missing"), f"{path.name}: {font.family}"
+
+
+def test_manifest_read_retries_transient_access_conflict(tmp_path, monkeypatch):
+    from pathlib import Path
+    import pytest
+    from pydantic import ValidationError
+    attempts=[]
+    def transient(path, **kwargs):
+        attempts.append(path)
+        if len(attempts)<3:
+            raise PermissionError("sharing violation")
+        return "{}"
+    monkeypatch.setattr(Path,"read_text",transient)
+    monkeypatch.setattr("designer.parse.package.time.sleep",lambda seconds:None)
+    with pytest.raises(ValidationError):
+        load_package(tmp_path)
+    assert len(attempts)==3
+
+
+def test_manifest_access_denied_is_bounded(tmp_path, monkeypatch):
+    from pathlib import Path
+    import pytest
+    attempts=[]
+    def denied(path, **kwargs):
+        attempts.append(path)
+        raise PermissionError("permanent access denied")
+    monkeypatch.setattr(Path,"read_text",denied)
+    monkeypatch.setattr("designer.parse.package.time.sleep",lambda seconds:None)
+    with pytest.raises(PermissionError):
+        load_package(tmp_path)
+    assert len(attempts)==4

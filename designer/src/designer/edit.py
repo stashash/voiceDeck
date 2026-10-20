@@ -13,6 +13,7 @@ agent_hook._client_for("deck") — тот же приём, что и в pipeline
 from __future__ import annotations
 
 import math
+import json
 import re
 import uuid
 from pathlib import Path
@@ -126,11 +127,42 @@ def _checks(state: _State, touched: set[str] | None = None, drop_ids: set[str] |
     drop_ids = drop_ids or set()
     kept = [f for f in state.findings if f.kind == "contextual" and f.slide_id in present
             and f.slide_id not in touched and f.id not in drop_ids]
-    return run_checks(state.scenes, state.ds) + kept
+    from designer.localization import language_findings
+    return run_checks(state.scenes, state.ds) + language_findings(state.scenes, state.plan.language) + kept
+
+
+_EDITED_DATA_WARNING = "Содержимое слайда изменено после расчёта. Источник сохранён, но вывод и значения требуют повторной сверки с данными."
+
+
+def _mark_edited_evidence(state: _State, findings: list[Finding]) -> None:
+    """Keep source identity, but never present manually changed content as verified."""
+    originals = {s["id"]: s for s in state.raw.get("plan", {}).get("slides", [])}
+    old_scenes = {s["slide_id"]: s for s in state.raw.get("scenes", [])}
+
+    def contents(elements):
+        return sorted((e.get("id", ""), e.get("text", ""),
+                       json.dumps(e.get("chart"), sort_keys=True), json.dumps(e.get("table"), sort_keys=True)) for e in elements)
+
+    for slide, scene in zip(state.plan.slides, state.scenes):
+        if slide.provenance is None:
+            continue
+        old = originals.get(slide.id)
+        before = old_scenes.get(slide.id)
+        semantic_fields = ("title", "key_message", "items", "chart", "table", "source_note")
+        changed = old is not None and any(old.get(k) != slide.model_dump().get(k) for k in semantic_fields)
+        changed = changed or (before is not None and contents(before["elements"]) != contents(
+            [e.model_dump(mode="json") for e in scene.elements]))
+        if changed and _EDITED_DATA_WARNING not in slide.provenance.warnings:
+            slide.provenance.warnings.append(_EDITED_DATA_WARNING)
+        if _EDITED_DATA_WARNING in slide.provenance.warnings:
+            findings.append(Finding(id=f"source-edited-{slide.id}", slide_id=slide.id,
+                check_id="data_source_edited", kind="deterministic", severity="warning",
+                message=_EDITED_DATA_WARNING, fix_hint="Сверьте правки с исходным файлом или отмените изменение."))
 
 
 def _persist(state: _State, findings: list[Finding]) -> None:
     """Commit the document immediately; derived files are exported separately."""
+    _mark_edited_evidence(state, findings)
     deck = Deck(id=state.deck_id, design_system_id=state.ds_id, variant=state.variant,
                 plan=state.plan, specs=state.specs, scenes=state.scenes)
     store.save_deck_result(state.deck_id, deck, findings, variant=state.variant)
@@ -720,7 +752,7 @@ def _draft_intent(intent: SlideIntent, data: dict) -> SlideIntent:
     })
 
 
-def _fit_to_pattern(intent: SlideIntent, pattern: Pattern, ds: DesignSystem, client) -> SlideIntent:
+def _fit_to_pattern(intent: SlideIntent, pattern: Pattern, ds: DesignSystem, client, language: str = "ru") -> SlideIntent:
     from designer import pipeline  # локальный импорт: те же лимиты слотов, что при генерации
 
     group = main_group(pattern)
@@ -728,16 +760,18 @@ def _fit_to_pattern(intent: SlideIntent, pattern: Pattern, ds: DesignSystem, cli
     limits, unit_limits = pipeline._role_limits(pattern, intent, n_units, ds.tokens.type_scale)
     if not limits and not unit_limits:
         return intent
-    return fill_slots(intent, limits, unit_limits, n_units, client)
+    return fill_slots(intent, limits, unit_limits, n_units, client, language=language)
 
 
-def _rewrite_intent(intent: SlideIntent, pattern: Pattern, instruction: str, ds: DesignSystem) -> SlideIntent:
+def _rewrite_intent(intent: SlideIntent, pattern: Pattern, instruction: str, ds: DesignSystem,
+                    language: str = "ru") -> SlideIntent:
+    from designer.localization import language_instruction
     client = _client_for("deck")
     try:
-        data = client.complete_json(system=_draft_system(instruction), user=_intent_material(intent),
+        data = client.complete_json(system=_draft_system(instruction) + language_instruction(language), user=_intent_material(intent),
                                      schema=_draft_schema())
         draft = _draft_intent(intent, data)
-        return _fit_to_pattern(draft, pattern, ds, client)
+        return _fit_to_pattern(draft, pattern, ds, client, language)
     finally:
         client.close()
 
@@ -750,7 +784,7 @@ def ask_agent_rewrite(deck_id: str, variant: str, slide_number: int, instruction
     if pattern is None:
         pattern = choose_pattern(intent, state.ds, [s.pattern_id for s in state.specs])
 
-    new_intent = _rewrite_intent(intent, pattern, instruction, state.ds)
+    new_intent = _rewrite_intent(intent, pattern, instruction, state.ds, getattr(state.plan, "language", "ru"))
     # Model latency must not lock the document. Recovery or a newer edit wins.
     with lock(deck_id, variant):
         if store.load_deck_state(deck_id, variant) != state.raw:

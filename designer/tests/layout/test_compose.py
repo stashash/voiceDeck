@@ -243,6 +243,23 @@ def test_visualisation_frame_goes_around_the_filled_slot():
     assert spec.viz_box is not None and spec.viz_box[1] >= 0.44 - 1e-9
 
 
+def test_image_only_template_with_invalid_margins_gets_a_readable_data_layout():
+    pattern = _cards(areas=[Area(id="full-slide", kind="image", box=(0, 0, 1, 1), shape_id=900)])
+    pattern.slots = []
+    pattern.groups = []
+    pattern.areas[0].box = (0, 0, 1, 1)
+    pattern.background_asset = "flattened-sample"
+    ds = _ds()
+    ds.tokens.margins = Margins(left=0, top=0, right=1, bottom=1)
+    chart = ChartSpec(type="column", categories=["A", "B"], series=[Series(name="Выручка", values=[4, 7])])
+    spec = compose(_intent(kind=SlideKind.chart, items=[], chart=chart, title="Выручка выросла"), pattern, ds)
+    assert spec.suppress_background_asset
+    assert all(abs(value - expected) < 1e-9 for value, expected in zip(spec.viz_box, (0.07, 0.30, 0.86, 0.58)))
+    assert 900 in spec.remove_shape_ids
+    title = next(element for element in spec.added_elements if element.id == "fallback-title")
+    assert title.text == "Выручка выросла"
+
+
 def test_fitted_size_steps_down_for_a_long_heading():
     items = [Item(heading="Причина, у которой очень длинное название", body="Коротко"), *_items(2)]
     spec = compose(_intent(items=items), _cards(), _ds())
@@ -458,6 +475,21 @@ def test_chart_frame_goes_around_the_layout_picture():
     ds.layouts = [LayoutInfo(name="макет", master_index=0, pictures=[(0.0, 0.0, 0.39, 1.0)])]
     spec = compose(_intent(kind=SlideKind.chart, items=[], key_message="", chart=chart), pattern, ds)
     assert spec.viz_box is not None and spec.viz_box[0] >= 0.39 - 1e-9
+
+
+def test_chart_frame_and_native_area_clear_preserved_edge_logo():
+    from designer.contracts import DecorShape
+    from designer.parse import geometry as geo
+    chart = ChartSpec(type='line', categories=['Jan', 'Feb'], series=[Series(name='value', values=[1, 2])])
+    pattern = _cards()
+    logo = (0.90, 0.30, 0.08, 0.20)
+    pattern.decor = [DecorShape(shape_id=999, box=logo, kind='image')]
+    pattern.areas = [Area(id='native-chart', kind='chart', box=(.05, .25, .90, .60), shape_id=998)]
+    spec = compose(_intent(kind=SlideKind.chart, items=[], key_message='', chart=chart), pattern, _ds())
+    assert spec.viz_box is not None
+    assert geo.overlap(spec.viz_box, logo) == 0
+    assert spec.viz_area_id != 'native-chart'
+    assert 999 not in spec.remove_shape_ids
 
 
 def test_qr_hint_does_not_take_the_key_message():

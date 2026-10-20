@@ -59,6 +59,7 @@ _SAMPLE_KINDS = ("chart", "table", "image")
 
 # Слайды, которые несут одну мысль: блоки и визуализация на них лишние.
 _PLAIN_KINDS = (SlideKind.title, SlideKind.section, SlideKind.thanks)
+_BOOKEND_KINDS = (SlideKind.title, SlideKind.section, SlideKind.thanks, SlideKind.cta)
 
 W_KIND = 3.0
 W_UNITS = 2.0
@@ -170,9 +171,27 @@ def _samples(pattern: Pattern) -> set[str]:
     return out
 
 
-def _viz_room(pattern: Pattern, ds: DesignSystem) -> bool:
+def _viz_room(pattern: Pattern, ds: DesignSystem, minimum: float = VIZ_ROOM) -> bool:
     """Остаётся ли после удаления блоков и образцов рамка под диаграмму или таблицу."""
-    return geo.area(content_region(pattern, ds.tokens.margins)) >= VIZ_ROOM
+    return geo.area(content_region(pattern, ds.tokens.margins)) >= minimum
+
+
+def _analytical_content_pattern(pattern: Pattern) -> bool:
+    """Data needs a content heading, never a cover selected for visual variety.
+
+    Fully flattened templates use compose's explicit clean data fallback. Native
+    covers cannot use that escape hatch: their furniture and mid-slide title
+    remain present in exported PowerPoint.
+    """
+    flattened = not pattern.slots and not any(g.unit_slots for g in pattern.groups) and (
+        bool(pattern.background_asset) or any(a.kind == "image" and a.box[2] >= .85 and a.box[3] >= .85
+                                              for a in pattern.areas))
+    if flattened:
+        return True
+    if pattern.kind in _BOOKEND_KINDS:
+        return False
+    return any(slot.role in _TITLE_ROLES and slot.box[1] <= .25 and geo.bottom(slot.box) <= .4
+               and slot.box[2] >= .45 for slot in pattern.slots)
 
 
 def _units_collide(group: RepeatGroup) -> bool:
@@ -305,6 +324,8 @@ def fits(intent: SlideIntent, pattern: Pattern, ds: DesignSystem) -> bool:
     if intent.kind is SlideKind.big_number and not _big_number_slot(pattern, ds):
         return False
     want = "chart" if intent.chart is not None else "table" if intent.table is not None else None
+    if want is not None and not _analytical_content_pattern(pattern):
+        return False
     if want is None:
         if _samples(pattern):
             return False  # чужой образец останется на слайде
@@ -405,12 +426,31 @@ def choose_pattern(intent: SlideIntent, ds: DesignSystem, used: list[str] | None
     if not ds.patterns:
         raise ValueError("в дизайн-системе нет ни одного паттерна")
     seen = list(used or [])
+    available = ds.patterns
+    if intent.chart is not None or intent.table is not None:
+        # Concrete payload wins over a model's semantic label (e.g. "title").
+        intent = intent.model_copy(update={"kind": SlideKind.chart if intent.chart is not None else SlideKind.table})
+        available = [p for p in ds.patterns if _analytical_content_pattern(p) and _in_layout(p, ds)]
+        if not available:
+            raise ValueError("В шаблоне нет читаемого контентного образца для диаграммы/таблицы; обложки и финальные слайды не используются.")
     if intent.image is not None and intent.image.path:
-        pictured = [p for p in ds.patterns if _fits_with_image(intent, p, ds)]
+        pictured = [p for p in available if _fits_with_image(intent, p, ds)]
         if pictured:
             return min(pictured, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))
     if intent.kind is SlideKind.big_number and not any(_big_number_slot(p, ds) for p in ds.patterns):
         # В шаблоне нет слайда с крупной цифрой: число уходит в заголовок раздела, а не в мелкую плашку.
         intent = intent.model_copy(update={"kind": SlideKind.section})
-    suitable = [p for p in ds.patterns if fits(intent, p, ds)]
-    return min(suitable or ds.patterns, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))
+    suitable = [p for p in available if fits(intent, p, ds)]
+    if (intent.chart is not None or intent.table is not None) and not suitable:
+        want = "chart" if intent.chart is not None else "table"
+        # The .40 area is a preference. Removable content blocks can still leave
+        # a readable .35+ frame (the scene's minimum), without admitting covers
+        # or incompatible sample imagery into the fallback pool.
+        suitable = [p for p in available if not (_samples(p) - {want}) and _viz_room(p, ds, .35)]
+    if (intent.chart is not None or intent.table is not None) and not suitable:
+        # A flattened reference has a deliberate clean compose fallback even if
+        # its extracted margins are unusable. Native unsafe content does not.
+        available = [p for p in available if not p.slots and not any(g.unit_slots for g in p.groups)]
+        if not available:
+            raise ValueError("В контентных образцах шаблона недостаточно свободного места для читаемой диаграммы/таблицы.")
+    return min(suitable or available, key=lambda p: (-score_pattern(intent, p, seen, ds), p.id))

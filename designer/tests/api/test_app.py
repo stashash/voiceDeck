@@ -40,6 +40,32 @@ def _mock_llm(payload: dict) -> LlmClient:
     return LlmClient("http://test/v1", "model", transport=httpx.MockTransport(handler))
 
 
+@pytest.mark.parametrize("language", [None, "ru", "en"])
+def test_creation_language_reaches_background_pipeline(client, monkeypatch, language):
+    captured = {}
+    def generate(*args, **kwargs):
+        captured.update(kwargs)
+    monkeypatch.setattr("designer.pipeline.generate_deck", generate)
+    app.dependency_overrides[get_llm_client] = lambda: _mock_llm({})
+    payload = {"design_system_id": "ds", "brief": "A short brief"}
+    if language:
+        payload["language"] = language
+    response = client.post("/decks", json=payload)
+    assert response.status_code == 200
+    assert captured["language"] == (language or "ru")
+
+
+def test_existing_deck_locale_endpoint_is_ru_only_and_calls_supported_helper(client, monkeypatch):
+    captured = []
+    def migrate(*args):
+        captured.append(args)
+        return {"language": "ru", "numerical_evidence_unchanged": True}
+    monkeypatch.setattr("designer.localization.migrate_deck_locale", migrate)
+    response = client.post("/decks/example/a/locale", json={"language": "ru"})
+    assert response.status_code == 200 and captured == [("example", "a", "ru")]
+    assert client.post("/decks/example/a/locale", json={"language": "en"}).status_code == 422
+
+
 def _loading_llm() -> LlmClient:
     """Сервер модели, у которого модель грузится: LM Studio отвечает 400 «Failed to load model»."""
     def handler(request: httpx.Request) -> httpx.Response:
@@ -194,11 +220,13 @@ def test_create_deck_with_variants_and_old_paths_still_respond(client, templates
     for variant in ("a", "b", "c"):
         response = client.get(f"/decks/{deck_id}/{variant}/files/deck.pptx")
         assert response.status_code == 200
+        assert response.headers["content-disposition"] == 'attachment; filename="deck.pptx"'
 
     # прежний путь без варианта отвечает тем же файлом, что и вариант a
     old = client.get(f"/decks/{deck_id}/files/deck.pptx")
     new_a = client.get(f"/decks/{deck_id}/a/files/deck.pptx")
     assert old.status_code == 200
+    assert old.headers["content-disposition"] == 'attachment; filename="deck.pptx"'
     assert old.content == new_a.content
 
 
@@ -717,3 +745,29 @@ def test_live_draft_puts_spoken_words_on_template_without_model(client, template
 
     assert response.status_code == 200
     assert "3 месяца" in response.json()["html"]
+
+
+def test_slide_thumbnail_is_small_and_invalidated_after_render(client):
+    from PIL import Image
+    from io import BytesIO
+    path = store.deck_variant_slide_path("thumbnail-test", "a", "1")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (1600,900), "red").save(path)
+    response=client.get("/decks/thumbnail-test/a/slides/1.png?thumb=true")
+    assert response.status_code==200 and response.headers["content-type"]=="image/webp"
+    with Image.open(BytesIO(response.content)) as image:
+        assert image.width==320 and image.height==180
+        assert image.getpixel((0,0))[0]>200
+    Image.new("RGB", (1600,900), "blue").save(path)
+    updated=client.get("/decks/thumbnail-test/a/slides/1.png?thumb=true")
+    assert updated.content!=response.content
+    assert client.get("/decks/thumbnail-test/a/slides/1.png").headers["content-type"]=="image/png"
+
+
+@pytest.mark.parametrize("status,expected", [(200,True),(401,False),(403,False),(404,False),(500,False)])
+def test_model_health_rejects_http_errors(monkeypatch,status,expected):
+    from importlib import import_module
+    module=import_module("designer.api.app")
+    original=httpx.Client
+    monkeypatch.setattr(module.httpx,"Client",lambda **kwargs: original(transport=httpx.MockTransport(lambda request:httpx.Response(status))))
+    assert module._model_available("http://test/v1") is expected

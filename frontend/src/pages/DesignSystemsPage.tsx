@@ -156,7 +156,7 @@ function BrandbookPanel({ id, onApplied }: { id: string; onApplied: (ds: DesignS
 
   async function importFile(file?: File) {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.json')) { setError('Загрузите файл токенов .json.'); return; }
+    if (!/\.(json|pdf|zip|fig)$/i.test(file.name)) { setError('Поддерживаются JSON-токены, PDF-гайдлайн, Figma .fig и ZIP с токенами и материалами.'); return; }
     setBusy(true); setError('');
     try {
       const next = await uploadBrandbook(id, file, priority);
@@ -189,18 +189,24 @@ function BrandbookPanel({ id, onApplied }: { id: string; onApplied: (ds: DesignS
 
   return <section className="card tight" aria-label="Брендбук" style={{ marginBottom: 20 }}>
     <h2>Брендбук и токены</h2>
-    <p className="muted">Загрузите локальный JSON с цветами, шрифтами, кеглями и полями. Аналитика не меняется, меняется только оформление.</p>
+    <p className="muted">Примеры для проверки: <a href="/brandbooks/local-tokens.json" download>JSON</a> · <a href="/brandbooks/local-brandbook.pdf" download>PDF-гайдлайн</a> · <a href="/brandbooks/local-brandbook.zip" download>Брендбук с логотипом</a> · <a href="/brandbooks/local-demo.fig" download>Figma .fig</a> · <a href="/brandbooks/local-assets-only.zip" download>Материалы без токенов</a>.</p>
+    <p className="muted">Импортируйте JSON-токены, PDF-гайдлайн с подписанными цветами и шрифтами, Figma .fig (до 20 МБ) или ZIP с JSON, логотипами и правилами сетки. Нативный .fig разбирается локально в браузере: заливки, шрифты и явная колоночная сетка. ZIP применяет правила логотипа и сетки из JSON.</p>
     <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
       <label className="button" style={{ cursor: busy ? 'wait' : 'pointer' }}>
-        <Upload size={16} strokeWidth={1.5}/>{busy ? 'Применяем…' : state?.file_name ? 'Заменить JSON' : 'Загрузить JSON'}
-        <input type="file" accept=".json,application/json" disabled={busy} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} style={{ display: 'none' }}/>
+        <Upload size={16} strokeWidth={1.5}/>{busy ? 'Разбираем…' : state?.file_name ? 'Заменить файл' : 'Импортировать'}
+        <input type="file" accept=".json,.pdf,.zip,.fig,application/json,application/pdf,application/zip" disabled={busy} onChange={event => { void importFile(event.target.files?.[0]); event.target.value = ''; }} style={{ display: 'none' }}/>
       </label>
       <label>Приоритет <select value={priority} disabled={busy} onChange={event => void changePriority(event.target.value as 'brand' | 'template')}>
         <option value="brand">Брендбук</option><option value="template">Шаблон</option>
       </select></label>
       {state?.file_name && <button type="button" className="button" disabled={busy} onClick={() => void clear()}>Убрать брендбук</button>}
     </div>
-    {state?.file_name && <p className="muted" role="status">{state.file_name} · приоритет: {state.priority === 'brand' ? 'брендбук' : 'шаблон'} · применены: {state.applied_fields.join(', ') || 'нет токенов'}</p>}
+    {state?.file_name && <div className="muted" role="status">
+      <p>{state.source?.file_name || state.file_name} · формат: {state.source?.format || state.source_format || 'json'} · приоритет: {state.priority === 'brand' ? 'брендбук' : 'шаблон'} · применены: {state.applied_fields.join(', ') || 'нет токенов'}</p>
+      {state.source?.sha256 && <p>SHA-256 исходного файла: {state.source.sha256}</p>}
+      {Boolean(state.assets?.length) && <p>Материалов: {state.assets!.length}. Логотип размещается по явным правилам JSON.</p>}
+      {Array.from(new Set([...(state.warnings ?? []), ...(state.source?.warnings ?? [])])).map(warning => <p key={warning}>{warning}</p>)}
+    </div>}
     {error && <p className="notice" role="alert">{error}</p>}
   </section>;
 }

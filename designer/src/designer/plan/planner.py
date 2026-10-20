@@ -7,18 +7,20 @@ from designer import icons
 from designer.contracts import ChartSpec, DeckPlan, SlideKind
 from designer.llm.client import LlmClient
 from designer.llm.skills import load_skill
+from designer.localization import language_instruction, prose_language_violations
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _SKILL_NAME = "plan-deck"
 
 
 def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, client: LlmClient,
-              visuals_ready: bool = False) -> DeckPlan:
+              visuals_ready: bool = False, language: str = "ru") -> DeckPlan:
     """visuals_ready: слайды с диаграммами уже собраны из таблицы, план их не обязан делать."""
     skill = load_skill(_SKILL_NAME)
     schema = plan_schema()
     system = skill.render(purpose=purpose, audience=audience, slide_count_hint=_slide_count_hint(slide_count),
                           icon_names=icons.names_text())
+    system += language_instruction(language)
 
     data = client.complete_json(system=system, user=brief, schema=schema, params=skill.params)
     plan = DeckPlan.model_validate(data)
@@ -30,12 +32,16 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
     if not visuals_ready:
         violations += _visualization_violations(plan, brief)
     violations += _content_violations(plan)
+    violations += prose_language_violations(plan.slides, language)
     if violations:
         retry_user = brief + "\n\nВ прошлом ответе нарушения: " + "; ".join(violations) + ". Исправь и ответь заново."
         data = client.complete_json(system=system, user=retry_user, schema=schema, params=skill.params)
         plan = DeckPlan.model_validate(data)
         _drop_numbers_missing_from_brief(plan, brief)
+        if prose_language_violations(plan.slides, language):
+            raise ValueError(f"The model did not produce the requested presentation language: {language}")
     _settle_empty(plan)
+    plan.language = language
     # Идентификаторы ставит код: модель возвращает их пустыми или повторяет, а по ним находки аудита привязаны к слайдам.
     for index, slide in enumerate(plan.slides, start=1):
         slide.id = f"s{index}"
