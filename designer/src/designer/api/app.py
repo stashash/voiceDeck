@@ -441,6 +441,19 @@ def get_design_system_asset(ds_id: str, name: str) -> FileResponse:
 
 # ---------- колоды ----------
 
+@app.get("/datasets/{dataset_id}/source")
+def download_source(dataset_id: str) -> Response:
+    from designer.export.sources import verified_source
+    from urllib.parse import quote
+    try:
+        snapshot, raw = verified_source(dataset_id)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(404, "Проверенный исходный файл не найден.") from exc
+    return Response(raw, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(snapshot['file_name'])}",
+                             "X-Source-SHA256": snapshot["source_sha256"]})
+
+
 @app.get("/decks", response_model=DeckListResponse)
 def list_decks() -> DeckListResponse:
     return DeckListResponse(items=[d for d in pipeline.list_decks() if not (store.deck_dir(d['id']) / '.deleted').exists()])
@@ -466,8 +479,6 @@ async def table_preview(file: UploadFile = File(...)) -> TablePreview:
 _MAX_PLAN_FILES = 7
 _MAX_PLAN_TABLES = 21
 _MAX_PLAN_TOTAL_BYTES = insights_table.MAX_BYTES * _MAX_PLAN_FILES
-_REFERENCE_PAGE_ROWS = 7  # native PPTX table renderer limits readable tables to seven rows
-_MAX_REFERENCE_PAGES = 30  # 201 source rows need 29 slides at this page size
 _MAX_BUNDLE_SLIDES = 60
 
 
@@ -484,49 +495,12 @@ def _json_safe(value):
     return value
 
 
-def _reference_pages(suggestion: dict, snapshot: dict) -> list[dict]:
-    """Split a large reference dataset into readable, provenance-bounded slide pages."""
-    if suggestion.get("visual") != "table":
-        return [suggestion]
-    table = snapshot.get("table") or {}
-    rows = table.get("rows") or []
-    lines = table.get("row_lines") or []
-    headers = table.get("headers") or []
-    if not rows or len(rows) != len(lines) or len(headers) != len(rows[0]):
-        raise HTTPException(422, "Исходная таблица неполна и не может быть разбита на страницы.")
-    pages = math.ceil(len(rows) / _REFERENCE_PAGE_ROWS)
-    if pages > _MAX_REFERENCE_PAGES:
-        raise HTTPException(422, f"Таблица требует {pages} слайдов; предел {_MAX_REFERENCE_PAGES}. Отфильтруйте источник.")
-    result = []
-    if pages > 1:
-        summary = dict(suggestion)
-        summary.update(visual="big_number", table=None, chart=None, number=str(len(rows)),
-                       headline=f"{len(rows)} строк справочника сохранены в приложении",
-                       statement=f"Полный справочник: {pages} страниц в приложении после основных выводов; исходные значения сохранены.",
-                       data_lines=[], coverage=f"Всего {len(rows)} строк; полный постраничный показ — в приложении.")
-        summary["provenance"] = dict(summary.get("provenance") or {}, displayed_row_lines=[])
-        result.append(summary)
-    for page_index in range(pages):
-        start = page_index * _REFERENCE_PAGE_ROWS
-        end = min(len(rows), start + _REFERENCE_PAGE_ROWS)
-        page = dict(suggestion)
-        page_rows = rows[start:end]
-        page_lines = lines[start:end]
-        page_count = pages
-        page["headline"] = f"{'Приложение · ' if pages > 1 else ''}Справочник · строки {start + 1}–{end} из {len(rows)}"
-        page["statement"] = f"Справочная таблица: строки {start + 1}–{end} из {len(rows)}; страница {page_index + 1} из {page_count}."
-        page["table"] = {"columns": headers, "rows": page_rows}
-        page["coverage"] = (f"Охват: страница {page_index + 1}/{page_count}; строки источника "
-                            f"{page_lines[0]}–{page_lines[-1]} из {len(rows)}; пропуски показаны как в источнике.")
-        page["formula"] = f"Постраничный показ исходных строк; {len(rows)} строк всего; без агрегации."
-        page["data_lines"] = [" | ".join([*headers, *row]) for row in page_rows]
-        provenance = dict(page.get("provenance") or {})
-        provenance.update({"displayed_row_lines": page_lines, "formula": page["formula"],
-                           "missing_policy": "preserve_all_rows", "page_index": page_index + 1,
-                           "page_count": page_count})
-        page["provenance"] = provenance
-        result.append(page)
-    return result
+def _reference_pages(suggestion: dict, snapshot: dict, mode: str = "compact") -> list[dict]:
+    from designer.reference_display import table_pages
+    try:
+        return table_pages(suggestion, snapshot, mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def _bundle_plan(inputs: list[tuple[str, bytes]], goal: str) -> list[DatasetTablePlan]:
@@ -834,16 +808,19 @@ async def materialize_plan_bundle(bundle_id: str = Form(...), selections: str = 
             if hashlib.sha256(raw).hexdigest() != by_id[dataset_id]["source_sha256"]:
                 raise ValueError("Контрольная сумма исходного файла не совпадает.")
             validated.append((dataset_id, raw, snapshot["file_name"], bundle["goal"], snapshot["table_index"],
-                              choice["candidate_kind"], json.dumps(choice["required_fields"])))
+                              choice["candidate_kind"], json.dumps(choice["required_fields"]), choice.get("table_display", "compact")))
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(422, f"Пакет не может быть использован: {exc}") from exc
     results = []
     suggestions = []
     for dataset_id, *args in validated:
+        mode = args.pop()
+        if mode not in {"compact", "full"}:
+            raise HTTPException(422, "table_display must be compact or full")
         result = await run_in_threadpool(_materialize_plan_candidate, *args)
         item = store.load_insights(result.id)
         results.append(item)
-        suggestions.extend(_reference_pages(dict(item["suggestions"][0]), store.load_dataset(dataset_id)))
+        suggestions.extend(_reference_pages(dict(item["suggestions"][0]), store.load_dataset(dataset_id), mode))
         if len(suggestions) > _MAX_BUNDLE_SLIDES:
             raise HTTPException(422, f"Выбор создаёт больше {_MAX_BUNDLE_SLIDES} слайдов; уменьшите число таблиц или объём справочника.")
     for index, suggestion in enumerate(suggestions, start=1):
@@ -976,6 +953,8 @@ def get_deck(deck_id: str) -> DeckStateResponse:
         raise _not_found()
 
     variant_states = {code: _variant_state(deck_id, code) for code in variant_codes}
+    from designer.variant_comparison import compare_exported_variants
+    compare_exported_variants(deck_id, variant_states)
     primary = variant_states.get("a") or next(iter(variant_states.values()))
     return DeckStateResponse(
         status=primary.status, design_system_id=primary.design_system_id, plan=primary.plan,

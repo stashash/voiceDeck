@@ -40,6 +40,9 @@ def make_plan(brief: str, purpose: str, audience: str, slide_count: int | None, 
         _drop_numbers_missing_from_brief(plan, brief)
         if prose_language_violations(plan.slides, language):
             raise ValueError(f"The model did not produce the requested presentation language: {language}")
+    if visuals_ready:
+        from designer.reference_display import clean_instruction_echoes
+        plan, _, _ = clean_instruction_echoes(plan)
     _settle_empty(plan)
     plan.language = language
     # Идентификаторы ставит код: модель возвращает их пустыми или повторяет, а по ним находки аудита привязаны к слайдам.
@@ -90,6 +93,10 @@ def _content_violations(plan: DeckPlan) -> list[str]:
     """Слайд без содержания выходит пустым: модель склонна писать данные в notes, а items и chart оставлять пустыми."""
     violations: list[str] = []
     for slide in plan.slides:
+        text = " ".join([slide.title, slide.key_message, *(i.heading + " " + i.body for i in slide.items)])
+        if re.search(r"(?:слайды.{0,70}уже (?:готовы|подготовлены)|готовые слайды.{0,60}по (?:темам|каждой теме)|"
+                     r"slides.{0,50}already (?:ready|prepared))", text, re.I):
+            violations.append(f"слайд {slide.id}: служебная инструкция о готовых слайдах попала в рассказ; замени содержанием из брифа или убери")
         if slide.kind in _LIST_KINDS and len(slide.items) < 2:
             violations.append(f"слайд {slide.id} ({slide.kind.value}): в items меньше двух пунктов")
         elif slide.kind == SlideKind.big_number and not any(item.number for item in slide.items):

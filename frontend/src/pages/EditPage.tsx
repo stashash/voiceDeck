@@ -25,9 +25,11 @@ const selectable=deckSelectable;
 
 const ASK_CHIPS = ['Короче', 'Сделай диаграммой', 'Вынести вывод в заголовок'];
 const FORMATS: { ext: string; label: string }[] = [
+  { ext: 'bundle.zip', label: 'полный комплект для передачи: слайды и исходники' },
   { ext: 'pptx', label: 'для правки в PowerPoint' },
   { ext: 'pdf', label: 'для рассылки' },
   { ext: 'html', label: 'для показа в браузере' },
+  { ext: 'sources.zip', label: 'все исходные файлы и строки — приложите к PPTX/PDF' },
 ];
 
 export default function EditPage({ deckId, variant, onVariantChange }: { deckId: string; variant: string; onVariantChange?: (variant: string) => void }) {
@@ -324,10 +326,14 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           return <a key={v} className={`edit-variant-tab ${v === variant ? 'active' : ''}`}
             href={`#/decks/${deckId}/edit/${v}`} onClick={onVariantChange ? e => { e.preventDefault(); if (has){manualChange();onVariantChange(v);} } : undefined} aria-current={v === variant ? 'page' : undefined}
             title={v === 'a' || !has ? undefined : 'Проверки смысла у этого варианта не было'}>
-            Вариант {v === 'a' ? 1 : v === 'b' ? 2 : 3}
+            Вариант {v === 'a' ? 1 : v === 'b' ? 2 : 3}{state?.variants[v]?.comparison_to_a?.exact_duplicate ? ' · копия 1' : ''}
           </a>;
         })}
       </div>
+      {active?.comparison_to_a?.near_duplicate && <p role="status" className="gen-note">
+        {active.comparison_to_a.same_pages} из {active.comparison_to_a.total_pages} слайдов совпадают с вариантом 1.
+        {' '}Отдельный дизайн не получился: безопасные варианты этого шаблона ограничены.
+      </p>}
       <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
         {active?.plan?.language !== 'en' && <button type="button" className="button" disabled={busy || waitingText || !active}
           title="Локализовать известные подписи данных в этом варианте. Числа и исходники сохраняются; прежние файлы архивируются. Непереведённые названия отмечаются в проверке."
@@ -336,7 +342,8 @@ export default function EditPage({ deckId, variant, onVariantChange }: { deckId:
           <Download size={18} strokeWidth={1.5}/>Скачать
         </button>
         {downloadOpen && <ul role="menu" aria-label="Формат файла" className="download-menu">
-          {FORMATS.map(f => <li key={f.ext} role="menuitem" tabIndex={0}>
+            {FORMATS.filter(f => !f.ext.endsWith('.zip') || active?.plan?.slides.some(slide => slide.provenance))
+              .map(f => <li key={f.ext} role="menuitem" tabIndex={0}>
             <a className="download-item" href={fileUrl(deckId, variant, `deck.${f.ext}`)} download onClick={() => setDownloadOpen(false)}>
               <span className="download-item-ext">{f.ext}</span><span className="download-item-sub">{f.label}</span>
             </a>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { DatasetTablePlan, errorText, VisualizationCandidate } from './api';
-import { analyzePersistedBundle, candidateKey, DatasetSelection, PersistedBundle, selectedCandidates } from './datasetBundle';
+import { BASE_URL, DatasetTablePlan, errorText, VisualizationCandidate } from './api';
+import { analyzePersistedBundle, candidateKey, DatasetSelection, PersistedBundle, selectedCandidates, TableDisplay, tableDisplayEstimate } from './datasetBundle';
 
 const MAX_FILES = 7;
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -33,7 +33,7 @@ function explain(candidate: VisualizationCandidate): string {
     grouped_column: 'Сопоставляет согласованные показатели внутри одной категории, например факт и план.',
     stacked_column: 'Показывает явно запрошенный состав показателя. Суммируемость компонентов требует проверки автора.',
     kpi: 'Выделяет один проверяемый итоговый показатель с указанным способом расчёта.',
-    table: 'Сохраняет исходные значения и пропуски. Большой справочник будет вынесен в приложение.',
+    table: 'Сохраняет исходные значения и пропуски. Для большой таблицы выберите фрагмент с полным исходником или все строки на слайдах.',
   };
   return `${messages[candidate.kind]} Поля: ${fields || 'все исходные колонки'}.`;
 }
@@ -57,6 +57,7 @@ export function SemanticDataPlan({ brief = '', onCreate, creating = false }: { b
   const [activeDataset, setActiveDataset] = useState(0);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [included, setIncluded] = useState<Record<string, boolean>>({});
+  const [tableDisplay, setTableDisplay] = useState<Record<string, TableDisplay>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const context = JSON.stringify([brief, goal, files.map(file => [file.name, file.size, file.lastModified])]);
@@ -73,7 +74,7 @@ export function SemanticDataPlan({ brief = '', onCreate, creating = false }: { b
     return dataset.plan.candidates.find(candidate => candidateKey(candidate) === key)
       ?? dataset.plan.selected_candidate;
   }, [dataset, selected]);
-  const selections = result ? selectedCandidates(result, selected, included) : [];
+  const selections = result ? selectedCandidates(result, selected, included, tableDisplay) : [];
   const unsupported = result?.datasets.filter(item => included[item.dataset_id] !== false &&
     !item.plan.candidates.some(candidate => candidate.renderable && candidateKey(candidate) ===
       (selected[item.dataset_id] ?? candidateKey(item.plan.selected_candidate)))).length ?? 0;
@@ -213,6 +214,23 @@ export function SemanticDataPlan({ brief = '', onCreate, creating = false }: { b
           <p>Поля: {selectedCandidate.required_fields.join(', ') || 'все исходные поля без агрегации'}</p>
           {selectedCandidate.excluded_row_lines.length > 0 && <p>Строки с пропусками: {selectedCandidate.excluded_row_lines.join(', ')}</p>}
           {selectedCandidate.warnings.map(warning => <p key={warning} className="semantic-plan-warning">{warning}</p>)}
+          {selectedCandidate.kind === 'table' && dataset.rows > 20 && <fieldset disabled={creating}>
+            <legend>Как показать большую таблицу</legend>
+            <label><input type="radio" name={`table-display-${dataset.dataset_id}`}
+              checked={(tableDisplay[dataset.dataset_id] ?? 'compact') === 'compact'}
+              onChange={() => setTableDisplay(current => ({ ...current, [dataset.dataset_id]: 'compact' }))}/>
+              Кратко — 1 слайд с первыми 7 строками + все {dataset.rows} строк в исходнике (по умолчанию)</label>
+            <br/>
+            <label><input type="radio" name={`table-display-${dataset.dataset_id}`}
+              disabled={tableDisplayEstimate(dataset.rows, 'full') > 30}
+              checked={tableDisplay[dataset.dataset_id] === 'full'}
+              onChange={() => setTableDisplay(current => ({ ...current, [dataset.dataset_id]: 'full' }))}/>
+              Полностью — {tableDisplayEstimate(dataset.rows, 'full')} слайдов в приложении
+              {tableDisplayEstimate(dataset.rows, 'full') > 30 ? ' (предел 30; используйте исходник)' : ''}</label>
+            <p>Фрагмент не является репрезентативной выборкой. В HTML доступны поиск и скачивание всех строк без сети.
+              При пересылке PPTX/PDF приложите архив исходников или скачайте весь комплект.</p>
+          </fieldset>}
+          <a href={`${BASE_URL}/datasets/${encodeURIComponent(dataset.dataset_id)}/source`} download>Скачать полный исходный файл · {dataset.rows} строк в этой таблице</a>
         </div>}
         {onCreate && <button type="button" className="button primary"
           disabled={busy || creating || !selections.length || unsupported > 0} onClick={() => void onCreate(result, selections)}>

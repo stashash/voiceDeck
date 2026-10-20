@@ -87,3 +87,28 @@ def test_failed_export_retries_without_losing_document(tmp_path, monkeypatch):
     edit_runtime.ensure_export(deck_id, 'a')
     assert len(attempts) == 2
     assert store.load_deck_state(deck_id, 'a')['revision'] == 'new'
+
+
+def test_new_export_retires_old_pdf_sources_and_removed_slide_images(tmp_path, monkeypatch):
+    monkeypatch.setenv(store.DATA_DIR_ENV, str(tmp_path / 'data'))
+    store.init_deck("deck", "ds")
+    store._write_json(store.deck_variant_state_path("deck", "a"), {"revision": "short"})
+    files = store.deck_variant_files_dir("deck", "a")
+    slides = store.deck_variant_slides_dir("deck", "a")
+    for name in ("deck.pdf", "deck.sources.zip", "deck.bundle.zip", "sources-manifest.json"):
+        (files / name).write_bytes(b"old")
+    (slides / "slide-001.png").write_bytes(b"old first")
+    (slides / "slide-029.png").write_bytes(b"removed last")
+    monkeypatch.setattr(edit, "_load", lambda *_: SimpleNamespace(raw={"revision": "short"}))
+    def export(state, directory):
+        (directory / "deck.html").write_text("new")
+        (directory / "slides").mkdir()
+        (directory / "slides" / "slide-001.png").write_bytes(b"new first")
+    monkeypatch.setattr(edit, "_export_files", export)
+    edit_runtime.ensure_export("deck", "a")
+    assert not (files / "deck.pdf").exists()
+    assert not (files / "deck.sources.zip").exists()
+    assert not (files / "deck.bundle.zip").exists()
+    assert not (files / "sources-manifest.json").exists()
+    assert (slides / "slide-001.png").read_bytes() == b"new first"
+    assert not (slides / "slide-029.png").exists()

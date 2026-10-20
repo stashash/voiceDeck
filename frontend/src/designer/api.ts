@@ -37,7 +37,8 @@ export type DesignSystemListItem = {
 };
 
 // ---------- план и сцена ----------
-export type SlideIntent = { id: string; kind: string; title: string; key_message: string; notes?: string };
+export type SlideIntent = { id: string; kind: string; title: string; key_message: string; notes?: string;
+  provenance?: { dataset_id: string; source_sha256: string; total_rows: number; displayed_row_lines: number[]; table_display?: string | null } | null };
 export type DeckPlan = { title: string; purpose: string; audience: string; language: string; slides: SlideIntent[] };
 export type TextStyle = { size_pt?: number | null; bold?: boolean; italic?: boolean; color?: string | null; align?: 'left' | 'center' | 'right' | null };
 export type Element = {
@@ -55,6 +56,7 @@ export type Finding = {
 
 // ---------- состояние колоды ----------
 export type DeckVariantState = {
+  comparison_to_a?: { basis: string; same_pages: number; total_pages: number; exact_duplicate: boolean; near_duplicate: boolean } | null;
   revision?: string | null;
   /** Правка, по которой нарисованы картинки слайдов: пока не равна revision, экспорт ещё идёт. */
   images_revision?: string | null;

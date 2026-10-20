@@ -127,21 +127,21 @@ def test_reference_201_pages_follow_main_messages_with_all_rows_and_provenance(c
     bundle = client.post("/insights/plan", files={"files": ("reference_201.csv", data)}, data={"goal": "reference"}).json()
     dataset = bundle["datasets"][0]
     response = client.post("/insights/plan/materialize-bundle", data={"bundle_id": bundle["id"], "selections": json.dumps([
-        {"dataset_id": dataset["dataset_id"], "candidate_kind": "table", "required_fields": ["reference_id", "label"]}
+        {"dataset_id": dataset["dataset_id"], "candidate_kind": "table", "required_fields": ["reference_id", "label"], "table_display": "full"}
     ])})
     assert response.status_code == 200, response.text
     suggestions = [Suggestion(**item) for item in store.load_insights(response.json()["id"])["suggestions"]]
-    assert len(suggestions) == 30 and suggestions[0].visual == "big_number"
+    assert len(suggestions) == 29 and all(s.visual == "table" for s in suggestions)
     plan = DeckPlan(title="Report", purpose="Review", audience="Team", slides=[
         SlideIntent(id="s1", kind=SlideKind.title, title="Report"),
         SlideIntent(id="s2", kind=SlideKind.cta, title="Next step"),
     ])
     insert_insight_slides(plan, suggestions)
     _append_reference_pages(plan)
-    assert plan.slides[2].title == "Next step"
-    pages = plan.slides[3:]
+    assert plan.slides[1].title == "Next step"
+    pages = plan.slides[2:]
     assert len(pages) == 29 and all(slide.title.startswith("Приложение") for slide in pages)
     assert [row for slide in pages for row in slide.table.rows] == read_table(data, "reference_201.csv").rows
     assert [line for slide in pages for line in slide.provenance.displayed_row_lines] == list(range(2, 203))
     assert len({slide.provenance.source_sha256 for slide in pages}) == 1
-    assert [slide.id for slide in plan.slides] == [f"s{i}" for i in range(1, 33)]
+    assert [slide.id for slide in plan.slides] == [f"s{i}" for i in range(1, 32)]

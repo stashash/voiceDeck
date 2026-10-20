@@ -509,7 +509,7 @@ def generate_deck(ds_id: str, brief: str, purpose: str, audience: str, slide_cou
                 with_contextual_audit=(variant_code == first_variant),
             )
             store.save_run(deck_id, recorder.manifest(design_system_id=ds_id), variant=variant_code,
-                            axis=variant_axes.VARIANT_AXES.get(variant_code, ""))
+                            axis=variant_axes.actual_axis(variant_code, plan, plans[variant_code]))
             decks[variant_code] = deck
 
         _emit(on_event, "done")
@@ -606,6 +606,8 @@ def _build_and_export_variant(deck_id: str, ds_id: str, variant_code: str, varia
         _emit(on_event, "convert", None, variant_code)
         _emit(on_event, "slide-images-skipped", None, variant_code)
 
+    from designer.export.sources import export_source_package
+    export_source_package(variant_plan, files_dir)
     sampled_indices = _automatic_contextual_indices(variant_plan)
     audited_indices = [i for i in sampled_indices if i < len(png_paths)] if with_contextual_audit else []
     if png_paths and with_contextual_audit:
@@ -831,6 +833,8 @@ def apply_fixes(deck_id: str, variant: str, finding_ids: list[str]) -> tuple[lis
             html_text = render_deck_images(deck, ds, [path.read_bytes() for path in png_paths])
             (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
 
+    from designer.export.sources import export_source_package
+    export_source_package(deck.plan, files_dir)
     store.save_deck_result(deck_id, deck, all_findings, variant=variant)
     return report, all_findings
 

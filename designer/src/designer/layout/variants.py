@@ -37,6 +37,14 @@ def make_variants(plan: DeckPlan, ds: DesignSystem) -> dict[str, DeckPlan]:
     }
 
 
+def actual_axis(variant: str, original: DeckPlan, result: DeckPlan) -> str:
+    if variant == "b" and len(result.slides) == len(original.slides):
+        return "Уплотнение не применилось: нет безопасно объединяемых слайдов; возможны совпадения с A."
+    if variant == "c" and result == original:
+        return "Альтернативный подбор макетов; аналитические данные уже показаны. Отличия от A зависят от доступных шаблонов."
+    return VARIANT_AXES.get(variant, "")
+
+
 def variant_used_seed(variant: str, chosen_by_a: list[str]) -> list[str]:
     """Стартовый список занятых паттернов для choose_pattern при сборке слайдов варианта.
 

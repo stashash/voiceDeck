@@ -136,6 +136,11 @@ export default function GenerationPage({ deckId }: { deckId: string }) {
               <Check size={16} strokeWidth={1.5} color="var(--success)"/>
               Готово: три варианта, {findingsCount} замечаний проверки у варианта 1
             </span> : <span className="gen-sub">Вариант {VARIANTS.indexOf(variant) + 1} из 3</span>}
+            {doneAll && Object.entries(state?.variants ?? {}).filter(([, item]) => item.comparison_to_a?.near_duplicate)
+              .map(([code, item]) => <p key={code} className="gen-note" role="status">
+                Вариант {code.toUpperCase()}: {item.comparison_to_a!.same_pages} из {item.comparison_to_a!.total_pages} слайдов
+                совпадают с A. Отдельный дизайн не получился; варианты шаблона ограничены.
+              </p>)}
             {noImages && <div className="gen-note" role="status">
               <AlertTriangle size={18} strokeWidth={1.5} color="var(--text-muted)"/>
               <span>Презентация готова без картинок слайдов: на машине не найден LibreOffice или PowerPoint.

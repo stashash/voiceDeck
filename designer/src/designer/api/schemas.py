@@ -92,6 +92,7 @@ class InsightsResponse(BaseModel):
 
 class DeckVariantState(BaseModel):
     """Состояние одного варианта колоды: своя инструкция, сцены, находки и обоснование оси."""
+    comparison_to_a: dict[str, Any] | None = None
     status: Literal["running", "done", "error"]
     revision: str | None = None
     design_system_id: str

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BASE_URL, VisualizationCandidate } from './api';
-import { analyzePersistedBundle, candidateKey, materializeDatasetBundle, PersistedBundle, selectedCandidates } from './datasetBundle';
+import { analyzePersistedBundle, candidateKey, materializeDatasetBundle, PersistedBundle, selectedCandidates, tableDisplayEstimate } from './datasetBundle';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -13,6 +13,15 @@ const saved = { id: 'bundle-1', datasets: [
 ] } as PersistedBundle;
 
 describe('persisted dataset bundle', () => {
+  it('predicts compact and full slide cost and passes an independent choice per source', () => {
+    expect(tableDisplayEstimate(201)).toBe(1);
+    expect(tableDisplayEstimate(201, 'full')).toBe(29);
+    expect(tableDisplayEstimate(4)).toBe(1);
+    expect(tableDisplayEstimate(8)).toBe(2);
+    const selections = selectedCandidates(saved, { first: candidateKey(table) }, {}, { first: 'full', second: 'compact' });
+    expect(selections.map(item => item.table_display)).toEqual(['full', 'compact']);
+    expect(selectedCandidates(saved, {}, {}, { first: 'full' })[0].table_display).toBeUndefined();
+  });
   it('keeps choices across table navigation and excludes only unchecked tables', () => {
     const chosen = { first: candidateKey(table), second: candidateKey(scatter) };
     expect(selectedCandidates(saved, chosen, { second: false })).toEqual([

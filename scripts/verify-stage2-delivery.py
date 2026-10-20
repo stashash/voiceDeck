@@ -1,9 +1,12 @@
 """Evidence checks over generated files and persisted live API state."""
 from pathlib import Path
 import hashlib
+import csv
+import io
 import json
 import sys
 import urllib.request
+import zipfile
 from pptx import Presentation
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 
@@ -50,15 +53,32 @@ for record in records:
         assert found.get(name)=={kind},(deck_id,variant,name,found.get(name))
     reference=[s for s in data_slides if s["provenance"]["file_name"]=="reference_201.csv" and s.get("table")]
     lines=[line for s in reference for line in s["provenance"]["displayed_row_lines"]]
-    assert len(lines)==201 and len(set(lines))==201,"Lost/duplicated reference rows"
-    first_appendix=next(i for i,s in enumerate(slides) if s in reference)
-    assert all(s.get("provenance",{}).get("page_count",0)>1 for s in slides[first_appendix:]),"Appendix interrupts main story"
+    compact=all(s["provenance"].get("table_display")=="compact" for s in reference)
+    if compact:
+        assert len(reference)==1 and lines==list(range(2,9)),"Compact view must disclose exactly the first seven rows"
+        assert reference[0]["provenance"]["total_rows"]==201
+    else:
+        assert len(lines)==201 and len(set(lines))==201,"Lost/duplicated reference rows"
+        first_appendix=next(i for i,s in enumerate(slides) if s in reference)
+        assert all(s.get("provenance",{}).get("page_count",0)>1 for s in slides[first_appendix:]),"Appendix interrupts main story"
     missing=next(s for s in data_slides if s["provenance"]["file_name"]=="missing_zero.csv")
     values=[str(v) for row in missing["table"]["rows"] for v in row]
     assert "8" in values and "0" in values and any(v in {"","—"} for v in values),values
     trend=next(s for s in data_slides if s["provenance"]["file_name"]=="time_series.xlsx")
     assert "30" in trend["title"] and "USD" in trend["title"]
     directory=Path(record["output_dir"])
+    with zipfile.ZipFile(directory/"deck.sources.zip") as archive:
+        manifest=json.loads(archive.read("sources-manifest.json"))
+        assert {d["file_name"] for d in manifest["datasets"]}==set(source_hashes),"Missing original source"
+        for source in manifest["datasets"]:
+            assert hashlib.sha256(archive.read(source["original_path"])).hexdigest()==source_hashes[source["file_name"]]
+            table=json.loads(archive.read(source["table_path"]))
+            assert len(table["rows"])==source["total_rows"]==len(table["row_lines"])
+            if source["file_name"]=="reference_201.csv":
+                original=list(csv.reader(io.StringIO((OUT/"content-v2/reference_201.csv").read_text(encoding="utf-8-sig"))))
+                assert table["headers"]==original[0] and table["rows"]==original[1:]
+                assert table["row_lines"]==list(range(2,203))
+    assert 'id="source-access"' in (directory/"deck.html").read_text(encoding="utf-8"),"Offline sources absent"
     for name in ["deck.pdf","deck.pptx","deck.html"]:
         path=directory/name
         assert path.is_file() and path.stat().st_size>1000,path
@@ -98,7 +118,7 @@ for record in records:
             assert any(sh.shape_type==13 for sh in sl.shapes),(i+1,"missing logo")
         assert "Play" in (directory/"deck.html").read_text(encoding="utf-8")
     results.append({"deckId":deck_id,"variant":variant,"slides":len(slides),"datasets":{k:sorted(v) for k,v in found.items()},
-                    "referenceRows":len(lines),"nativeEditableCharts":len(native_charts),"unknownTemplate":bool(record.get("unknown_template"))})
+                    "referenceRowsDisplayed":len(lines),"referenceRowsPreserved":201,"tableDisplay":"compact" if compact else "full","nativeEditableCharts":len(native_charts),"unknownTemplate":bool(record.get("unknown_template"))})
 evidence={"status":"passed","syntheticData":True,"challengePresentations":9,"unknownTemplatePresentations":0 if challenge_only else 1,
           "browserErrors":capture.get("browserErrors",[]),"checks":results,"files":files,
           "limits":["This verifies supported paths and supplied examples, not every possible Figma/PDF document.",

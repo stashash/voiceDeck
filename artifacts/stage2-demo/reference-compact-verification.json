@@ -1,0 +1,179 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "deck_id": "6b57bd92f26041b78f94df1706d2a80a",
+      "variant": "a",
+      "before": 40,
+      "after": 10,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s10"
+      ]
+    },
+    {
+      "deck_id": "6b57bd92f26041b78f94df1706d2a80a",
+      "variant": "b",
+      "before": 40,
+      "after": 10,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s10"
+      ]
+    },
+    {
+      "deck_id": "6b57bd92f26041b78f94df1706d2a80a",
+      "variant": "c",
+      "before": 40,
+      "after": 10,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s10"
+      ]
+    },
+    {
+      "deck_id": "664bf9e00de04590a028a6cb0e2c92a3",
+      "variant": "a",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "664bf9e00de04590a028a6cb0e2c92a3",
+      "variant": "b",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "664bf9e00de04590a028a6cb0e2c92a3",
+      "variant": "c",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "bdb8e8a2f7164f9094e98d351bfceed7",
+      "variant": "a",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "bdb8e8a2f7164f9094e98d351bfceed7",
+      "variant": "b",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "bdb8e8a2f7164f9094e98d351bfceed7",
+      "variant": "c",
+      "before": 40,
+      "after": 11,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": []
+    },
+    {
+      "deck_id": "325c31043ccc4acf8411fe2a734e354f",
+      "variant": "a",
+      "before": 40,
+      "after": 9,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s9",
+        "s10"
+      ]
+    },
+    {
+      "deck_id": "325c31043ccc4acf8411fe2a734e354f",
+      "variant": "b",
+      "before": 40,
+      "after": 9,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s9",
+        "s10"
+      ]
+    },
+    {
+      "deck_id": "325c31043ccc4acf8411fe2a734e354f",
+      "variant": "c",
+      "before": 40,
+      "after": 9,
+      "chart_arrays_unchanged": true,
+      "source_identities_unchanged": true,
+      "removed_instruction_echo_ids": [
+        "s9",
+        "s10"
+      ]
+    }
+  ],
+  "files": {
+    "Education — A.html": "0b0fc85f39454a8cd3d55ebcf0e65876f7c4fb659eb64e1c01b805432f71a525",
+    "Education — A.pdf": "b7f34fb5381631bc6b7a207a0b3df2d2b94cfc650838a0f140ca7d89f8820d16",
+    "Education — A.pptx": "aafb520bc913bd7c6a2087dfc7ea4a29b54bd4d0aec2551810f737ef018163b9",
+    "Education — A.sources.zip": "5bb9bdddf3834e84fbda394a61d8d5530207caff0a8e4dedad589aee2735193e",
+    "Education — B.html": "c8d44741148b0091ff61d88ecdd4f61f3c411c47a245b6c6cfebd42fd97db2f4",
+    "Education — B.pdf": "0b024b165e594e0daf1d9f18b74039405a9de62861cae5b0af64cf1127b7a918",
+    "Education — B.pptx": "b8c956eef2f3dd06819f95c11eb7be2456598272c7c4defce355b495781a66d5",
+    "Education — B.sources.zip": "7380d50e1ceab2126e2c097d1a05377ca5b60f888e8eec48648a09da5d0df0d1",
+    "Education — C.html": "d3db50a3b08ac3327cb2f694c5c0dc5f8dcab6928fcd4f06b81891b850f70cc9",
+    "Education — C.pdf": "eb50ac853d3ac5c91fbb7e9f6cd0366b21fad6dcad1cbf581bea75b1e50137b6",
+    "Education — C.pptx": "0bf9f4f7ff876287cd43109503bbe85cf47c6abb4651bd306bf15d776bff98fb",
+    "Education — C.sources.zip": "656dbf17c3f914641986158df222f5f909559fe0d8766ca36b9a156d71bcf6e0",
+    "VK Tech — A.html": "24eb7ada2b95f6f1ccfa9c375c80412df071741714de48c344a8ecfa9ea94043",
+    "VK Tech — A.pdf": "17be5c1ba8943832d8494ffe62a9ebd73fa61b39273a58821c68cafef201b6b9",
+    "VK Tech — A.pptx": "30f3932c27fb0f92d8bed77cc5f21abb4aba1b27cbeafc36f4c37a5fdf0b8f40",
+    "VK Tech — A.sources.zip": "3a776eb7d1c61c0a7d926f1a943ae4a8663ed9ab78c1b528f7163b32dc62e0fd",
+    "VK Tech — B.html": "a718f3211b632c7a47396ecf6f13dc02ce4c90debcbfa32b423accaaeec70612",
+    "VK Tech — B.pdf": "99c299b84ab739a4d77f61116f7d877126a76ecb6ac07f332f24d24c6f39ffee",
+    "VK Tech — B.pptx": "f1c14cd888b7b3059819c25000fa1e4097e35acb3796688b088a5715fc01f050",
+    "VK Tech — B.sources.zip": "f16001ba7dce5e50f640b8cb5d9abdeee556ebec25fc7deede1f376cfb7f596f",
+    "VK Tech — C.html": "d5fdbf9526025ef95f90bfb34384fadbc0955b210160ab3a6057145ec57203c6",
+    "VK Tech — C.pdf": "0cafc778b5662be5102eb2a44522ff50e2ae50cf9a72d69f40d8d456f5623e5b",
+    "VK Tech — C.pptx": "6ef3d067d6c2229e09229e616406112cbc0f13be02b041cdf003f0f44781da58",
+    "VK Tech — C.sources.zip": "50d0d528a27c249d7a1d4504482e32dd3ba620abd0981148bd1c0742bf94d7f7",
+    "WorkSpace — A.html": "c19f76d4a1b16a807ed851593abc2edfbf35fc91a0b9356d4ff4f1dcb52d4665",
+    "WorkSpace — A.pdf": "22e0c05e03295bc3531545b088a60d44049abea9ed06a6b5aaacd234aa983461",
+    "WorkSpace — A.pptx": "42d0119b4629f6631f45e76cfc345863fea181385ca82b2bdb9e4157b6da53b6",
+    "WorkSpace — A.sources.zip": "209f2f02a72a4fa6bb0dc776ebf65c8a98aedde992a731fecb153e68561de286",
+    "WorkSpace — B.html": "ffc7ad0b561c40285c10a9f0361d3c0b8ac4f814b0a0a6362946ec71acf8222f",
+    "WorkSpace — B.pdf": "7fcffff8d3554b32071255a0ef4311bd99b0219225005f1e2e76007246833082",
+    "WorkSpace — B.pptx": "efa259024b7bcdbc3d2d8dbcbd0ba87f2051cceefd197b3510bdc22ac1428e52",
+    "WorkSpace — B.sources.zip": "aea124d86d8cf1261b025267cf7f5a241f4960d110e8769f730193af3e5c434b",
+    "WorkSpace — C.html": "124ac14bc12cfe61506e7977e9f7d01b7effc712ad50db08f589d7820487551e",
+    "WorkSpace — C.pdf": "2e01158a26e925cbfb388761b7f1924f8847288b4b0c9df749776d4ac1793ba9",
+    "WorkSpace — C.pptx": "ad868d84c9c0690b06aada3c6fd134e7e0fad4f614a113daa44335ce731bcfc2",
+    "WorkSpace — C.sources.zip": "f4f5255bce78d8c29cc8a7e9d1a40c9cf885d6d5ecb9bd86dcb0354e208f26fb",
+    "Незнакомый шаблон — A.html": "09e48669d88a4ceffceddf0b3ac7bbca7effcde9fbde0a26253dcfbe308099c7",
+    "Незнакомый шаблон — A.pdf": "422e203acbb1e31709e010fed75bd4c67d20bb57dd42ef85a14d783409a80a37",
+    "Незнакомый шаблон — A.pptx": "9520895c026d2d7437d50e82037dfeaf2156697343151b657c312a3ff74abae3",
+    "Незнакомый шаблон — A.sources.zip": "59b4762e247f967c3e856ad8ee5ea9025f749a13c133a7630f43c9a94496d7d8",
+    "ПРОЧИТАЙТЕ.md": "ad644c2b91340d7eb95a20a663028ff996fa7b41d68661788fed749b38f3e724"
+  },
+  "backend": [
+    {
+      "tests": "1465",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "28"
+    }
+  ]
+}

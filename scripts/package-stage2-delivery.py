@@ -30,6 +30,8 @@ dirty=bool(subprocess.check_output(["git","status","--porcelain","--untracked-fi
 final_tests=OUT/"presubmission-backend-final.xml"
 if (OUT/"russian-localization-final-tests.xml").exists():
     final_tests=OUT/"russian-localization-final-tests.xml"
+if (OUT/"reference-compact-final-tests.xml").exists():
+    final_tests=OUT/"reference-compact-final-tests.xml"
 if final_tests.exists():
     suites=list(ET.parse(final_tests).getroot().iter("testsuite"))
     assert suites and all(int(s.get("failures",0))==int(s.get("errors",0))==0 for s in suites), "Latest presubmission tests failed"
@@ -44,9 +46,10 @@ for run in json.loads((OUT/"final-v3/run-manifest.json").read_text(encoding="utf
     directory=Path(run["output_dir"])
     label=labels[(run["deck_id"],run["variant"])]
     target_dir="challenge/"+label+"/"+run["variant"].upper()
-    for name in ["deck.pdf","deck.pptx","deck.html","contact-sheet.png"]:
+    for name in ["deck.pdf","deck.pptx","deck.html","deck.sources.zip","sources-manifest.json","contact-sheet.png"]:
         add(directory/name,target_dir+"/"+name)
     links=" · ".join(f'<a href="{quote(target_dir+"/deck."+ext)}">{ext.upper()}</a>' for ext in ["pdf","pptx","html"])
+    links+=f' · <a href="{quote(target_dir+"/deck.sources.zip")}">Все исходники</a>'
     index_rows.append(f'<tr><td>{html.escape(label)}</td><td>{run["variant"].upper()}</td><td>{links}</td></tr>')
 for name in ["deck.pdf","deck.pptx","deck.html","VoiceDeck-stage2-screencast.mp4","subtitles.srt","capture-manifest.json","edit-manifest.json","video-contact-sheet.jpg"]:
     add(OUT/"screencast"/name,"unknown-template/"+name)

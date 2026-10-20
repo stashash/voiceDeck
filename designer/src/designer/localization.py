@@ -113,6 +113,20 @@ def _source_note(slide: SlideIntent, language: str) -> str:
     source = f"{'Источник' if language == 'ru' else 'Source'}: {p.file_name}"
     if p.sheet:
         source += f" · {'лист' if language == 'ru' else 'sheet'} «{p.sheet}»"
+    if p.table_display:
+        shown = len(p.displayed_row_lines)
+        scope = ", ".join(map(str, p.displayed_row_lines))
+        coverage = (f"На слайде {shown} из {p.total_rows} строк. Строки источника: {scope}."
+                    if language == "ru" else f"Shown: {shown} of {p.total_rows} rows. Source rows: {scope}.")
+        if p.page_count:
+            coverage += (f" Страница {p.page_index}/{p.page_count}." if language == "ru"
+                         else f" Page {p.page_index}/{p.page_count}.")
+        if p.table_display == "compact":
+            # Template footers commonly fit only two lines. Keep the access hint
+            # together with coverage, instead of silently clipping a third line.
+            coverage = (f"На слайде {shown} из {p.total_rows} строк; не репрезентативная выборка. Все строки: HTML → «Источники» / архив исходников."
+                        if language == "ru" else f"Shown: {shown} of {p.total_rows}; not representative. All rows: HTML → Sources / sources archive.")
+        return source + "\n" + coverage
     if language == "ru":
         coverage = f"Охват: {len(p.row_lines)} из {p.total_rows} строк; исключено: {len(p.excluded_row_lines)}."
         if p.page_count:
@@ -154,6 +168,8 @@ def localize_slide(slide: SlideIntent, language: str = "ru") -> SlideIntent:
         result.source_note = _source_note(result, language)
         if language == "en":
             _english_analytical_text(result)
+        from designer.reference_display import localize_table_copy
+        localize_table_copy(result, language)
     return result
 
 

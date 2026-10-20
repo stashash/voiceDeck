@@ -217,6 +217,8 @@ def _export_files(state: _State, files_dir: Path) -> None:
                 (slides_dir / f"slide-{index:03d}.png").write_bytes(png)
             html_text = render_deck_images(deck, state.ds, pngs)
             (files_dir / "deck.html").write_text(html_text, encoding="utf-8")
+    from designer.export.sources import export_source_package
+    export_source_package(state.plan, files_dir)
 
 
 def _export_element_overrides(state: _State, pptx_path: Path) -> None:

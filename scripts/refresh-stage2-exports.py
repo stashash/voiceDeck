@@ -22,7 +22,7 @@ for run in manifest["runs"]:
         subprocess.run(["docker","compose","exec","-T","designer","python","/tmp/reexport-stage2-runtime.py",deck_id,variant],cwd=ROOT,check=True)
     with urllib.request.urlopen(f"http://127.0.0.1:8090/decks/{deck_id}",timeout=60) as response: state=json.load(response)
     directory=Path(run["output_dir"])
-    for name in ["deck.pptx","deck.pdf","deck.html"]:
+    for name in ["deck.pptx","deck.pdf","deck.html","deck.sources.zip","sources-manifest.json"]:
         with urllib.request.urlopen(f"http://127.0.0.1:8090/decks/{deck_id}/{variant}/files/{name}",timeout=120) as response:
             (directory/name).write_bytes(response.read())
     images=[]
@@ -32,6 +32,11 @@ for run in manifest["runs"]:
         images.append(target)
     module.make_contact_sheet(images,directory/"contact-sheet.png")
     run["final_exported_at"]=datetime.now(timezone.utc).isoformat()
+    run["slide_count"]=len(images)
+    for template in manifest["templates"]:
+        for item in template.get("decks",[]):
+            if item.get("deck_id")==deck_id and item.get("variant")==variant:
+                item["slide_count"]=len(images)
     run["final_export_preserved_plan"]=True
     run["final_export_locale"]=state["variants"][variant]["plan"].get("language","ru")
     (OUT/"run-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")

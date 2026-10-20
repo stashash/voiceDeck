@@ -319,6 +319,7 @@ class DataProvenance(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     page_index: int | None = None
     page_count: int | None = None
+    table_display: str | None = None
 
 
 class SlideIntent(BaseModel):

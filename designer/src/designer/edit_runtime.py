@@ -61,12 +61,21 @@ def _export(deck_id, variant, revision):
         with lock(deck_id, variant):
             if store.load_deck_state(deck_id, variant).get("revision") != revision:
                 return
+            # A removed page or an unavailable PDF converter must not leave a
+            # previous revision downloadable under the new revision marker.
+            for name in ("deck.pdf", "deck.sources.zip", "deck.bundle.zip", "sources-manifest.json"):
+                if not (staging / name).is_file():
+                    (files / name).unlink(missing_ok=True)
             for path in staging.iterdir():
                 if path.is_file():
                     os.replace(path, files / path.name)
             images = staging / "slides"
+            target = store.deck_variant_slides_dir(deck_id, variant)
+            produced = {p.name for p in images.glob("slide-*.png")} if images.exists() else set()
+            for path in target.glob("slide-*.png"):
+                if path.name not in produced:
+                    path.unlink()
             if images.exists():
-                target = store.deck_variant_slides_dir(deck_id, variant)
                 for path in images.iterdir():
                     os.replace(path, target / path.name)
             # images: картинки слайдов этой правки готовы; без конвертера их нет и редактор

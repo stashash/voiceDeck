@@ -69,21 +69,20 @@ def test_bundle_persists_original_bytes_normalized_rows_profile_and_plan(client)
 def test_persisted_bundle_materializes_multiple_sources_and_reaches_deck_generation(client, monkeypatch):
     saved = bundle(client)
     response = materialize(client, saved)
-    assert [item["id"] for item in response["suggestions"]] == [f"s{i}" for i in range(1, 32)]
+    assert [item["id"] for item in response["suggestions"]] == ["s1", "s2"]
     stored = store.load_insights(response["id"])
     assert stored["bundle_id"] == saved["id"]
     assert len(stored["analyses"]) == 2
-    assert stored["suggestions"][1]["visual"] == "big_number"
-    reference = stored["suggestions"][2]
+    reference = stored["suggestions"][1]
+    assert reference["visual"] == "table"
     assert reference["provenance"]["total_rows"] == 201
     assert len(reference["provenance"]["row_lines"]) == 201
-    assert len(reference["provenance"]["displayed_row_lines"]) == 7
-    pages = stored["suggestions"][2:]
-    assert len(pages) == 29
-    assert [page["provenance"]["page_index"] for page in pages] == list(range(1, 30))
-    assert all(page["provenance"]["page_count"] == 29 for page in pages)
-    assert sorted(line for page in pages for line in page["provenance"]["displayed_row_lines"]) == list(range(2, 203))
-    assert pages[-1]["provenance"]["displayed_row_lines"] == [198, 199, 200, 201, 202]
+    assert reference["provenance"]["displayed_row_lines"] == list(range(2, 9))
+    assert reference["provenance"]["table_display"] == "compact"
+    assert reference["provenance"]["page_count"] is None
+    source = client.get(f"/datasets/{reference['provenance']['dataset_id']}/source")
+    assert source.status_code == 200
+    assert source.content == (FIXTURES / "reference_201.csv").read_bytes()
     captured = {}
     monkeypatch.setattr(pipeline, "generate_deck", lambda *a, **kw: captured.update(kw))
     app.dependency_overrides[get_llm_client] = lambda: object()

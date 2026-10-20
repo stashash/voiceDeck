@@ -3,7 +3,12 @@ import { request } from './request';
 
 export type PersistedDataset = DatasetTablePlan & { dataset_id: string; source_sha256: string };
 export type PersistedBundle = Omit<DatasetBundlePlanResponse, 'datasets'> & { id: string; datasets: PersistedDataset[] };
-export type DatasetSelection = { dataset_id: string; candidate_kind: VisualizationCandidate['kind']; required_fields: string[] };
+export type TableDisplay = 'compact' | 'full';
+export type DatasetSelection = { dataset_id: string; candidate_kind: VisualizationCandidate['kind']; required_fields: string[]; table_display?: TableDisplay };
+
+export function tableDisplayEstimate(rows: number, mode: TableDisplay = 'compact') {
+  return rows > 20 && mode === 'compact' ? 1 : Math.ceil(rows / 7);
+}
 
 export async function analyzePersistedBundle(files: File[], goal: string): Promise<PersistedBundle> {
   const result = await analyzeDatasetBundle(files, goal) as PersistedBundle;
@@ -17,13 +22,16 @@ export function candidateKey(candidate: VisualizationCandidate) {
   return JSON.stringify([candidate.kind, candidate.required_fields]);
 }
 
-export function selectedCandidates(bundle: PersistedBundle, selected: Record<string, string>, included: Record<string, boolean>): DatasetSelection[] {
+export function selectedCandidates(bundle: PersistedBundle, selected: Record<string, string>, included: Record<string, boolean>,
+                                   tableDisplay: Record<string, TableDisplay> = {}): DatasetSelection[] {
   return bundle.datasets.flatMap(dataset => {
     if (included[dataset.dataset_id] === false) return [];
     const candidate = dataset.plan.candidates.find(item => candidateKey(item) === selected[dataset.dataset_id])
       ?? dataset.plan.selected_candidate;
     return candidate.renderable ? [{ dataset_id: dataset.dataset_id, candidate_kind: candidate.kind,
-                                    required_fields: candidate.required_fields }] : [];
+                                    required_fields: candidate.required_fields,
+                                    ...(candidate.kind === 'table' && tableDisplay[dataset.dataset_id]
+                                      ? { table_display: tableDisplay[dataset.dataset_id] } : {}) }] : [];
   });
 }
 

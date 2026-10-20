@@ -158,6 +158,9 @@ def test_migration_refuses_unreviewed_editor_revisions(monkeypatch):
 
 
 def test_migration_snapshots_exports_and_keeps_provenance_without_edited_data_warning(tmp_path, monkeypatch):
+    # This test uses invented provenance ids; source-package integrity is tested
+    # with real persisted bytes in test_reference_display.
+    monkeypatch.setattr("designer.export.sources.export_source_package", lambda *args: {})
     from designer import pipeline, store
     from designer.contracts import Deck
     from designer.layout.compose import compose
