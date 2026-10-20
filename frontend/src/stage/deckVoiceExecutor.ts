@@ -39,7 +39,10 @@ export async function executeDeckVoice(a:DeckVoiceAction,c:DeckVoiceContext):Pro
  const el=a.elementNumber!==undefined?elements[a.elementNumber-1]:scene.elements.find(e=>e.id===c.selectedId);
  if(a.elementNumber!==undefined&&(!Number.isInteger(a.elementNumber)||a.elementNumber<1||!el))return invalid(`Элемента ${a.elementNumber} нет`);
  if(a.kind==='element'||a.kind==='title'){
-  const titles=elements.filter(e=>e.type==='text'&&/^(?:title|heading|заголовок)$/i.test(e.role));
+  const found=elements.filter(e=>e.type==='text'&&/^(?:title|heading|заголовок)$/i.test(e.role));
+  // «Заголовок» без номера это заголовок слайда: подзаголовки карточек (heading) его не делают неоднозначным.
+  const main=found.filter(e=>/^title$/i.test(e.role));
+  const titles=main.length===1?main:found;
   if(a.kind==='title'&&titles.length!==1)return invalid('Уточните номер заголовка');
   const selected=a.kind==='title'?titles[0]:elements[a.number-1];
   return selected?{...result,selectedId:selected.id,notice:`Выбран элемент ${elements.indexOf(selected)+1}`} : invalid('Элемент не найден');

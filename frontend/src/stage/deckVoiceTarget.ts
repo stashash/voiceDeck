@@ -25,7 +25,7 @@ export function deckRewriteTarget(instruction:string,scenes:Scene[],index:number
   if(name){const found=scene.elements.filter(e=>e.type==='text'&&normalizeVoice(e.text)===name[1]&&(!title||isTitle(e.role)));if(found.length!==1)return {notice:'Указанный текст не найден однозначно'};element=found[0];}
   else {const n=deckNumber(qualifier.replace(/^(?:номер |№\s*)/,''));if(n===undefined||n<1)return {notice:'Уточните номер элемента'};element=deckSelectable(scene)[n-1];if(title&&element&&!isTitle(element.role))return {notice:'Указанный элемент не является заголовком'};}
  }
- else if(title){const found=scene.elements.filter(e=>e.type==='text'&&isTitle(e.role));if(found.length!==1)return {notice:'Уточните номер заголовка'};element=found[0];}
+ else if(title){const all=scene.elements.filter(e=>e.type==='text'&&isTitle(e.role));const main=all.filter(e=>/^title$/i.test(e.role));const found=main.length===1?main:all;if(found.length!==1)return {notice:'Уточните номер заголовка'};element=found[0];}
  else if(selected||!/(?:заголов|элемент|объект|карточ|таблиц|диаграмм|изображени)/.test(command))element=scene.elements.find(e=>e.id===selectedId);
  else return {notice:'Уточните объект отдельной командой выбора'};
  return element?.type==='text'?{slide,id:element.id}:{notice:'Текстовый элемент не найден'};

@@ -275,18 +275,18 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
     metric = measures[0] if measures else None
     category = categories[0] if categories else None
     if len(measures) > 1 and not goal.measures:
-        warnings.append(f"Multiple measures: default primary field is '{metric}'; no mixed-unit sum is assumed.")
+        warnings.append(f"Показателей несколько: по умолчанию взят «{metric}», величины с разными единицами не складываются.")
     if len(categories) > 1 and not goal.dimensions:
-        warnings.append(f"Multiple category axes: default field is '{category}'; other dimensions are not aggregated.")
+        warnings.append(f"Категорий несколько: по умолчанию взят «{category}», остальные не сводятся.")
     time_axes = tuple(n for n in (goal.dimensions or profile.datetime_candidates) if n in profile.datetime_candidates)
     axis = time_axes[0] if len(time_axes) == 1 else None
     if len(time_axes) > 1:
-        warnings.append("Ambiguous temporal axis: multiple date columns; select one explicitly.")
+        warnings.append("Столбцов с датами несколько: выберите ось времени явно.")
     elif axis is None and any(_TIME_NAME.search(n) for n in table.headers):
-        warnings.append("No unambiguous parsed temporal axis; text periods are not treated as a time series.")
+        warnings.append("Однозначной оси времени нет: текстовые периоды не считаются временным рядом.")
     for col in profile.columns:
         if col.numeric_outlier_count:
-            warnings.append(f"'{col.name}' has {col.numeric_outlier_count} IQR outlier(s); all are retained.")
+            warnings.append(f"В «{col.name}» выбросов по IQR: {col.numeric_outlier_count}, все оставлены.")
 
     def complete(fields: tuple[str, ...]) -> list[int]:
         return [i for i, row in enumerate(table.rows)
@@ -310,7 +310,7 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         kept = set(indices)
         excluded = tuple(table.lines[i] for i in range(len(table.rows)) if i not in kept)
         if excluded:
-            limits += (f"{len(excluded)} row(s) with missing/unparseable selected cells excluded; see excluded_row_lines. No zero filling.",)
+            limits += (f"Строк с пропусками или нечитаемыми значениями: {len(excluded)}, они исключены. Нулями пропуски не заполняются.",)
         renderable = True
         if kind in {"line", "bar", "column", "pie", "histogram", "scatter", "grouped_column", "stacked_column"}:
             exact = [v for field in metrics for v in numbers(field, indices)]
@@ -320,10 +320,10 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             if kind == "pie":
                 renderable = renderable and math.isfinite(sum(float(v) for v in exact))
             if not renderable:
-                limits += ("Numeric precision/range exceeds the export format; choose the reference table.",)
+                limits += ("Точность или диапазон чисел выходит за формат выгрузки: выберите справочную таблицу.",)
             if goal.measures and set(metrics) != set(goal.measures):
                 renderable = False
-                limits += ("This view omits explicitly selected measures; choose a view that preserves all selected fields.",)
+                limits += ("В этом виде пропадают выбранные показатели: выберите вид, где видны все выбранные поля.",)
             # parse_number deliberately accepts suffixes, but stripping them is
             # not a unit conversion. Preserve currency/rate cells in a table if
             # the chart header cannot faithfully label every selected value.
@@ -335,10 +335,10 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
                             if (match := re.search(r"(?:₽|руб\.?|р\.|\$|€|%)\s*$", table.rows[i][positions[field]], re.I))]
                 if any(aliases.get(suffix, suffix.upper()) != declared for suffix in suffixes):
                     renderable = False
-                    limits += (f"'{field}' has cell units missing from or conflicting with its header; the reference table preserves the literal units without conversion.",)
+                    limits += (f"У «{field}» единицы в ячейках не указаны в заголовке или расходятся с ним: справочная таблица сохранит единицы как в источнике, без пересчёта.",)
         if kind in {"bar", "column", "grouped_column", "stacked_column"} and len(indices) > MAX_CATEGORY_POINTS:
             renderable = False
-            limits += (f"More than {MAX_CATEGORY_POINTS} categories cannot be read safely on one slide; choose the paginated reference table. No categories are dropped or grouped.",)
+            limits += (f"Больше {MAX_CATEGORY_POINTS} категорий на одном слайде не прочитать: выберите справочную таблицу по страницам. Категории не отбрасываются и не группируются.",)
         candidates.append(VisualizationCandidate(
             kind, base + (50 if goal.kind in preferred else 0), reason, fields, dims, metrics,
             tuple(table.lines[i] for i in indices), excluded, limits,
@@ -353,22 +353,22 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
         if (profile.columns[positions[axis]].confidence == 1 and len(indices) >= 2 and len(keys) == len(indices)
                 and len(set(keys)) == len(keys) and len({k[0] for k in keys}) == 1):
             ordered = [i for _, i in sorted(zip(keys, indices))]
-            add("line", 90, ("trend",), f"'{axis}' provides {len(indices)} unique ordered periods for '{metric}'.",
-                (axis,), (metric,), ordered, ("Unequal time spacing is possible; do not imply interpolation across missing periods.",))
-            add("column", 65, ("comparison",), f"Compare '{metric}' across the {len(indices)} observed '{axis}' periods.",
+            add("line", 90, ("trend",), f"В «{axis}» {len(indices)} разных упорядоченных периодов для «{metric}».",
+                (axis,), (metric,), ordered, ("Шаг между периодами может быть неравным: пропущенные периоды не достраиваются.",))
+            add("column", 65, ("comparison",), f"Сравнение «{metric}» по {len(indices)} периодам «{axis}».",
                 (axis,), (metric,), ordered)
         else:
-            warnings.append(f"'{axis}': duplicate/mixed-precision periods or fewer than two complete rows; no line chart.")
+            warnings.append(f"«{axis}»: периоды повторяются, записаны с разной точностью или полных строк меньше двух, график не строится.")
     elif goal.kind == "trend":
-        warnings.append("Trend needs a clear temporal axis and a numeric measure; the requested trend is unsupported.")
+        warnings.append("Для динамики нужны ось времени и числовой показатель: здесь их нет.")
 
     if category and metric:
         indices = complete((category, metric))
         labels = [table.rows[i][positions[category]].strip() for i in indices]
         unique = len(set(labels)) == len(labels)
         if len(indices) >= 2 and unique:
-            add("bar", 80, ("comparison",), f"Compare '{metric}' across {len(indices)} unique '{category}' categories.", (category,), (metric,), indices)
-            add("column", 70, ("comparison",), f"Vertical comparison of '{metric}' by '{category}', one observation per category.", (category,), (metric,), indices)
+            add("bar", 80, ("comparison",), f"Сравнение «{metric}» по {len(indices)} категориям «{category}».", (category,), (metric,), indices)
+            add("column", 70, ("comparison",), f"Вертикальное сравнение «{metric}» по «{category}», одно значение на категорию.", (category,), (metric,), indices)
             values = numbers(metric, indices)
             with localcontext() as context:
                 context.prec = max(32, max(len(v.as_tuple().digits) + abs(v.as_tuple().exponent) for v in values) + 12)
@@ -384,16 +384,16 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             # 40% and 60% silently changes their denominator.
             percentage_ok = field_label(metric)[1] != "%" or total == 100
             if len(indices) <= 6 and all(v >= 0 for v in values) and total > 0 and declared_ok and percentage_ok:
-                add("pie", 95 if denom_field else 55, ("shares",), f"'{metric}' has {len(indices)} nonnegative categories in '{category}'; denominator is the observed sum {_decimal_text(total)}.",
+                add("pie", 95 if denom_field else 55, ("shares",), f"У «{metric}» {len(indices)} неотрицательных категорий «{category}», знаменатель это их сумма {_decimal_text(total)}.",
                     (category,), (metric,), indices,
-                    ("Shares refer to observed rows only; mutual exclusivity and completeness of the population are not established.",),
+                    ("Доли считаются только по строкам таблицы: что категории не пересекаются и покрывают всё, не проверено.",),
                     denominator=total, denominator_field=denom_field, aggregation="share_of_observed_sum")
             elif goal.kind == "shares":
-                warnings.append(f"No pie for '{metric}': requires 2–6 categories, nonnegative values, positive sum and agreement with any declared total.")
+                warnings.append(f"Круговой для «{metric}» нет: нужны 2–6 категорий, неотрицательные значения, положительная сумма и совпадение с итогом.")
                 if not percentage_ok:
-                    warnings.append("Percentage values do not sum to 100; their original denominator must not be replaced by normalization of the observed sum.")
+                    warnings.append("Проценты в сумме не дают 100: их исходный знаменатель нельзя заменять пересчётом на сумму.")
         else:
-            warnings.append(f"'{category}': repeated labels or fewer than two complete rows; choose an explicit grouping/aggregation before category charts.")
+            warnings.append(f"«{category}»: подписи повторяются или полных строк меньше двух; задайте группировку до диаграммы по категориям.")
 
         # Only structurally matched actual/target columns are safely comparable here.
         pairs = [(a, b) for j, a in enumerate(measures) for b in measures[j + 1:]
@@ -407,14 +407,14 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
             # missing. Prefer a readable all-row table; never turn absence into zero.
             incomplete_pair = len(indices) < len(table.rows)
             if incomplete_pair and goal.kind in {"auto", "comparison"}:
-                warnings.append("Incomplete paired measures: use the reference table to preserve every known value and every missing cell. No zero filling.")
-                add("table", 200, (), "Paired comparison has missing cells; the table preserves all rows and each available series value.",
+                warnings.append("Пары показателей неполные: справочная таблица сохранит все известные значения и все пропуски. Нулями пропуски не заполняются.")
+                add("table", 200, (), "В парном сравнении есть пропуски: таблица сохраняет все строки и каждое известное значение.",
                     dims=tuple(n for n in table.headers if n not in profile.numeric_candidates),
                     metrics=profile.numeric_candidates, required_fields=tuple(table.headers),
                     indices=list(range(len(table.rows))))
             elif not incomplete_pair and len(indices) >= 2 and len({table.rows[i][positions[category]] for i in indices}) == len(indices):
-                add("grouped_column", 85, ("comparison",), f"Matched actual/target fields '{pair[0]}' and '{pair[1]}' share '{category}'; compare complete pairs without summing them.",
-                    (category,), pair, indices, ("Compare paired measures without summing them; verify units before interpretation.",))
+                add("grouped_column", 85, ("comparison",), f"Факт и план «{pair[0]}» и «{pair[1]}» по одной категории «{category}»: сравниваются полные пары, без сложения.",
+                    (category,), pair, indices, ("Пары сравниваются без сложения; единицы проверьте до выводов.",))
 
         # A shared unit is necessary but does not prove additivity. Only a literal
         # stacking request authorizes this composition view, never a generic shares goal.
@@ -425,49 +425,49 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
                      and len(indices) >= 2 and len({table.rows[i][positions[category]].strip() for i in indices}) == len(indices)
                      and all(v >= 0 for n in measures for v in numbers(n, indices)) and not pairs)
             if valid:
-                add("stacked_column", 150, (), "Explicit stacked composition request with matching declared units; no normalization.",
+                add("stacked_column", 150, (), "Явный запрос состава с накоплением, единицы совпадают; без нормировки.",
                     (category,), measures, indices,
-                    ("Values are stacked as components; additivity and mutual exclusivity are user assumptions, not inferred facts.",),
+                    ("Значения складываются как части целого: что их можно складывать, решает автор, сервис это не выводит.",),
                     aggregation="stack_components")
             else:
-                warnings.append("Stacked composition requires 2–5 nonnegative component measures with matching explicit units and unique categories; actual/target pairs are not components.")
+                warnings.append("Для состава с накоплением нужны 2–5 неотрицательных показателей с одной единицей и уникальные категории; факт и план частями не считаются.")
 
     if metric:
         indices = complete((metric,))
         if len(indices) >= 5 and len(set(numbers(metric, indices))) >= 2:
             add("histogram", 60 if category or axis else 90, ("distribution",),
-                f"'{metric}' has {len(indices)} numeric observations with variation; bin their frequencies, not category totals.",
-                metrics=(metric,), indices=indices, limits=("All complete observations, including IQR outliers, are retained in the frequency bins.",))
+                f"В «{metric}» {len(indices)} разных числовых наблюдений: считаем, сколько попадает в каждый интервал, а не суммы по категориям.",
+                metrics=(metric,), indices=indices, limits=("В интервалах все полные наблюдения, выбросы по IQR тоже.",))
         elif goal.kind == "distribution":
-            warnings.append(f"Histogram needs at least five numeric observations and two distinct values in '{metric}'.")
+            warnings.append(f"Для распределения нужны хотя бы пять чисел и два разных значения в «{metric}».")
     if len(measures) >= 2:
         pair = tuple(measures[:2])
         indices = complete(pair)
         if len(indices) >= 5 and all(len(set(numbers(n, indices))) >= 2 for n in pair):
-            add("scatter", 75, ("relationship",), f"'{pair[0]}' and '{pair[1]}' have {len(indices)} complete numeric pairs with variation.",
-                metrics=pair, indices=indices, limits=("Association is not causation; no correlation value is asserted.",))
+            add("scatter", 75, ("relationship",), f"«{pair[0]}» и «{pair[1]}»: {len(indices)} полных пар чисел с разбросом.",
+                metrics=pair, indices=indices, limits=("Связь не значит причину; коэффициент корреляции не утверждается.",))
         elif goal.kind == "relationship":
-            warnings.append("Scatter needs at least five complete pairs and variation in both distinct numeric measures.")
+            warnings.append("Для связи показателей нужны хотя бы пять полных пар и разброс в обоих.")
     elif goal.kind == "relationship":
-        warnings.append("Scatter needs two distinct numeric measures; identifiers are not measures.")
+        warnings.append("Для связи нужны два разных числовых показателя; идентификаторы показателями не считаются.")
 
     if goal.kind == "kpi" and goal.aggregation == "count_rows" and table.rows:
-        add("kpi", 95, ("kpi",), f"Count of source records: {len(table.rows)} rows, including incomplete records; not a sum of business measures.",
+        add("kpi", 95, ("kpi",), f"Число записей источника: {len(table.rows)} строк, неполные тоже; это не сумма показателей.",
             indices=list(range(len(table.rows))), aggregation="count_rows", value=Decimal(len(table.rows)))
     elif goal.kind == "kpi":
-        warnings.append("No safe KPI aggregation was specified; numeric business measures are not summed automatically.")
+        warnings.append("Как считать показатель, не задано: числа сами не суммируются.")
 
     families = {"trend": {"line"}, "comparison": {"bar", "column", "grouped_column"}, "shares": {"pie"},
                 "distribution": {"histogram"}, "relationship": {"scatter"}, "kpi": {"kpi"}}
     if goal.kind in families and not any(c.kind in families[goal.kind] for c in candidates):
-        warnings.append(f"Requested '{goal.kind}' is not supported by the detected selected fields; alternatives are shown without inventing data.")
+        warnings.append(f"Для запрошенного вида данных не хватает: показаны другие варианты, без придуманных данных.")
 
     if not any(c.kind == "table" for c in candidates):
         add("table", 100 if not measures or goal.kind == "reference" else 10, ("reference",),
-            f"Reference view of {len(table.rows)} rows and {len(table.headers)} columns; original values are retained, without aggregation.",
+            f"Справочная таблица: {len(table.rows)} строк и {len(table.headers)} столбцов, значения как в источнике, без свёртки.",
             dims=tuple(n for n in table.headers if n not in profile.numeric_candidates), metrics=profile.numeric_candidates,
             required_fields=tuple(table.headers), indices=list(range(len(table.rows))),
-            limits=("Paginate the reference table before rendering; never squeeze all rows onto one slide.",) if len(table.rows) > 20 else ())
+            limits=("Таблицу разбейте на страницы: все строки на один слайд не помещаются.",) if len(table.rows) > 20 else ())
     best = max(candidates, key=lambda c: c.score)
     # High-cardinality text is not a categorical axis in the conservative profile.
     # An explicit comparison must not silently become a histogram in that case.
@@ -475,13 +475,13 @@ def plan_table(table: Table, goal: AnalyticalGoal | str = "") -> AnalyticalPlan:
     if not best.renderable or unsupported_goal:
         if not best.renderable:
             warnings.extend(best.warnings)
-            warnings.append("The preferred chart is unsafe to render; the reference table preserves all source values.")
+            warnings.append("Выбранную диаграмму нельзя собрать без искажений: справочная таблица сохраняет все значения источника.")
         else:
-            warnings.append("The requested analysis has no safe chart; the reference table preserves all source values.")
+            warnings.append("Для запрошенного анализа нет диаграммы без искажений: справочная таблица сохраняет все значения источника.")
         candidates = [replace(c, score=best.score + 1) if c.kind == "table" else c for c in candidates]
     shared = tuple(dict.fromkeys(warnings))
     candidates = [replace(c, warnings=tuple(dict.fromkeys((*shared, *c.warnings))),
-                          reason=c.reason + (" Limitations: " + " ".join(dict.fromkeys((*shared, *c.warnings)))
+                          reason=c.reason + (" Ограничения: " + " ".join(dict.fromkeys((*shared, *c.warnings)))
                                              if shared or c.warnings else "")) for c in candidates]
     ranked = tuple(_describe(table, c) for c in sorted(candidates, key=lambda c: (-c.score, c.kind, c.required_fields))[:3])
     return AnalyticalPlan(_content_hash(table, profile), len(table.rows), len(table.headers), goal,

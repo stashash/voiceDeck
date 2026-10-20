@@ -38,7 +38,7 @@ def test_percent_level_change_is_in_points_with_relative_change_separately_named
 def test_units_cannot_be_stripped_or_compared_as_same_quantity(header, rows):
     result = plan(f"category,{header}\n{rows}\n", "shares")
     assert result.selected_candidate.kind == "table"
-    assert any("cell units" in warning for warning in result.warnings)
+    assert any("единицы в ячейках" in warning for warning in result.warnings)
     assert all(not c.renderable for c in result.candidates if c.kind != "table")
 
 
@@ -50,7 +50,7 @@ def test_explicit_matching_header_and_cell_units_remain_chartable():
 def test_percentage_levels_are_not_renormalized_to_a_different_denominator():
     result = plan("category,rate_%\nA,20\nB,30\n", "shares")
     assert not any(c.kind == "pie" for c in result.candidates)
-    assert any("original denominator" in warning for warning in result.warnings)
+    assert any("исходный знаменатель" in warning for warning in result.warnings)
     complete = plan("category,share_%\nA,20\nB,80\n", "shares")
     assert complete.selected_candidate.kind == "pie"
     assert complete.selected_candidate.denominator == 100
@@ -61,7 +61,7 @@ def test_explicit_multimeasure_selection_is_not_silently_narrowed():
                   AnalyticalGoal("trend", measures=("a_USD", "b_USD")))
     assert result.selected_candidate.kind == "table"
     assert all(not c.renderable for c in result.candidates if c.kind != "table")
-    assert any("explicitly selected measures" in warning for warning in result.warnings)
+    assert any("пропадают выбранные показатели" in warning for warning in result.warnings)
 
 
 def test_native_horizontal_bar_titles_follow_physical_axes_and_data_survives(tmp_path):

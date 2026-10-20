@@ -91,14 +91,14 @@ def test_unsupported_decimal_precision_selects_exact_table_and_rejects_chart(cli
     assert plan.selected_candidate.kind == "table"
     unsafe = next(candidate for candidate in plan.candidates if candidate.kind == kind)
     assert not unsafe.renderable
-    assert "precision/range" in unsafe.reason
+    assert "диапазон чисел" in unsafe.reason
     assert materialize(client, text, goal, unsafe).status_code == 422
     response = materialize(client, text, goal, plan.selected_candidate)
     assert response.status_code == 200, response.text
     saved = store.load_insights(response.json()["id"])["suggestions"][0]
     assert saved["table"]["rows"] == table(text).rows
     assert saved["provenance"]["row_lines"] == list(plan.selected_candidate.row_lines)
-    assert "precision/range" in response.json()["note"]
+    assert "диапазон чисел" in response.json()["note"]
 
 
 def test_conclusion_arithmetic_does_not_round_large_decimal_endpoint_difference():
@@ -115,7 +115,7 @@ def test_large_categorical_charts_fall_back_without_silent_truncation(client, go
     text = headers + "\n" + "\n".join(f"C{i}," + ",".join(str(i + j + 1) for j in range(width)) for i in range(20))
     plan = plan_table(table(text), goal)
     assert plan.selected_candidate.kind == "table"
-    assert any("More than 12 categories" in warning for warning in plan.warnings)
+    assert any("Больше 12 категорий" in warning for warning in plan.warnings)
     assert all(not candidate.renderable for candidate in plan.candidates if candidate.kind != "table")
     bundle = client.post("/insights/plan", files={"files": ("source.csv", text.encode(), "text/csv")}, data={"goal": goal}).json()
     dataset = bundle["datasets"][0]
@@ -136,7 +136,7 @@ def test_high_cardinality_comparison_uses_paginated_reference_instead_of_unrelat
     text = "category,value\n" + "\n".join(f"Category {i},{i}" for i in range(25))
     plan = plan_table(table(text), "compare")
     assert plan.selected_candidate.kind == "table"
-    assert any("requested analysis has no safe chart" in warning for warning in plan.warnings)
+    assert any("Для запрошенного анализа нет диаграммы" in warning for warning in plan.warnings)
     response = client.post("/insights/plan", files={"files": ("source.csv", text.encode(), "text/csv")}, data={"goal": "compare"})
     bundle = response.json()
     dataset = bundle["datasets"][0]
